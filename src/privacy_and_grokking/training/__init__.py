@@ -7,7 +7,7 @@ from .train import train
 
 _BATCH_SIZE = 200
 _LOG_FREQUENCY = 500
-_OPTIMIZATION_STEPS = 100#_000
+_OPTIMIZATION_STEPS = 100_000
 
 TrainingRegistry.register("MLP_V1", partial(train, params=Parameters(
     name="MLP_V1",
