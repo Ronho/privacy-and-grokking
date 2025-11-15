@@ -12,8 +12,6 @@ dependencies = [
     "onnxscript==0.5.6",
     "polars==1.35.1",
     "pydantic==2.12.4",
-    "torch==2.9.0",
-    "torchvision==0.24.0",
     "tqdm==4.67.1",
     "typer==0.20.0",
 ]
@@ -21,5 +19,41 @@ dependencies = [
 [project.scripts]
 pag = "privacy_and_grokking.cli:app"
 
+[project.optional-dependencies]
+cpu = [
+  "torch==2.9.0",
+  "torchvision==0.24.0",
+]
+cu130 = [
+  "torch==2.9.0",
+  "torchvision==0.24.0",
+]
+
 [tool.uv]
 package = true
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu130" },
+  ],
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu130", extra = "cu130" },
+]
+torchvision = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu130", extra = "cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
