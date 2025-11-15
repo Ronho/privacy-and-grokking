@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import polars as pl
 import random
 import torch
 import torch.nn as nn
@@ -17,13 +18,16 @@ from ..utils import eval_mode, get_device
 
 DTYPE = torch.float32
 
-def eval(model, loss_fn, loader) -> tuple[float, float]:
+def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame]:
     device = get_device()
     one_hots = torch.eye(10, 10).to(device)
 
     loss = 0
     correct = 0
     number = 0
+    index_list = []
+    logit_list = []
+    label_list = []
 
     for x, y in loader:
         x, y = x.to(device), y.to(device)
@@ -33,11 +37,58 @@ def eval(model, loss_fn, loader) -> tuple[float, float]:
         correct += torch.sum(labels == y.to(device)).item()
         number += x.size(0)
 
-    return (loss/number), (correct/number)
+        index_list.extend(range(number - x.size(0), number))
+        label_list.append(y.detach().cpu().numpy())
+        logit_list.append(logits.detach().cpu().numpy())
 
-def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x, step: int) -> None:
+    df = pl.DataFrame({
+        "index": index_list,
+        "correct_label": np.concatenate(label_list),
+        **{f"logit_{i}": np.concatenate([logits[:, i] for logits in logit_list]) for i in range(logit_list[0].shape[1])}
+    })
+
+    return (loss/number), (correct/number), df
+
+def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_loader, eval_test_loader) -> Metrics:
     pk = get_path_keeper()
     pk.set_params({"step": step})
+
+    with eval_mode(model):
+        train_loss, train_accuracy, df_train = _eval(model, loss_fn, eval_train_loader)
+        df_train = df_train.with_columns(pl.lit(step).alias("step"))
+        test_loss, test_accuracy, df_test = _eval(model, loss_fn, eval_test_loader)
+        df_test = df_test.with_columns(pl.lit(step).alias("step"))
+
+        all_layer = sum(torch.pow(p, 2).sum().item() for p in model.parameters())
+        norm = float(np.sqrt(all_layer))
+        last_layer = sum(torch.pow(p, 2).sum().item() for p in model.model[-1].parameters())
+        last_layer_norm = float(np.sqrt(last_layer))
+
+        metrics = Metrics(
+            step=step,
+            train=ModeMetrics(
+                loss=train_loss,
+                accuracy=train_accuracy,
+            ),
+            test=ModeMetrics(
+                loss=test_loss,
+                accuracy=test_accuracy,
+            ),
+            norm=norm,
+            last_layer_norm=last_layer_norm,
+        )
+        df_train.write_parquet(pk.TRAIN_LOGITS)
+        df_test.write_parquet(pk.TEST_LOGITS)
+        save_model(
+            model,
+            optimizer,
+            x
+        )
+
+    return metrics
+
+def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
+    pk = get_path_keeper()
     torch.save(model.state_dict(), pk.MODEL_TORCH)
     torch.save(optimizer.state_dict(), pk.OPTIMIZER)
     torch.onnx.export(model, x, pk.MODEL_ONNX, verbose=False)
@@ -84,8 +135,8 @@ def train(params: Parameters) -> None:
         train_subset = train
 
     train_loader = torch.utils.data.DataLoader(train_subset, batch_size=params.batch_size, shuffle=True)
-    eval_train_loader = torch.utils.data.DataLoader(train_subset, batch_size=200)
-    eval_test_loader = torch.utils.data.DataLoader(test, batch_size=200)
+    eval_train_loader = torch.utils.data.DataLoader(train_subset, batch_size=200, shuffle=False)
+    eval_test_loader = torch.utils.data.DataLoader(test, batch_size=200, shuffle=False)
 
     # Model
     logger.info("Preparing model.")
@@ -120,38 +171,13 @@ def train(params: Parameters) -> None:
                     break
 
                 if (step < 30) or (step < 150 and step % 10 == 0) or step % params.log_frequency == 0:
-                    with eval_mode(model):
-                        train_loss, train_accuracy = eval(model, loss_fn, eval_train_loader)
-                        test_loss, test_accuracy = eval(model, loss_fn, eval_test_loader)
-                        all_layer = sum(torch.pow(p, 2).sum().item() for p in model.parameters())
-                        norm = float(np.sqrt(all_layer))
-                        last_layer = sum(torch.pow(p, 2).sum().item() for p in model.model[-1].parameters())
-                        last_layer_norm = float(np.sqrt(last_layer))
-                        data.append(Metrics(
-                            step=step,
-                            train=ModeMetrics(
-                                loss=train_loss,
-                                accuracy=train_accuracy,
-                            ),
-                            test=ModeMetrics(
-                                loss=test_loss,
-                                accuracy=test_accuracy,
-                            ),
-                            norm=norm,
-                            last_layer_norm=last_layer_norm,
-                        ))
-                        save_model(
-                            model,
-                            optimizer,
-                            x,
-                            step
-                        )
-                        pbar.set_description("L: {0:1.1e}|{1:1.1e}. A: {2:2.1f}%|{3:2.1f}%".format(
-                            train_loss,
-                            test_loss,
-                            train_accuracy * 100,
-                            test_accuracy * 100,
-                        ))
+                    metrics = evaluate(step, model, x, optimizer, loss_fn, eval_test_loader, eval_test_loader)
+                    pbar.set_description("L: {0:1.1e}|{1:1.1e}. A: {2:2.1f}%|{3:2.1f}%".format(
+                        metrics.train.loss,
+                        metrics.test.loss,
+                        metrics.train.accuracy * 100,
+                        metrics.test.accuracy * 100,
+                    ))
 
                 optimizer.zero_grad()
                 x, y = x.to(device), y.to(device)
@@ -166,9 +192,9 @@ def train(params: Parameters) -> None:
 
     # Saving results
     logger.info("Saving results.")
+    x, _ = next(iter(train_loader))
+    evaluate(step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader)
+    pk.set_params({"step": step})
     with pk.TRAIN_METRICS.open("w") as f:
         json.dump(data, f, default=to_jsonable_python)
-    x, _ = next(iter(train_loader))
-    save_model(model, optimizer, x.to(device), step)
-
     logger.info(f"Ending training: '{params.name}'")

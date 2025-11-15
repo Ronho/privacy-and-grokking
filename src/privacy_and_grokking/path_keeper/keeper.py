@@ -77,3 +77,11 @@ class PathKeeper:
     @property
     def OPTIMIZER(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "optimizer.pt"
+    
+    @property
+    def TRAIN_LOGITS(self) -> Path:
+        return self._fill(PathKeeper._CHECKPOINT) / "train_logits.parquet"
+    
+    @property
+    def TEST_LOGITS(self) -> Path:
+        return self._fill(PathKeeper._CHECKPOINT) / "test_logits.parquet"
