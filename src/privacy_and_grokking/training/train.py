@@ -168,6 +168,8 @@ def train(params: Parameters) -> None:
     with tqdm(total=params.optimization_steps) as pbar:
         while step < params.optimization_steps:
             for x, y in train_loader:
+                x, y = x.to(device), y.to(device)
+
                 if step >= params.optimization_steps:
                     break
 
@@ -181,7 +183,6 @@ def train(params: Parameters) -> None:
                     ))
 
                 optimizer.zero_grad()
-                x, y = x.to(device), y.to(device)
                 logits = model(x)
                 loss = loss_fn(logits, one_hots[y])
                 loss.backward()
@@ -194,7 +195,7 @@ def train(params: Parameters) -> None:
     # Saving results
     logger.info("Saving results.")
     x, _ = next(iter(train_loader))
-    evaluate(step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader)
+    evaluate(step, model, x.to(device), optimizer, loss_fn, eval_train_loader, eval_test_loader)
     pk.set_params({"step": step})
     with pk.TRAIN_METRICS.open("w") as f:
         json.dump(data, f, default=to_jsonable_python)
