@@ -108,6 +108,7 @@ def train(params: Parameters) -> None:
     random.seed(params.seed)
     np.random.seed(params.seed)
     device = get_device()
+    logger.info(f"Using device {device}", extra={"device": device})
 
     # Dataset
     logger.info("Preparing dataset.")
