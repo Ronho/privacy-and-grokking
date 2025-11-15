@@ -79,6 +79,10 @@ class PathKeeper:
         return self._fill(PathKeeper._CHECKPOINT) / "optimizer.pt"
     
     @property
+    def RNG_STATE(self) -> Path:
+        return self._fill(PathKeeper._CHECKPOINT) / "rng_state.pt"
+    
+    @property
     def TRAIN_LOGITS(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "train_logits.parquet"
     

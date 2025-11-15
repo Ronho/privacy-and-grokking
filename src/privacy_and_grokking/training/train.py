@@ -49,6 +49,20 @@ def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame
 
     return (loss/number), (correct/number), df
 
+def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
+    pk = get_path_keeper()
+    torch.save(model.state_dict(), pk.MODEL_TORCH)
+    torch.save(optimizer.state_dict(), pk.OPTIMIZER)
+    torch.onnx.export(model, x, pk.MODEL_ONNX, verbose=False)
+
+    states = {
+        "random": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "torch-cuda": torch.cuda.get_rng_state_all(),
+    }
+    torch.save(states, pk.RNG_STATE)
+
 def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_loader, eval_test_loader) -> Metrics:
     pk = get_path_keeper()
     pk.set_params({"step": step})
@@ -86,12 +100,6 @@ def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_load
         )
 
     return metrics
-
-def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
-    pk = get_path_keeper()
-    torch.save(model.state_dict(), pk.MODEL_TORCH)
-    torch.save(optimizer.state_dict(), pk.OPTIMIZER)
-    torch.onnx.export(model, x, pk.MODEL_ONNX, verbose=False)
 
 def train(params: Parameters) -> None:
     logger = get_logger()
