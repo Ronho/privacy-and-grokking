@@ -182,7 +182,7 @@ def train(params: Parameters) -> None:
                     break
 
                 if (step < 30) or (step < 150 and step % 10 == 0) or step % params.log_frequency == 0:
-                    metrics = evaluate(step, model, x, optimizer, loss_fn, eval_test_loader, eval_test_loader)
+                    metrics = evaluate(step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader)
                     data.append(metrics)
                     pbar.set_description("L: {0:1.1e}|{1:1.1e}. A: {2:2.1f}%|{3:2.1f}%".format(
                         metrics.train.loss,

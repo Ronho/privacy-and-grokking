@@ -18,7 +18,7 @@ class PathKeeper:
     _TRAIN_METRICS = "data/runs/{run_id}/{model}/train_metrics.json"
     _CHECKPOINT = "data/runs/{run_id}/{model}/checkpoints/{step}/"
 
-    def __init__(self, base_dir: Path | str | None = None):
+    def __init__(self, base_dir: Path | str | None = None, create_dirs: bool = True):
         if base_dir is None:
             self.base_dir = Path(__file__).parent.parent.parent.parent
         elif isinstance(base_dir, str):
@@ -30,6 +30,7 @@ class PathKeeper:
                 self.required_params[value] = re.findall(r"{(.*?)}", value)
         self.all_params = set(param for sublist in self.required_params.values() for param in sublist)
         self.params = {}
+        self.create_dirs = create_dirs
 
     def set_params(self, params: dict[str, Any]):
         for key, value in params.items():
@@ -48,10 +49,11 @@ class PathKeeper:
 
         filled = path_template.format(**self.params)
         path = self.base_dir / filled
-        if "." in path.name:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            path.mkdir(parents=True, exist_ok=True)
+        if not "*" in str(path) and self.create_dirs:
+            if "." in path.name:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                path.mkdir(parents=True, exist_ok=True)
         return path
 
     @property
