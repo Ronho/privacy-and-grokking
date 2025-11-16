@@ -75,7 +75,7 @@ def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_load
 
         all_layer = sum(torch.pow(p, 2).sum().item() for p in model.parameters())
         norm = float(np.sqrt(all_layer))
-        last_layer = sum(torch.pow(p, 2).sum().item() for p in model[-1].parameters())
+        last_layer = sum(torch.pow(p, 2).sum().item() for p in model.last_layer.parameters())
         last_layer_norm = float(np.sqrt(last_layer))
 
         metrics = Metrics(

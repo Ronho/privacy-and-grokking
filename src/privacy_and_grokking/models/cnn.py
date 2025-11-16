@@ -22,3 +22,7 @@ class CNN(nn.Module):
         y = F.relu(y)
         y = self.fc2(y)
         return y
+
+    @property
+    def last_layer(self):
+        return self.fc2

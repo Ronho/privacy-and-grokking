@@ -17,3 +17,7 @@ class MLP(nn.Module):
         y = F.relu(y)
         y = self.fc3(y)
         return y
+    
+    @property
+    def last_layer(self):
+        return self.fc3
