@@ -15,6 +15,12 @@ class ModelArchitectures(StrEnum):
     MLP = "MLP"
     CNN = "CNN"
 
+class MNISTDataset(BaseModel):
+    dataset_name: Literal["MNIST"] = "MNIST"
+
+    size: Literal["small", "full"]
+    canary: Literal["gaussian_noise"] | None
+
 class Parameters(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -26,5 +32,5 @@ class Parameters(BaseModel):
     model: ModelArchitectures
     optimization_steps: int
     optimizer: AdamW = Field(discriminator="optim_name")
-    sample_size: int | None
+    dataset: MNISTDataset = Field(discriminator="dataset_name")
     seed: int

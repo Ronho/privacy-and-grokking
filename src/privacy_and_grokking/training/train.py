@@ -11,6 +11,7 @@ from tqdm.auto import tqdm
 
 from .metrics import Metrics, ModeMetrics
 from .parameters import ModelArchitectures, Parameters
+from ..datasets import MNIST
 from ..logger import get_logger
 from ..models import CNN, MLP
 from ..path_keeper import get_path_keeper
@@ -120,31 +121,10 @@ def train(params: Parameters) -> None:
 
     # Dataset
     logger.info("Preparing dataset.")
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,)), # MNIST mean/std
-    ])
-
-    train = datasets.MNIST(
-        root=pk.CACHE,
-        train=True, 
-        transform=transform,
-        download=True
-    )
-    test = datasets.MNIST(
-        root=pk.CACHE,
-        train=False, 
-        transform=transform,
-        download=True
-    )
-
-    if params.sample_size:
-        train_subset, _ = torch.utils.data.random_split(train, [params.sample_size, len(train) - params.sample_size])
-    else:
-        train_subset = train
-
-    train_loader = torch.utils.data.DataLoader(train_subset, batch_size=params.batch_size, shuffle=True)
-    eval_train_loader = torch.utils.data.DataLoader(train_subset, batch_size=200, shuffle=False)
+    dataset = MNIST(params.dataset.size, canary=params.dataset.canary)
+    train, test = dataset()
+    train_loader = torch.utils.data.DataLoader(train, batch_size=params.batch_size, shuffle=True)
+    eval_train_loader = torch.utils.data.DataLoader(train, batch_size=200, shuffle=False)
     eval_test_loader = torch.utils.data.DataLoader(test, batch_size=200, shuffle=False)
 
     # Model
