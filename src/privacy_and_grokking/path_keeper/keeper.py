@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 from ..logger import get_logger
 
+
 logger = get_logger()
 
 class CheckpointPaths(TypedDict):
@@ -14,9 +15,9 @@ class CheckpointPaths(TypedDict):
 class PathKeeper:
 
     _CACHE = "cache"
-    _LOG = "data/runs/{run_id}/logs.log"
-    _TRAIN_METRICS = "data/runs/{run_id}/{model}/train_metrics.json"
-    _CHECKPOINT = "data/runs/{run_id}/{model}/checkpoints/{step}/"
+    _LOG = "data/runs/{run_id}/logs/{log_id}.log"
+    _TRAIN_FOLDER = "data/runs/{run_id}/{model}/"
+    _CHECKPOINT = _TRAIN_FOLDER + "checkpoints/{step}/"
 
     def __init__(self, base_dir: Path | str | None = None, create_dirs: bool = True):
         if base_dir is None:
@@ -63,10 +64,14 @@ class PathKeeper:
     @property
     def LOG(self) -> Path:
         return self._fill(PathKeeper._LOG)
+    
+    @property
+    def TRAIN_CONFIG(self) -> Path:
+        return self._fill(PathKeeper._TRAIN_FOLDER) / "train_config.json"
 
     @property
     def TRAIN_METRICS(self) -> Path:
-        return self._fill(PathKeeper._TRAIN_METRICS)
+        return self._fill(PathKeeper._TRAIN_FOLDER) / "train_metrics.json"
     
     @property
     def MODEL_TORCH(self) -> Path:

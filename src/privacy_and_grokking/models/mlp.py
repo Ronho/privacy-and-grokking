@@ -2,12 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class MLP(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim: torch.Size, num_classes: int):
         super().__init__()
-        self.fc1 = nn.Linear(28 * 28, 200)
+        input = int(torch.prod(torch.tensor(input_dim)).item())
+        self.fc1 = nn.Linear(input, 200)
         self.fc2 = nn.Linear(200, 200)
-        self.fc3 = nn.Linear(200, 10)
+        self.fc3 = nn.Linear(200, num_classes)
 
     def forward(self, input):
         y = torch.flatten(input, 1)

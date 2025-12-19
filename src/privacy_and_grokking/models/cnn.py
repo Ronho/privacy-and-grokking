@@ -2,13 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class CNN(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim: torch.Size, num_classes: int):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 6, 3)
         self.conv2 = nn.Conv2d(6, 16, 3)
         self.fc1 = nn.Linear(16 * 5 * 5, 200)
-        self.fc2 = nn.Linear(200, 10)  
+        self.fc2 = nn.Linear(200, num_classes)
 
     def forward(self, input):
         y = self.conv1(input)

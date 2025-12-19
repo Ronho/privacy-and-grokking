@@ -1,6 +1,9 @@
 import contextlib
 import torch
 
+from importlib.metadata import version
+
+
 def get_device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -12,5 +15,24 @@ def eval_mode(model):
             yield
     finally:
         model.train()
+
+def get_package_version() -> str:
+    """Get the version of the privacy_and_grokking package."""
+    try:
+        return version("privacy-and-grokking")
+    except Exception:
+        return "unknown"
+    
+def set_all_seeds(seed: int) -> None:
+    """Set the seed for all relevant random number generators."""
+    import random
+    import numpy as np
+    import torch
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 __all__ = ["get_device", "eval_mode"]
