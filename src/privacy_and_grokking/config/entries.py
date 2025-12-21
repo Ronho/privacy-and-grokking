@@ -48,6 +48,8 @@ def get_configs() -> list[TrainConfig]:
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
+                percentage=0.1,
+                repetitions=10,
                 noise_scale=1.0,
                 seed=GAUSSIAN_NOISE_CANARY_SEED,
             ),
@@ -87,6 +89,8 @@ def get_configs() -> list[TrainConfig]:
             train_ratio=MNIST_TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
+                percentage=0.1,
+                repetitions=10,
                 noise_scale=1.0,
                 seed=GAUSSIAN_NOISE_CANARY_SEED,
             ),
@@ -128,6 +132,8 @@ def get_configs() -> list[TrainConfig]:
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
+                percentage=0.1,
+                repetitions=10,
                 noise_scale=1.0,
                 seed=GAUSSIAN_NOISE_CANARY_SEED,
             ),
@@ -167,6 +173,8 @@ def get_configs() -> list[TrainConfig]:
             train_ratio=MNIST_TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
+                percentage=0.1,
+                repetitions=10,
                 noise_scale=1.0,
                 seed=GAUSSIAN_NOISE_CANARY_SEED,
             ),

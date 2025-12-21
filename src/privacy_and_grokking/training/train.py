@@ -171,8 +171,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
         train_ratio=config.dataset.train_ratio,
         train_size=config.dataset.train_size,
         canary=config.dataset.canary.name if config.dataset.canary is not None else None,
-        device=device,
-        **(config.dataset.canary.model_dump() if config.dataset.canary is not None else {})
+        **(config.dataset.canary.model_dump(exclude=["name"]) if config.dataset.canary is not None else {})
     )
     train_loader = torch.utils.data.DataLoader(train, batch_size=config.batch_size, shuffle=True)
     eval_train_loader = torch.utils.data.DataLoader(train, batch_size=config.batch_size, shuffle=False)

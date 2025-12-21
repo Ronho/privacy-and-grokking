@@ -19,17 +19,20 @@ def get_mnist() -> DataContainer:
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
+    target_transform = transforms.Lambda(lambda y: torch.tensor(y, dtype=torch.long))
     pk = get_path_keeper()
     train = datasets.MNIST(
         root=pk.CACHE,
         train=True, 
         transform=transform,
+        target_transform=target_transform,
         download=True
     )
     test = datasets.MNIST(
         root=pk.CACHE,
         train=False, 
         transform=transform,
+        target_transform=target_transform,
         download=True
     )
     info: DataContainer = {

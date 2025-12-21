@@ -12,7 +12,7 @@ def stratified_split(dataset: Dataset, num_classes: int, train_ratio: float) -> 
     indices = {c: [] for c in range(num_classes)}
     for idx in range(len(dataset)):
         _, label = dataset[idx]
-        indices[label].append(idx)
+        indices[int(label)].append(idx)
 
     train_indices = []
     val_indices = []
@@ -36,22 +36,22 @@ def create_subset(size: int | None, dataset: Dataset, num_classes: int) -> Subse
         indices = {c: [] for c in range(num_classes)}
         for idx in range(len(dataset)):
             _, label = dataset[idx]
-            if len(indices[label]) < samples_per_class:
-                indices[label].append(idx)
+            if len(indices[int(label)]) < samples_per_class:
+                indices[int(label)].append(idx)
             if all(len(idxs) >= samples_per_class for idxs in indices.values()):
                 break
         subset_indices = [idx for idxs in indices.values() for idx in idxs]
 
     return Subset(dataset, subset_indices)
 
-def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, device: torch.device = torch.device("cpu"), **kwargs) -> tuple[Dataset, Dataset, Dataset, torch.Size, int]:
+def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, **kwargs) -> tuple[Dataset, Dataset, Dataset, torch.Size, int]:
     container = create_dataset(name)
     train, val = stratified_split(container["trainval"], container["num_classes"], train_ratio=train_ratio)
     subset = create_subset(train_size, train, container["num_classes"])
     if canary is None:
         canary_dataset = TensorDataset(torch.empty(0, *container["input_shape"]), torch.empty(0))
     else:
-        canary_dataset = create_canaries(name=canary, dataset=subset, num_classes=container["num_classes"], device=device, **kwargs)
+        canary_dataset = create_canaries(name=canary, dataset=subset, num_classes=container["num_classes"], **kwargs)
         
     train = ConcatDataset([subset, canary_dataset])
 

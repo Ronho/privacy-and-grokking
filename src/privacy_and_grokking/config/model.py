@@ -25,6 +25,8 @@ class AdamW(OptimizerConfig):
 
 class CanaryConfig(BaseModel):
     name: Canary
+    percentage: float
+    repetitions: int
 
 class GaussianNoiseCanary(CanaryConfig):
     name: Canary = "gaussian_noise"
