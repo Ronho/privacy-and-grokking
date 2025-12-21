@@ -240,6 +240,18 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
     x, _ = next(iter(train_loader))
     evaluate(step, model, x.to(device), optimizer, loss_fn, eval_train_loader, eval_test_loader)
     pk.set_params({"step": step})
+
+    if restart:
+        if pk.TRAIN_METRICS.exists():
+            existing_data = json.loads(pk.TRAIN_METRICS.read_text())
+            existing_metrics = [Metrics.model_validate(m) for m in existing_data]
+        else:
+            existing_metrics = []
+        lookup = {m.step: m for m in existing_metrics}
+        for m in data:
+            lookup[m.step] = m
+        data = sorted(lookup.values(), key=lambda m: m.step)
+
     with pk.TRAIN_METRICS.open("w") as f:
         json.dump(data, f, default=to_jsonable_python)
     logger.info(f"Ending training: '{config.name}'")
