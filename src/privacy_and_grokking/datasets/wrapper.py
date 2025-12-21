@@ -6,7 +6,7 @@ from .datasets import Data, create_dataset
 
 
 def stratified_split(dataset: Dataset, num_classes: int, train_ratio: float) -> tuple[Dataset, Dataset]:
-    if not (0.0 < train_ratio < 1.0):
+    if not (0.0 <= train_ratio <= 1.0):
         raise ValueError("train_ratio must be between 0 and 1.")
 
     indices = {c: [] for c in range(num_classes)}
