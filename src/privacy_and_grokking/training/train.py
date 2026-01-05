@@ -166,15 +166,16 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
 
     # Dataset
     logger.info("Preparing dataset.")
-    train, _, test, input_shape, num_classes = get_dataset(
+    train, val, test, input_shape, num_classes = get_dataset(
         name=config.dataset.name,
         train_ratio=config.dataset.train_ratio,
         train_size=config.dataset.train_size,
         canary=config.dataset.canary.name if config.dataset.canary is not None else None,
         **(config.dataset.canary.model_dump(exclude=["name"]) if config.dataset.canary is not None else {})
     )
-    train_loader = torch.utils.data.DataLoader(train, batch_size=config.batch_size, shuffle=True)
-    eval_train_loader = torch.utils.data.DataLoader(train, batch_size=config.batch_size, shuffle=False)
+    data = val if config.dataset.use_val_for_training else train
+    train_loader = torch.utils.data.DataLoader(data, batch_size=config.batch_size, shuffle=True)
+    eval_train_loader = torch.utils.data.DataLoader(data, batch_size=config.batch_size, shuffle=False)
     eval_test_loader = torch.utils.data.DataLoader(test, batch_size=config.batch_size, shuffle=False)
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 

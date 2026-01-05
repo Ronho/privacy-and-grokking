@@ -1,6 +1,6 @@
 [project]
 name = "privacy-and-grokking"
-version = "2.0.1"
+version = "2.1.0"
 description = "Understanding how Grokking affects privacy."
 readme = "README.md"
 requires-python = ">=3.13"

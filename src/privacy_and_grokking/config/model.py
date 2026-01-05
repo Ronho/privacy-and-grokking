@@ -36,6 +36,7 @@ class GaussianNoiseCanary(CanaryConfig):
 class DatasetConfig(BaseModel):
     name: Data
     train_ratio: float = Field(gt=0.0, lt=1.0)
+    use_val_for_training: bool = Field(default=False)
     train_size: int | None = None
     canary: CanaryConfig | None = Field(discriminator="name", default=None)
 

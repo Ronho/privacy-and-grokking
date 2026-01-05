@@ -34,6 +34,25 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
+        name="MLP_VAL_V1",
+        code_version=VERSION,
+        batch_size=BATCH_SIZE,
+        log_frequency=LOG_FREQUENCY,
+        optimization_steps=100_000,
+        seed=SEED,
+        loss=LOSS,
+        optimizer=OPTIMIZER,
+        model="mlp",
+        dataset=DatasetConfig(
+            name="mnist",
+            train_ratio=MNIST_TRAIN_RATIO,
+            use_val_for_training=True,
+            train_size=None,
+            canary=None,
+        ),
+        initialization_scale=None,
+    ))
+    configs.append(TrainConfig(
         name="MLP_CAN_NOISE_V1",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
@@ -61,7 +80,7 @@ def get_configs() -> list[TrainConfig]:
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
-        optimization_steps=OPTIMIZATION_STEPS,
+        optimization_steps=1_000_000,
         seed=SEED,
         loss=LOSS,
         optimizer=OPTIMIZER,
@@ -112,6 +131,25 @@ def get_configs() -> list[TrainConfig]:
         dataset=DatasetConfig(
             name="mnist",
             train_ratio=MNIST_TRAIN_RATIO,
+            train_size=None,
+            canary=None,
+        ),
+        initialization_scale=None,
+    ))
+    configs.append(TrainConfig(
+        name="CNN_VAL_V1",
+        code_version=VERSION,
+        batch_size=BATCH_SIZE,
+        log_frequency=LOG_FREQUENCY,
+        optimization_steps=100_000,
+        seed=SEED,
+        loss=LOSS,
+        optimizer=OPTIMIZER,
+        model="cnn",
+        dataset=DatasetConfig(
+            name="mnist",
+            train_ratio=MNIST_TRAIN_RATIO,
+            use_val_for_training=True,
             train_size=None,
             canary=None,
         ),
