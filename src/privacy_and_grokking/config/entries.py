@@ -10,8 +10,9 @@ def get_configs() -> list[TrainConfig]:
     SEED=128
     LOSS = MSELoss()
     OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
-    MNIST_TRAIN_RATIO = 0.5
+    TRAIN_RATIO = 0.5
     GAUSSIAN_NOISE_CANARY_SEED = 64
+    DATASET = "cifar10"
 
     configs = []
 
@@ -26,8 +27,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=None,
             canary=None,
         ),
@@ -44,8 +45,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             use_val_for_training=True,
             train_size=None,
             canary=None,
@@ -63,7 +64,7 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name="mnist",
+            name=DATASET,
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
@@ -86,8 +87,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=None,
         ),
@@ -104,8 +105,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
@@ -129,8 +130,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=None,
             canary=None,
         ),
@@ -147,8 +148,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             use_val_for_training=True,
             train_size=None,
             canary=None,
@@ -166,7 +167,7 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name="mnist",
+            name=DATASET,
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
@@ -189,8 +190,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=None,
         ),
@@ -207,8 +208,8 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name="mnist",
-            train_ratio=MNIST_TRAIN_RATIO,
+            name=DATASET,
+            train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
