@@ -1135,7 +1135,7 @@ wheels = [
 
 [[package]]
 name = "privacy-and-grokking"
-version = "2.2.1"
+version = "2.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "ipykernel" },
