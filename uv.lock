@@ -42,6 +42,24 @@ wheels = [
 ]
 
 [[package]]
+name = "captum"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "torch", version = "2.9.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "torch", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "torch", version = "2.9.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "torch", version = "2.9.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5b/0b/db1c79ae2496bf61d10d3439e85321d3df3cefc7a9960347f38722049872/captum-0.7.0.tar.gz", hash = "sha256:7ca87d0dc67b3b7589a730b970b9536172a5468e0e31bf8657fdd73abc568a33", size = 1237972, upload-time = "2023-12-05T08:32:07.126Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/76/b21bfd2c35cab2e9a4b68b1977f7488c246c8cffa31e3361ee7610e8b5af/captum-0.7.0-py3-none-any.whl", hash = "sha256:2cbec9aa4b6ec325c2fdf369c1fdabb011017122e2314e2af009496d53a0757c", size = 1330385, upload-time = "2023-12-05T08:32:04.88Z" },
+]
+
+[[package]]
 name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -788,7 +806,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.13.0.50"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas" },
+    { name = "nvidia-cublas", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/9c/9e99c00dc23db324244ec257d1e84d79539202ee2f185dee2c1fa97c9549/nvidia_cudnn_cu13-9.13.0.50-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:33f0aa0b64230101b348648fd0693342188071d3f8a137c0cf50051c24b3584b", size = 412337597, upload-time = "2025-09-04T20:22:31.535Z" },
@@ -801,7 +819,7 @@ name = "nvidia-cufft"
 version = "12.0.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-nvjitlink", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/e9/4e49b1baf6899e42eeec324a49d7aa2219fec42076327c4e468000dd375a/nvidia_cufft-12.0.0.15-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1885731254835797572ff075f3daf43a2a0a2801210dea26971940dae7e1a367", size = 214053580, upload-time = "2025-08-04T10:20:45.781Z" },
@@ -833,9 +851,9 @@ name = "nvidia-cusolver"
 version = "12.0.3.29"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas" },
-    { name = "nvidia-cusparse" },
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-cublas", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "nvidia-cusparse", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "nvidia-nvjitlink", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/bb/2e60de9bb1f0c3395eabd91ccad00f4ba3ef736dc9190a158a9d268419f5/nvidia_cusolver-12.0.3.29-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:3bb6e65ce0beaeafdd069b320246e8f17c1cd30ddb27a0539143a3706733a4d8", size = 193104180, upload-time = "2025-08-04T10:22:19.821Z" },
@@ -848,7 +866,7 @@ name = "nvidia-cusparse"
 version = "12.6.2.49"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-nvjitlink", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/30/f32023427f2ef4ec27e8293dfddb5068de566912cd0a45eccfd400017a62/nvidia_cusparse-12.6.2.49-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5d3269c19283a0057fb5ebfb003ae2a10c97a28a6958f4238354826b055827c7", size = 155888587, upload-time = "2025-08-04T10:23:04.091Z" },
@@ -1135,9 +1153,10 @@ wheels = [
 
 [[package]]
 name = "privacy-and-grokking"
-version = "2.2.2"
+version = "2.3.0"
 source = { editable = "." }
 dependencies = [
+    { name = "captum" },
     { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -1170,6 +1189,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "captum", specifier = "==0.7.0" },
     { name = "ipykernel", specifier = "==7.0.1" },
     { name = "matplotlib", specifier = "==3.10.7" },
     { name = "numpy", specifier = "==2.3.4" },
@@ -1658,19 +1678,51 @@ resolution-markers = [
     "sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform == 'darwin'" },
-    { name = "fsspec", marker = "sys_platform == 'darwin'" },
-    { name = "jinja2", marker = "sys_platform == 'darwin'" },
-    { name = "networkx", marker = "sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "sys_platform == 'darwin'" },
-    { name = "sympy", marker = "sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
+    { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:259548471194ab63d7ea273873053a6e3cc23530c1510f01e9d7ad259187bbd0" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:e24836d968b54ef4dfb05594001a61958711ac9224026291e4e3f92f83a6fd7f" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:d8e2ab7f86010330bdcc39c8b2c795590cc75e37df4823cdaee2c98d6e3ff4a3" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:a3e859039c985d8e3ea60d7a54ca7e97ea2ae15e31beced4f3260128a161bb01" },
+]
+
+[[package]]
+name = "torch"
+version = "2.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "filelock", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "fsspec", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "jinja2", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "networkx", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "setuptools", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "sympy", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "typing-extensions", marker = "(extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra != 'extra-20-privacy-and-grokking-cpu' and extra != 'extra-20-privacy-and-grokking-cu130')" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/1c/90eb13833cdf4969ea9707586d7b57095c3b6e2b223a7256bf111689bcb8/torch-2.9.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:c30a17fc83eeab346913e237c64b15b5ba6407fff812f6c541e322e19bc9ea0e", size = 104111330, upload-time = "2025-10-15T15:46:35.238Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/21/2254c54b8d523592c25ef4434769aa23e29b1e6bf5f4c0ad9e27bf442927/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:8f25033b8667b57857dfd01458fbf2a9e6a6df1f8def23aef0dc46292f6aa642", size = 899750243, upload-time = "2025-10-15T15:48:57.459Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/a5/5cb94fa4fd1e78223455c23c200f30f6dc10c6d4a2bcc8f6e7f2a2588370/torch-2.9.0-cp313-cp313-win_amd64.whl", hash = "sha256:d037f1b4ffd25013be4a7bf3651a0a910c68554956c7b2c92ebe87c76475dece", size = 109284513, upload-time = "2025-10-15T15:46:45.061Z" },
+    { url = "https://files.pythonhosted.org/packages/66/e8/fc414d8656250ee46120b44836ffbb3266343db424b3e18ca79ebbf69d4f/torch-2.9.0-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:e4e5b5cba837a2a8d1a497ba9a58dae46fa392593eaa13b871c42f71847503a5", size = 74830362, upload-time = "2025-10-15T15:46:48.983Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/5f/9474c98fc5ae0cd04b9466035428cd360e6611a86b8352a0fc2fa504acdc/torch-2.9.0-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:64693568f5dc4dbd5f880a478b1cea0201cc6b510d91d1bc54fea86ac5d1a637", size = 104144940, upload-time = "2025-10-15T15:47:29.076Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/5a/8e0c1cf57830172c109d4bd6be2708cabeaf550983eee7029291322447a0/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:f8ed31ddd7d10bfb3fbe0b9fe01b1243577f13d75e6f4a0839a283915ce3791e", size = 899744054, upload-time = "2025-10-15T15:48:29.864Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/28/82c28b30fcb4b7c9cdd995763d18bbb830d6521356712faebbad92ffa61d/torch-2.9.0-cp313-cp313t-win_amd64.whl", hash = "sha256:eff527d4e4846e6f70d2afd8058b73825761203d66576a7e04ea2ecfebcb4ab8", size = 109517546, upload-time = "2025-10-15T15:47:33.395Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/c3/a91f96ec74347fa5fd24453fa514bc61c61ecc79196fa760b012a1873d96/torch-2.9.0-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:f8877779cf56d1ce431a7636703bdb13307f5960bb1af49716d8b179225e0e6a", size = 74480732, upload-time = "2025-10-15T15:47:38.002Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/73/9f70af34b334a7e0ef496ceec96b7ec767bd778ea35385ce6f77557534d1/torch-2.9.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:7e614fae699838038d888729f82b687c03413c5989ce2a9481f9a7e7a396e0bb", size = 74433037, upload-time = "2025-10-15T15:47:41.894Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/84/37cf88625901934c97109e583ecc21777d21c6f54cda97a7e5bbad1ee2f2/torch-2.9.0-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:dfb5b8cd310ba3436c7e14e8b7833ef658cf3045e50d2bdaed23c8fc517065eb", size = 104116482, upload-time = "2025-10-15T15:47:46.266Z" },
+    { url = "https://files.pythonhosted.org/packages/56/8e/ca8b17866943a8d4f4664d402ea84210aa274588b4c5d89918f5caa24eec/torch-2.9.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:b3d29524993a478e46f5d598b249cd824b7ed98d7fba538bd9c4cde6c803948f", size = 899746916, upload-time = "2025-10-15T15:50:40.294Z" },
+    { url = "https://files.pythonhosted.org/packages/43/65/3b17c0fbbdab6501c5b320a52a648628d0d44e7379f64e27d9eef701b6bf/torch-2.9.0-cp314-cp314-win_amd64.whl", hash = "sha256:71c7578984f5ec0eb645eb4816ac8435fcf3e3e2ae1901bcd2f519a9cafb5125", size = 109275151, upload-time = "2025-10-15T15:49:20.715Z" },
+    { url = "https://files.pythonhosted.org/packages/83/36/74f8c051f785500396e42f93542422422dfd874a174f21f8d955d36e5d64/torch-2.9.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:71d9309aee457bbe0b164bce2111cd911c4ed4e847e65d5077dbbcd3aba6befc", size = 74823353, upload-time = "2025-10-15T15:49:16.59Z" },
+    { url = "https://files.pythonhosted.org/packages/62/51/dc3b4e2f9ba98ae27238f0153ca098bf9340b2dafcc67fde645d496dfc2a/torch-2.9.0-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:c08fb654d783899e204a32cca758a7ce8a45b2d78eeb89517cc937088316f78e", size = 104140340, upload-time = "2025-10-15T15:50:19.67Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/8d/b00657f8141ac16af7bb6cda2e67de18499a3263b78d516b9a93fcbc98e3/torch-2.9.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:ec8feb0099b2daa5728fbc7abb0b05730fd97e0f359ff8bda09865aaa7bd7d4b", size = 899731750, upload-time = "2025-10-15T15:49:36.673Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/29/bd361e0cbb2c79ce6450f42643aaf6919956f89923a50571b0ebfe92d142/torch-2.9.0-cp314-cp314t-win_amd64.whl", hash = "sha256:695ba920f234ad4170c9c50e28d56c848432f8f530e6bc7f88fcb15ddf338e75", size = 109503850, upload-time = "2025-10-15T15:50:24.118Z" },
 ]
 
 [[package]]
@@ -1682,13 +1734,13 @@ resolution-markers = [
     "sys_platform == 'linux'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "sys_platform != 'darwin'" },
-    { name = "networkx", marker = "sys_platform != 'darwin'" },
-    { name = "setuptools", marker = "sys_platform != 'darwin'" },
-    { name = "sympy", marker = "sys_platform != 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
+    { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-20-privacy-and-grokking-cpu') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:be4438d8dad7f0d5a5e54f0feef8a893446894ec87f102bb1d82dcc4518542e4" },
@@ -1715,29 +1767,29 @@ resolution-markers = [
     "python_full_version < '3.15' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
 ]
 dependencies = [
-    { name = "filelock" },
-    { name = "fsspec" },
-    { name = "jinja2" },
-    { name = "networkx" },
-    { name = "nvidia-cublas", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cuda-cupti", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cuda-nvrtc", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cuda-runtime", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cudnn-cu13", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cufft", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cufile", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-curand", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cusolver", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cusparse", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cusparselt-cu13", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-nccl-cu13", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-nvjitlink", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-nvshmem-cu13", marker = "sys_platform == 'linux'" },
-    { name = "nvidia-nvtx", marker = "sys_platform == 'linux'" },
-    { name = "setuptools" },
-    { name = "sympy" },
-    { name = "triton", marker = "sys_platform == 'linux'" },
-    { name = "typing-extensions" },
+    { name = "filelock", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "fsspec", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "jinja2", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "networkx", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "nvidia-cublas", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cuda-cupti", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cuda-runtime", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cufft", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cufile", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-curand", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cusolver", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cusparse", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "nvidia-nvtx", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "setuptools", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "sympy", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
+    { name = "triton", marker = "(sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
+    { name = "typing-extensions", marker = "extra == 'extra-20-privacy-and-grokking-cu130'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:ecf3d24bd4c0e6e425bd778a6de99b52279e0021a60d7eb11ab0c2d669f3f9b0" },

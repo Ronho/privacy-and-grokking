@@ -1,10 +1,11 @@
 [project]
 name = "privacy-and-grokking"
-version = "2.2.2"
+version = "2.3.0"
 description = "Understanding how Grokking affects privacy."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "captum==0.7.0",
     "ipykernel==7.0.1",
     "matplotlib==3.10.7",
     "numpy==2.3.4",

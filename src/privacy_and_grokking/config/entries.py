@@ -1,4 +1,4 @@
-from .model import TrainConfig, MSELoss, AdamW, DatasetConfig, GaussianNoiseCanary
+from .model import TrainConfig, MSELoss, AdamW, DatasetConfig, GaussianNoiseCanary, WatermarkCanary
 from ..utils import get_package_version
 
 
@@ -11,13 +11,12 @@ def get_configs() -> list[TrainConfig]:
     LOSS = MSELoss()
     OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
     TRAIN_RATIO = 0.5
-    GAUSSIAN_NOISE_CANARY_SEED = 64
-    DATASET = "cifar10"
+    CANARY_SEED = 64
 
     configs = []
 
     configs.append(TrainConfig(
-        name="MLP_V1",
+        name="CIFAR10_MLP_NOGROK_TRAIN_WATERMARK",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -27,7 +26,54 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="cifar10",
+            train_ratio=TRAIN_RATIO,
+            train_size=None,
+            canary=WatermarkCanary(
+                percentage=1,
+                repetitions=1,
+                square_size=3,
+                seed=CANARY_SEED
+            ),
+        ),
+        initialization_scale=None,
+    ))
+    configs.append(TrainConfig(
+        name="CIFAR10_MLP_GROK_TRAIN_WATERMARK",
+        code_version=VERSION,
+        batch_size=BATCH_SIZE,
+        log_frequency=LOG_FREQUENCY,
+        optimization_steps=OPTIMIZATION_STEPS,
+        seed=SEED,
+        loss=LOSS,
+        optimizer=OPTIMIZER,
+        model="mlp",
+        dataset=DatasetConfig(
+            name="cifar10",
+            train_ratio=TRAIN_RATIO,
+            train_size=1000,
+            canary=WatermarkCanary(
+                percentage=1,
+                repetitions=1,
+                square_size=3,
+                seed=CANARY_SEED
+            ),
+        ),
+        initialization_scale=8.0,
+    ))
+
+    configs.append(TrainConfig(
+        name="MNIST_MLP_NOGROK_TRAIN_NOCAN",
+        code_version=VERSION,
+        batch_size=BATCH_SIZE,
+        log_frequency=LOG_FREQUENCY,
+        optimization_steps=OPTIMIZATION_STEPS,
+        seed=SEED,
+        loss=LOSS,
+        optimizer=OPTIMIZER,
+        model="mlp",
+        dataset=DatasetConfig(
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=None,
             canary=None,
@@ -35,17 +81,17 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="MLP_VAL_V1",
+        name="MNIST_MLP_NOGROK_VAL_NOCAN",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
-        optimization_steps=100_000,
+        optimization_steps=OPTIMIZATION_STEPS,
         seed=SEED,
         loss=LOSS,
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             use_val_for_training=True,
             train_size=None,
@@ -54,7 +100,7 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="MLP_CAN_NOISE_V1",
+        name="MNIST_MLP_NOGROK_TRAIN_NOISE",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -64,30 +110,30 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
                 repetitions=10,
                 noise_scale=1.0,
-                seed=GAUSSIAN_NOISE_CANARY_SEED,
+                seed=CANARY_SEED,
             ),
         ),
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="MLP_GROK_V1",
+        name="MNIST_MLP_GROK_TRAIN_NOCAN",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
-        optimization_steps=1_000_000,
+        optimization_steps=OPTIMIZATION_STEPS,
         seed=SEED,
         loss=LOSS,
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=None,
@@ -95,7 +141,7 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=8.0,
     ))
     configs.append(TrainConfig(
-        name="MLP_GROK_CAN_NOISE_V1",
+        name="MNIST_MLP_GROK_TRAIN_NOISE",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -105,14 +151,14 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="mlp",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
                 repetitions=10,
                 noise_scale=1.0,
-                seed=GAUSSIAN_NOISE_CANARY_SEED,
+                seed=CANARY_SEED,
             ),
         ),
         initialization_scale=8.0,
@@ -120,7 +166,7 @@ def get_configs() -> list[TrainConfig]:
 
     # CNN:
     configs.append(TrainConfig(
-        name="CNN_V1",
+        name="MNIST_CNN_NOGROK_TRAIN_NOCAN",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -130,7 +176,7 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=None,
             canary=None,
@@ -138,17 +184,17 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="CNN_VAL_V1",
+        name="MNIST_CNN_NOGROK_VAL_NOCAN",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
-        optimization_steps=100_000,
+        optimization_steps=OPTIMIZATION_STEPS,
         seed=SEED,
         loss=LOSS,
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             use_val_for_training=True,
             train_size=None,
@@ -157,7 +203,7 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="CNN_CAN_NOISE_V1",
+        name="MNIST_CNN_NOGROK_TRAIN_NOISE",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -167,20 +213,20 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=0.5,
             train_size=None,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
                 repetitions=10,
                 noise_scale=1.0,
-                seed=GAUSSIAN_NOISE_CANARY_SEED,
+                seed=CANARY_SEED,
             ),
         ),
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
-        name="CNN_GROK_V1",
+        name="MNIST_CNN_GROK_TRAIN_NOCAN",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -190,7 +236,7 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=None,
@@ -198,7 +244,7 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=8.0,
     ))
     configs.append(TrainConfig(
-        name="CNN_GROK_CAN_NOISE_V1",
+        name="MNIST_CNN_GROK_TRAIN_NOISE",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
         log_frequency=LOG_FREQUENCY,
@@ -208,14 +254,14 @@ def get_configs() -> list[TrainConfig]:
         optimizer=OPTIMIZER,
         model="cnn",
         dataset=DatasetConfig(
-            name=DATASET,
+            name="mnist",
             train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=GaussianNoiseCanary(
                 percentage=0.1,
                 repetitions=10,
                 noise_scale=1.0,
-                seed=GAUSSIAN_NOISE_CANARY_SEED,
+                seed=CANARY_SEED,
             ),
         ),
         initialization_scale=8.0,

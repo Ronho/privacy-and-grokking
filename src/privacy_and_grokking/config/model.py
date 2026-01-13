@@ -33,6 +33,11 @@ class GaussianNoiseCanary(CanaryConfig):
     noise_scale: float | None = None
     seed: int | None = None
 
+class WatermarkCanary(CanaryConfig):
+    name: Canary = "watermark"
+    square_size: int
+    seed: int | None = None
+
 class DatasetConfig(BaseModel):
     name: Data
     train_ratio: float = Field(gt=0.0, lt=1.0)
