@@ -17,18 +17,18 @@ SEED = 64
 DTYPE = torch.float32
 NUM_CLASSES = 10
 
-RUN_ID = "v2.0.0"
+RUN_ID = "v2.2.1"
 STEP = 100_000
 MODELS = [
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MLP_V1"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MLP_CAN_NOISE_V1"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MLP_GROK_V1"), updates=[100, 5_000, 100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MLP_GROK_CAN_NOISE_V1"), updates=[100, 5_000, 100_000, 250_000]),
+    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_TRAIN_WATERMARK"), updates=[100_000, 250_000]),
+    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_NOCAN"), updates=[100_000, 250_000]),
+    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_WATERMARK"), updates=[100, 5_000, 100_000, 250_000]),
+    # ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MLP_GROK_CAN_NOISE_V1"), updates=[100, 5_000, 100_000, 250_000]),
 
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_V1"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_CAN_NOISE_V1"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_GROK_V1"), updates=[1_000, 30_000, 100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_GROK_CAN_NOISE_V1"), updates=[1_000, 30_000, 100_000, 250_000]),
+    # ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_V1"), updates=[100_000, 250_000]),
+    # ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_CAN_NOISE_V1"), updates=[100_000, 250_000]),
+    # ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_GROK_V1"), updates=[1_000, 30_000, 100_000, 250_000]),
+    # ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CNN_GROK_CAN_NOISE_V1"), updates=[1_000, 30_000, 100_000, 250_000]),
 ]
 
 torch.set_default_dtype(DTYPE)

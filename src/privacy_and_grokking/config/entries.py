@@ -39,6 +39,24 @@ def get_configs() -> list[TrainConfig]:
         initialization_scale=None,
     ))
     configs.append(TrainConfig(
+        name="CIFAR10_MLP_GROK_TRAIN_NOCAN",
+        code_version=VERSION,
+        batch_size=BATCH_SIZE,
+        log_frequency=LOG_FREQUENCY,
+        optimization_steps=OPTIMIZATION_STEPS,
+        seed=SEED,
+        loss=LOSS,
+        optimizer=OPTIMIZER,
+        model="mlp",
+        dataset=DatasetConfig(
+            name="cifar10",
+            train_ratio=TRAIN_RATIO,
+            train_size=1000,
+            canary=None,
+        ),
+        initialization_scale=8.0,
+    ))
+    configs.append(TrainConfig(
         name="CIFAR10_MLP_GROK_TRAIN_WATERMARK",
         code_version=VERSION,
         batch_size=BATCH_SIZE,
@@ -53,8 +71,8 @@ def get_configs() -> list[TrainConfig]:
             train_ratio=TRAIN_RATIO,
             train_size=1000,
             canary=WatermarkCanary(
-                percentage=1,
-                repetitions=1,
+                percentage=0.1,
+                repetitions=10,
                 square_size=3,
                 seed=CANARY_SEED
             ),
