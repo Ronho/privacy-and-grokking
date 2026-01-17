@@ -44,7 +44,7 @@ def create_subset(size: int | None, dataset: Dataset, num_classes: int) -> Subse
 
     return Subset(dataset, subset_indices)
 
-def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, **kwargs) -> tuple[Dataset, Dataset, Dataset, torch.Size, int]:
+def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, **kwargs) -> tuple[Dataset, Dataset, Dataset, torch.Size, int, dict[str, tuple[float, ...]]]:
     container = create_dataset(name)
     train, val = stratified_split(container["trainval"], container["num_classes"], train_ratio=train_ratio)
     subset = create_subset(train_size, train, container["num_classes"])
@@ -55,4 +55,4 @@ def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: 
         
     train = ConcatDataset([subset, canary_dataset])
 
-    return train, val, container["test"], container["input_shape"], container["num_classes"]
+    return train, val, container["test"], container["input_shape"], container["num_classes"], container["normalization"]

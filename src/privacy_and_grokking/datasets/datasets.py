@@ -11,6 +11,7 @@ class DataContainer(TypedDict):
     test: Dataset
     num_classes: int
     input_shape: torch.Size
+    normalization: dict[str, tuple[float, ...]]
 
 type Data = Literal["mnist", "cifar10"]
 
@@ -39,7 +40,11 @@ def get_mnist() -> DataContainer:
         "trainval": train,
         "test": test,
         "num_classes": 10,
-        "input_shape": train[0][0].shape
+        "input_shape": train[0][0].shape,
+        "normalization": {
+            "mean": (0.1307,),
+            "std": (0.3081,)
+        }
     }
     return info
 
@@ -69,7 +74,11 @@ def get_cifar10() -> DataContainer:
         "trainval": train,
         "test": test,
         "num_classes": 10,
-        "input_shape": train[0][0].shape
+        "input_shape": train[0][0].shape,
+        "normalization": {
+            "mean": (0.4914, 0.4822, 0.4465),
+            "std": (0.247, 0.243, 0.261)
+        }
     }
     return info
 

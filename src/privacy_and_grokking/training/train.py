@@ -166,7 +166,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
 
     # Dataset
     logger.info("Preparing dataset.")
-    train, val, test, input_shape, num_classes = get_dataset(
+    train, val, test, input_shape, num_classes, _ = get_dataset(
         name=config.dataset.name,
         train_ratio=config.dataset.train_ratio,
         train_size=config.dataset.train_size,
