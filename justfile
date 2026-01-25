@@ -24,8 +24,5 @@ qa-fix:
     uv run pytest
 
 clean:
-    rm -rf .pytest_cache .ruff_cache .venv dist htmlcov .coverage
+    rm -rf .pytest_cache .ruff_cache .venv
     find . -type d -name "__pycache__" -exec rm -rf {} +
-
-build:
-    uv build
