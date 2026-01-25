@@ -1,22 +1,33 @@
+from collections.abc import Sequence
+from typing import Literal
+
 import torch
-
 from torch.utils.data import Dataset, TensorDataset
-from typing import Sequence, Literal
-
 
 type CanaryTuple = tuple[torch.Tensor, list[int]]
 type Canary = Literal["gaussian_noise", "watermark"]
 
-def gaussian_noise(num_canaries: int, dim: Sequence[int], num_classes: int, noise_scale: float, seed: int | None) -> CanaryTuple:
+
+def gaussian_noise(
+    num_canaries: int, dim: Sequence[int], num_classes: int, noise_scale: float, seed: int | None
+) -> CanaryTuple:
     generator = torch.Generator()
     if seed is not None:
         generator.manual_seed(seed)
-    
+
     data = torch.randn((num_canaries, *dim), generator=generator) * noise_scale
     labels = [i % num_classes for i in range(num_canaries)]
     return data, labels
 
-def watermark(num_canaries: int, dim: Sequence[int], num_classes: int, dataset: Dataset, square_size: int, seed: int | None) -> CanaryTuple:
+
+def watermark(
+    num_canaries: int,
+    dim: Sequence[int],
+    num_classes: int,
+    dataset: Dataset,
+    square_size: int,
+    seed: int | None,
+) -> CanaryTuple:
     generator = torch.Generator()
     if seed is not None:
         generator.manual_seed(seed)
@@ -38,23 +49,34 @@ def watermark(num_canaries: int, dim: Sequence[int], num_classes: int, dataset: 
         labels = labels_tensor.tolist()
     else:
         labels = [0] * num_canaries
-    
+
     return data, labels
 
-def create_canaries(name: Canary, dataset: Dataset, num_classes: int, percentage: float, repetitions: int, **kwargs) -> TensorDataset:
+
+def create_canaries(
+    name: Canary, dataset: Dataset, num_classes: int, percentage: float, repetitions: int, **kwargs
+) -> TensorDataset:
     """Create a canary dataset based on the specified canary type that represents 1% of the given dataset.
-    
+
     The total canaries generated are determined by the `percentage` parameter. Each canary is repeated `repetitions` times.
     """
 
-    num_canaries = int(len(dataset) * (percentage/100))
+    num_canaries = int(len(dataset) * (percentage / 100))
     dim = dataset[0][0].shape
 
     match name.lower():
         case "gaussian_noise":
-            data, labels = gaussian_noise(num_canaries=num_canaries, dim=dim, num_classes=num_classes, **kwargs)
+            data, labels = gaussian_noise(
+                num_canaries=num_canaries, dim=dim, num_classes=num_classes, **kwargs
+            )
         case "watermark":
-            data, labels = watermark(num_canaries=num_canaries, dim=dim, num_classes=num_classes, dataset=dataset, **kwargs)
+            data, labels = watermark(
+                num_canaries=num_canaries,
+                dim=dim,
+                num_classes=num_classes,
+                dataset=dataset,
+                **kwargs,
+            )
         case _:
             raise ValueError(f"Unknown canary: {name}")
 

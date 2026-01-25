@@ -18,6 +18,14 @@ dependencies = [
     "typer==0.20.0",
 ]
 
+[dependency-groups]
+dev = [
+    "just-bin>=1.46.0",
+    "pytest>=9.0.2",
+    "ruff>=0.14.14",
+    "ty>=0.0.13",
+]
+
 [project.scripts]
 pag = "privacy_and_grokking.cli:app"
 
@@ -31,6 +39,7 @@ cu130 = [
   "torchvision==0.24.0",
 ]
 
+# --- uv Configuration ---
 [tool.uv]
 package = true
 conflicts = [
@@ -60,14 +69,25 @@ name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-]
+# --- Ruff Configuration ---
+[tool.ruff]
+line-length = 100
+target-version = "py313"
 
-[tool.pytest]
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "W"]
+ignore = []
+
+# --- ty Configuration ---
+[tool.ty]
+
+# --- pytest Configuration ---
+[tool.pytest.ini_options]
 minversion = "9.0"
-addopts = ["-ra", "-q"]
-testpaths = [
-    "tests"
+addopts = [
+    "-ra -q --strict-markers",
+    "--cov=src/db_lightgate_python",
+    "--cov-report=term-missing",
+    "--cov-report=html",
 ]
+testpaths = ["tests"]

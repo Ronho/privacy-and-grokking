@@ -1,7 +1,8 @@
+from math import floor
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from math import floor
 
 
 class CNN(nn.Module):

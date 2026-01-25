@@ -13,7 +13,9 @@ class TrainingRegistry:
     @classmethod
     def register(cls, config: TrainConfig) -> None:
         if config.name in cls._registry:
-            raise ValueError(f"Model configuration with name '{config.name}' is already registered.")
+            raise ValueError(
+                f"Model configuration with name '{config.name}' is already registered."
+            )
         cls._registry[config.name] = config
 
     @classmethod

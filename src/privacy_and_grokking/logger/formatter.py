@@ -2,15 +2,15 @@ import json
 import logging
 import logging.handlers
 import sys
-
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar, Literal
 
 
 class StructuredFileFormatter(logging.Formatter):
-
-    REMOVAL_KEYS: ClassVar[list[str]] = list(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys())
+    REMOVAL_KEYS: ClassVar[list[str]] = list(
+        logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()
+    )
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -25,25 +25,24 @@ class StructuredFileFormatter(logging.Formatter):
             "module": record.module,
             "function": record.funcName,
             "line": record.lineno,
-            **self.default_parameters
+            **self.default_parameters,
         }
-        
+
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
 
         for key, value in record.__dict__.items():
             if key not in StructuredFileFormatter.REMOVAL_KEYS:
                 log_entry[key] = value
-        
+
         return json.dumps(log_entry, ensure_ascii=False)
 
 
 class ConsoleFormatter(logging.Formatter):
-
     def __init__(self):
         super().__init__(
             fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
 
 
@@ -63,10 +62,7 @@ def setup_logger(
     if channel in ("file", "all"):
         if log_file is None:
             raise ValueError("log_file must be provided when channel is 'file' or 'all'.")
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_file,
-            encoding="utf-8"
-        )
+        file_handler = logging.handlers.RotatingFileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(StructuredFileFormatter(**kwargs))
         logger.addHandler(file_handler)
 
@@ -74,5 +70,5 @@ def setup_logger(
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(ConsoleFormatter())
         logger.addHandler(console_handler)
-    
+
     return logger

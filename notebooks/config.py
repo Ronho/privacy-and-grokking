@@ -1,15 +1,17 @@
-import numpy as np
 import random
-import torch
 
-from privacy_and_grokking.config import TrainingRegistry, TrainConfig
-from privacy_and_grokking.models import MLP, CNN
+import numpy as np
+import torch
 from pydantic import BaseModel
+
+from privacy_and_grokking.config import TrainConfig, TrainingRegistry
+
 
 class ModelConfig(BaseModel):
     id: str
     config: TrainConfig
     updates: list[int]
+
 
 TrainingRegistry.load_defaults()
 
@@ -20,15 +22,46 @@ NUM_CLASSES = 10
 RUN_ID = "v2.3.0"
 STEP = 100_000
 MODELS = [
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_VAL_NOCAN"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_TRAIN_NOCAN"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_TRAIN_WATERMARK"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_NOCAN"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_WATERMARK"), updates=[100_000, 250_000]),
-
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MNIST_MLP_NOGROK_VAL_NOCAN"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MNIST_MLP_NOGROK_TRAIN_NOCAN"), updates=[100_000, 250_000]),
-    ModelConfig(id=RUN_ID, config=TrainingRegistry.get("MNIST_MLP_GROK_TRAIN_NOCAN"), updates=[100_000, 250_000]),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_VAL_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_TRAIN_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("CIFAR10_MLP_NOGROK_TRAIN_WATERMARK"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("CIFAR10_MLP_GROK_TRAIN_WATERMARK"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("MNIST_MLP_NOGROK_VAL_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("MNIST_MLP_NOGROK_TRAIN_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
+    ModelConfig(
+        id=RUN_ID,
+        config=TrainingRegistry.get("MNIST_MLP_GROK_TRAIN_NOCAN"),
+        updates=[100_000, 250_000],
+    ),
 ]
 
 torch.set_default_dtype(DTYPE)

@@ -1,11 +1,13 @@
 import torch
+from torch.utils.data import ConcatDataset, Dataset, Subset, TensorDataset
 
-from torch.utils.data import Dataset, ConcatDataset, Subset, TensorDataset
 from .canaries import Canary, create_canaries
 from .datasets import Data, create_dataset
 
 
-def stratified_split(dataset: Dataset, num_classes: int, train_ratio: float) -> tuple[Dataset, Dataset]:
+def stratified_split(
+    dataset: Dataset, num_classes: int, train_ratio: float
+) -> tuple[Dataset, Dataset]:
     if not (0.0 <= train_ratio <= 1.0):
         raise ValueError("train_ratio must be between 0 and 1.")
 
@@ -24,6 +26,7 @@ def stratified_split(dataset: Dataset, num_classes: int, train_ratio: float) -> 
     train_subset = torch.utils.data.Subset(dataset, train_indices)
     val_subset = torch.utils.data.Subset(dataset, val_indices)
     return train_subset, val_subset
+
 
 def create_subset(size: int | None, dataset: Dataset, num_classes: int) -> Subset:
     if size is None:
@@ -44,15 +47,29 @@ def create_subset(size: int | None, dataset: Dataset, num_classes: int) -> Subse
 
     return Subset(dataset, subset_indices)
 
-def get_dataset(name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, **kwargs) -> tuple[Dataset, Dataset, Dataset, torch.Size, int, dict[str, tuple[float, ...]]]:
+
+def get_dataset(
+    name: Data, train_ratio: float, train_size: int | None, canary: Canary | None = None, **kwargs
+) -> tuple[Dataset, Dataset, Dataset, torch.Size, int, dict[str, tuple[float, ...]]]:
     container = create_dataset(name)
-    train, val = stratified_split(container["trainval"], container["num_classes"], train_ratio=train_ratio)
+    train, val = stratified_split(
+        container["trainval"], container["num_classes"], train_ratio=train_ratio
+    )
     subset = create_subset(train_size, train, container["num_classes"])
     if canary is None:
         canary_dataset = TensorDataset(torch.empty(0, *container["input_shape"]), torch.empty(0))
     else:
-        canary_dataset = create_canaries(name=canary, dataset=subset, num_classes=container["num_classes"], **kwargs)
-        
+        canary_dataset = create_canaries(
+            name=canary, dataset=subset, num_classes=container["num_classes"], **kwargs
+        )
+
     train = ConcatDataset([subset, canary_dataset])
 
-    return train, val, container["test"], container["input_shape"], container["num_classes"], container["normalization"]
+    return (
+        train,
+        val,
+        container["test"],
+        container["input_shape"],
+        container["num_classes"],
+        container["normalization"],
+    )

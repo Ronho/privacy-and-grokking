@@ -1,4 +1,14 @@
-from .model import LossConfig, MSELoss, OptimizerConfig, AdamW, CanaryConfig, GaussianNoiseCanary, WatermarkCanary, DatasetConfig, TrainConfig
+from .model import (
+    AdamW,
+    CanaryConfig,
+    DatasetConfig,
+    GaussianNoiseCanary,
+    LossConfig,
+    MSELoss,
+    OptimizerConfig,
+    TrainConfig,
+    WatermarkCanary,
+)
 from .registry import TrainingRegistry
 
 __all__ = [

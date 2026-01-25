@@ -1,12 +1,13 @@
 import json
+from typing import Any
+
 import matplotlib.pyplot as plt
 import polars as pl
-
-from typing import Any
 
 from ..config import TrainConfig
 from ..datasets import get_dataset
 from ..path_keeper import get_path_keeper
+
 
 def _flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "_") -> dict[str, Any]:
     items: list[tuple[str, Any]] = []
@@ -18,49 +19,55 @@ def _flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "_") -> di
             items.append((new_key, v))
     return dict(items)
 
+
 def _aggregate_logits_per_step(df: pl.DataFrame, num_classes: int) -> pl.DataFrame:
     labels = list(range(num_classes))
 
     correct_logits_exprs = [
-        pl.when(pl.col("correct_label") == label).then(pl.col(f"logit_{label}"))
-        for label in labels
+        pl.when(pl.col("correct_label") == label).then(pl.col(f"logit_{label}")) for label in labels
     ]
 
-    df_with_logits = df.with_columns([
-        pl.coalesce(*correct_logits_exprs).alias("correct_logit"),
-        pl.sum_horizontal([f"logit_{i}" for i in labels]).alias("sum_all_logits")
-    ]).with_columns([
-        ((pl.col("sum_all_logits") - pl.col("correct_logit")) / (num_classes - 1)).alias("avg_wrong_logit")
-    ])
+    df_with_logits = df.with_columns(
+        [
+            pl.coalesce(*correct_logits_exprs).alias("correct_logit"),
+            pl.sum_horizontal([f"logit_{i}" for i in labels]).alias("sum_all_logits"),
+        ]
+    ).with_columns(
+        [
+            ((pl.col("sum_all_logits") - pl.col("correct_logit")) / (num_classes - 1)).alias(
+                "avg_wrong_logit"
+            )
+        ]
+    )
 
     logits_by_step = (
-        df_with_logits
-        .group_by("step")
-        .agg([
-            pl.col("correct_logit").mean().alias("avg_correct_logit"),
-            pl.col("correct_logit").std().alias("std_correct_logit"),
-            pl.col("avg_wrong_logit").mean().alias("avg_wrong_logit"),
-            pl.col("avg_wrong_logit").std().alias("std_wrong_logit"),
-            pl.col("correct_logit").count().alias("count")
-        ])
+        df_with_logits.group_by("step")
+        .agg(
+            [
+                pl.col("correct_logit").mean().alias("avg_correct_logit"),
+                pl.col("correct_logit").std().alias("std_correct_logit"),
+                pl.col("avg_wrong_logit").mean().alias("avg_wrong_logit"),
+                pl.col("avg_wrong_logit").std().alias("std_wrong_logit"),
+                pl.col("correct_logit").count().alias("count"),
+            ]
+        )
         .sort("step")
     )
 
     return logits_by_step
 
+
 def _process_single_step_logits(df: pl.DataFrame) -> pl.DataFrame:
-    labels = df["correct_label"].unique().sort().to_list() 
+    labels = df["correct_label"].unique().sort().to_list()
     expressions = [
-        pl.when(pl.col("correct_label") == label).then(pl.col(f"logit_{label}"))
-        for label in labels
+        pl.when(pl.col("correct_label") == label).then(pl.col(f"logit_{label}")) for label in labels
     ]
-    return df.with_columns(
-        pl.coalesce(*expressions).alias("correct_logit")
-    )
+    return df.with_columns(pl.coalesce(*expressions).alias("correct_logit"))
+
 
 def visualize(cfg: TrainConfig):
     pk = get_path_keeper()
-    
+
     metrics = json.loads(pk.TRAIN_METRICS.read_text())
     flat_metrics = [_flatten_dict(m) for m in metrics]
     df = pl.DataFrame(flat_metrics)
@@ -74,13 +81,13 @@ def visualize(cfg: TrainConfig):
     ax1.plot(df["step"], df["test_accuracy"], label="Test Accuracy")
     ax1.legend(loc=(0.15, 0.7))
     ax1.grid(True, alpha=0.3)
-    
+
     ax1_twin = ax1.twinx()
     ax1_twin.set_ylabel("Weight Norm")
     ax1_twin.plot(df["step"], df["norm"], color="purple", label="Weight Norm")
     ax1_twin.plot(df["step"], df["last_layer_norm"], color="pink", label="Last Layer Weight Norm")
     ax1_twin.legend(loc=(0.05, 0.55))
-    
+
     ax1.set_title("Accuracy & Weight Norm")
 
     ax2.set_xlabel("Optimization Steps")
@@ -123,12 +130,24 @@ def visualize(cfg: TrainConfig):
     std_wrong_train = train_logits["std_wrong_logit"].to_numpy()
 
     ax1.plot(steps_train, avg_correct_train, "b-", linewidth=2, label="Average Correct Logit")
-    ax1.fill_between(steps_train, avg_correct_train - std_correct_train, avg_correct_train + std_correct_train, 
-                    alpha=0.3, color="blue", label="Correct Logit ±1 Std")
+    ax1.fill_between(
+        steps_train,
+        avg_correct_train - std_correct_train,
+        avg_correct_train + std_correct_train,
+        alpha=0.3,
+        color="blue",
+        label="Correct Logit ±1 Std",
+    )
     ax1.plot(steps_train, avg_wrong_train, "r-", linewidth=2, label="Average Wrong Logits")
-    ax1.fill_between(steps_train, avg_wrong_train - std_wrong_train, avg_wrong_train + std_wrong_train, 
-                    alpha=0.3, color="red", label="Wrong Logits ±1 Std")
-    
+    ax1.fill_between(
+        steps_train,
+        avg_wrong_train - std_wrong_train,
+        avg_wrong_train + std_wrong_train,
+        alpha=0.3,
+        color="red",
+        label="Wrong Logits ±1 Std",
+    )
+
     ax1.set_xlabel("Optimization Steps")
     ax1.set_ylabel("Logit Size")
     ax1.set_title("Training Data")
@@ -141,21 +160,33 @@ def visualize(cfg: TrainConfig):
     std_correct_test = test_logits["std_correct_logit"].to_numpy()
     avg_wrong_test = test_logits["avg_wrong_logit"].to_numpy()
     std_wrong_test = test_logits["std_wrong_logit"].to_numpy()
-    
+
     ax2.plot(steps_test, avg_correct_test, "b-", linewidth=2, label="Average Correct Logit")
-    ax2.fill_between(steps_test, avg_correct_test - std_correct_test, avg_correct_test + std_correct_test, 
-                    alpha=0.3, color="blue", label="Correct Logit ±1 Std")
+    ax2.fill_between(
+        steps_test,
+        avg_correct_test - std_correct_test,
+        avg_correct_test + std_correct_test,
+        alpha=0.3,
+        color="blue",
+        label="Correct Logit ±1 Std",
+    )
     ax2.plot(steps_test, avg_wrong_test, "r-", linewidth=2, label="Average Wrong Logits")
-    ax2.fill_between(steps_test, avg_wrong_test - std_wrong_test, avg_wrong_test + std_wrong_test, 
-                    alpha=0.3, color="red", label="Wrong Logits ±1 Std")
-    
+    ax2.fill_between(
+        steps_test,
+        avg_wrong_test - std_wrong_test,
+        avg_wrong_test + std_wrong_test,
+        alpha=0.3,
+        color="red",
+        label="Wrong Logits ±1 Std",
+    )
+
     ax2.set_xlabel("Optimization Steps")
     ax2.set_ylabel("Logit Size")
     ax2.set_title("Test Data")
     ax2.set_xscale("log")
     ax2.grid(True, alpha=0.3)
     ax2.legend()
-    
+
     fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / "training_train_test_logits_size_evolution.png")
@@ -172,12 +203,24 @@ def visualize(cfg: TrainConfig):
     std_correct_test = test_logits["std_correct_logit"].to_numpy()
 
     ax1.plot(steps, avg_correct_train, "b-", linewidth=2, label="Train Average")
-    ax1.fill_between(steps, avg_correct_train - std_correct_train, avg_correct_train + std_correct_train, 
-                    alpha=0.3, color="blue", label="Train ±1 Std")
+    ax1.fill_between(
+        steps,
+        avg_correct_train - std_correct_train,
+        avg_correct_train + std_correct_train,
+        alpha=0.3,
+        color="blue",
+        label="Train ±1 Std",
+    )
     ax1.plot(steps, avg_correct_test, "r-", linewidth=2, label="Test Average")
-    ax1.fill_between(steps, avg_correct_test - std_correct_test, avg_correct_test + std_correct_test, 
-                    alpha=0.3, color="red", label="Test ±1 Std")
-    
+    ax1.fill_between(
+        steps,
+        avg_correct_test - std_correct_test,
+        avg_correct_test + std_correct_test,
+        alpha=0.3,
+        color="red",
+        label="Test ±1 Std",
+    )
+
     ax1.set_xlabel("Optimization Steps")
     ax1.set_ylabel("Logit Size")
     ax1.set_title("Correct Logits")
@@ -189,14 +232,26 @@ def visualize(cfg: TrainConfig):
     std_wrong_train = train_logits["std_wrong_logit"].to_numpy()
     avg_wrong_test = test_logits["avg_wrong_logit"].to_numpy()
     std_wrong_test = test_logits["std_wrong_logit"].to_numpy()
-    
+
     ax2.plot(steps, avg_wrong_train, "b-", linewidth=2, label="Train Average")
-    ax2.fill_between(steps, avg_wrong_train - std_wrong_train, avg_wrong_train + std_wrong_train, 
-                    alpha=0.3, color="blue", label="Train ±1 Std")
+    ax2.fill_between(
+        steps,
+        avg_wrong_train - std_wrong_train,
+        avg_wrong_train + std_wrong_train,
+        alpha=0.3,
+        color="blue",
+        label="Train ±1 Std",
+    )
     ax2.plot(steps, avg_wrong_test, "r-", linewidth=2, label="Test Average")
-    ax2.fill_between(steps, avg_wrong_test - std_wrong_test, avg_wrong_test + std_wrong_test, 
-                    alpha=0.3, color="red", label="Test ±1 Std")
-    
+    ax2.fill_between(
+        steps,
+        avg_wrong_test - std_wrong_test,
+        avg_wrong_test + std_wrong_test,
+        alpha=0.3,
+        color="red",
+        label="Test ±1 Std",
+    )
+
     ax2.set_xlabel("Optimization Steps")
     ax2.set_ylabel("Logit Size")
     ax2.set_title("Wrong Logits")
@@ -213,23 +268,38 @@ def visualize(cfg: TrainConfig):
     pk.set_params({"step": cfg.optimization_steps})
     df_train = pl.read_parquet(pk.TRAIN_LOGITS)
     df_test = pl.read_parquet(pk.TEST_LOGITS)
-    train_logits, test_logits = _process_single_step_logits(df_train), _process_single_step_logits(df_test)
+    train_logits, test_logits = (
+        _process_single_step_logits(df_train),
+        _process_single_step_logits(df_test),
+    )
 
     plt.figure(figsize=(10, 6))
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.hist(train_logits["correct_logit"].to_numpy(), bins=50, alpha=0.6, label="Train", density=True)
+    ax.hist(
+        train_logits["correct_logit"].to_numpy(), bins=50, alpha=0.6, label="Train", density=True
+    )
     ax.hist(test_logits["correct_logit"].to_numpy(), bins=50, alpha=0.6, label="Test", density=True)
     ax.set_xlabel("Correct Logit")
     ax.set_ylabel("Density")
     ax.set_yscale("log")
-    ax.axvline(x=train_logits["correct_logit"].mean(), color="blue", linestyle="--", label="Train Mean")
-    ax.axvline(x=test_logits["correct_logit"].mean(), color="orange", linestyle="--", label="Test Mean")
-    ax.axvline(x=train_logits["correct_logit"].median(), color="blue", linestyle=":", label="Train Median")
-    ax.axvline(x=test_logits["correct_logit"].median(), color="orange", linestyle=":", label="Test Median")
+    ax.axvline(
+        x=train_logits["correct_logit"].mean(), color="blue", linestyle="--", label="Train Mean"
+    )
+    ax.axvline(
+        x=test_logits["correct_logit"].mean(), color="orange", linestyle="--", label="Test Mean"
+    )
+    ax.axvline(
+        x=train_logits["correct_logit"].median(), color="blue", linestyle=":", label="Train Median"
+    )
+    ax.axvline(
+        x=test_logits["correct_logit"].median(), color="orange", linestyle=":", label="Test Median"
+    )
     ax.legend()
     ax.grid(True, alpha=0.3)
 
     fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
-    fig.savefig(pk.IMAGE_FOLDER / f"training_correct_logit_distribution_step_{cfg.optimization_steps}.png")
+    fig.savefig(
+        pk.IMAGE_FOLDER / f"training_correct_logit_distribution_step_{cfg.optimization_steps}.png"
+    )
     plt.close(fig)

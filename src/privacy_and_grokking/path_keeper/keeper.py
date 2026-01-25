@@ -1,19 +1,19 @@
 import re
-
 from pathlib import Path
 from typing import Any, TypedDict
+
 from ..logger import get_logger
 
-
 logger = get_logger()
+
 
 class CheckpointPaths(TypedDict):
     model: Path
     optimizer: Path
     onnx: Path
 
-class PathKeeper:
 
+class PathKeeper:
     _CACHE = "cache"
     _RUN_FOLDER = "data/runs/{run_id}/"
     _LOG = _RUN_FOLDER + "logs/{log_id}.log"
@@ -27,12 +27,14 @@ class PathKeeper:
             self.base_dir = Path(__file__).parent.parent.parent.parent
         elif isinstance(base_dir, str):
             self.base_dir = Path(base_dir)
-        
+
         self.required_params = {}
         for key, value in self.__class__.__dict__.items():
             if not key.startswith("__") and isinstance(value, str):
                 self.required_params[value] = re.findall(r"{(.*?)}", value)
-        self.all_params = set(param for sublist in self.required_params.values() for param in sublist)
+        self.all_params = set(
+            param for sublist in self.required_params.values() for param in sublist
+        )
         self.params = {}
         self.create_dirs = create_dirs
 
@@ -48,12 +50,17 @@ class PathKeeper:
 
     def _fill(self, path_template: str) -> Path:
         if not all(param in self.params for param in self.required_params[path_template]):
-            missing = [param for param in self.required_params[path_template] if param not in self.params]
-            logger.warning(f"Missing parameters for path template '{path_template}'.", extra={"missing_parameters": missing})
+            missing = [
+                param for param in self.required_params[path_template] if param not in self.params
+            ]
+            logger.warning(
+                f"Missing parameters for path template '{path_template}'.",
+                extra={"missing_parameters": missing},
+            )
 
         filled = path_template.format(**self.params)
         path = self.base_dir / filled
-        if not "*" in str(path) and self.create_dirs:
+        if "*" not in str(path) and self.create_dirs:
             if "." in path.name:
                 path.parent.mkdir(parents=True, exist_ok=True)
             else:
@@ -67,7 +74,7 @@ class PathKeeper:
     @property
     def LOG(self) -> Path:
         return self._fill(PathKeeper._LOG)
-    
+
     @property
     def TRAIN_CONFIG(self) -> Path:
         return self._fill(PathKeeper._TRAIN_FOLDER) / "train_config.json"
@@ -75,7 +82,7 @@ class PathKeeper:
     @property
     def TRAIN_METRICS(self) -> Path:
         return self._fill(PathKeeper._TRAIN_FOLDER) / "train_metrics.json"
-    
+
     @property
     def MODEL_TORCH(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "model.pt"
@@ -87,23 +94,23 @@ class PathKeeper:
     @property
     def OPTIMIZER(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "optimizer.pt"
-    
+
     @property
     def RNG_STATE(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "rng_state.pt"
-    
+
     @property
     def TRAIN_LOGITS(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "train_logits.parquet"
-    
+
     @property
     def TEST_LOGITS(self) -> Path:
         return self._fill(PathKeeper._CHECKPOINT) / "test_logits.parquet"
-    
+
     @property
     def IMAGE_FOLDER(self) -> Path:
         return self._fill(PathKeeper._IMAGE_FOLDER)
-    
+
     @property
     def ATTACK_FOLDER(self) -> Path:
         return self._fill(PathKeeper._ATTACK_FOLDER)

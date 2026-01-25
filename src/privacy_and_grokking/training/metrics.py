@@ -5,6 +5,7 @@ class ModeMetrics(BaseModel):
     loss: float
     accuracy: float
 
+
 class Metrics(BaseModel):
     step: int
     train: ModeMetrics

@@ -1,6 +1,6 @@
 from .cnn import CNN
 from .mlp import MLP
-from .wrapper import create_model, Model
+from .wrapper import Model, create_model
 
 __all__ = [
     "CNN",

@@ -1,24 +1,25 @@
 import json
+import random
+from collections.abc import Callable
+
 import numpy as np
 import polars as pl
-import random
 import torch
 import torch.nn as nn
-
 from pydantic import BaseModel
 from pydantic_core import to_jsonable_python
-from typing import Callable
-from torchvision import datasets, transforms
 from tqdm.auto import tqdm
-from ..config import TrainConfig, LossConfig, AdamW
-from .metrics import Metrics, ModeMetrics
+
+from ..config import AdamW, LossConfig, TrainConfig
 from ..datasets import get_dataset
 from ..logger import get_logger
 from ..models import create_model
 from ..path_keeper import get_path_keeper
 from ..utils import eval_mode, get_device, set_all_seeds
+from .metrics import Metrics, ModeMetrics
 
 DTYPE = torch.float32
+
 
 def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame]:
     device = get_device()
@@ -42,13 +43,19 @@ def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame
         label_list.append(y.detach().cpu().numpy())
         logit_list.append(logits.detach().cpu().numpy())
 
-    df = pl.DataFrame({
-        "index": index_list,
-        "correct_label": np.concatenate(label_list),
-        **{f"logit_{i}": np.concatenate([logits[:, i] for logits in logit_list]) for i in range(logit_list[0].shape[1])}
-    })
+    df = pl.DataFrame(
+        {
+            "index": index_list,
+            "correct_label": np.concatenate(label_list),
+            **{
+                f"logit_{i}": np.concatenate([logits[:, i] for logits in logit_list])
+                for i in range(logit_list[0].shape[1])
+            },
+        }
+    )
 
-    return (loss/number), (correct/number), df
+    return (loss / number), (correct / number), df
+
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
     pk = get_path_keeper()
@@ -64,7 +71,10 @@ def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
     }
     torch.save(states, pk.RNG_STATE)
 
-def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_loader, eval_test_loader) -> Metrics:
+
+def evaluate(
+    step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_loader, eval_test_loader
+) -> Metrics:
     pk = get_path_keeper()
     pk.set_params({"step": step})
 
@@ -94,27 +104,29 @@ def evaluate(step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_load
         )
         df_train.write_parquet(pk.TRAIN_LOGITS)
         df_test.write_parquet(pk.TEST_LOGITS)
-        save_model(
-            model,
-            optimizer,
-            x
-        )
+        save_model(model, optimizer, x)
 
     return metrics
 
-def get_loss_fn(cfg: LossConfig, num_classes: int, device: torch.device) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+
+def get_loss_fn(
+    cfg: LossConfig, num_classes: int, device: torch.device
+) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
     match cfg.name.lower():
         case "mse":
             one_hot = torch.eye(num_classes, num_classes).to(device)
             fn = nn.MSELoss()
+
             def loss(logits, labels: torch.Tensor) -> torch.Tensor:
                 return fn(logits, one_hot[labels])
+
             return loss
         case "cross_entropy":
             return nn.CrossEntropyLoss()
         case _:
             raise ValueError(f"Unknown loss function: {cfg.name}")
-        
+
+
 def get_optimizer(cfg: AdamW, params) -> torch.optim.Optimizer:
     match cfg.name.lower():
         case "adamw":
@@ -122,9 +134,11 @@ def get_optimizer(cfg: AdamW, params) -> torch.optim.Optimizer:
         case _:
             raise ValueError(f"Unknown optimizer: {cfg.name}")
 
+
 class RestartConfig(BaseModel):
     name: str
     checkpoint: int
+
 
 def train(cfg: TrainConfig | RestartConfig) -> None:
     logger = get_logger()
@@ -134,14 +148,16 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
     if isinstance(cfg, RestartConfig):
         pk.set_params({"step": cfg.checkpoint})
         logger.info(f"Restarting training from checkpoint: '{cfg.name}' at step {cfg.checkpoint}")
-        logger.warning("Make sure you are using the same device as when the checkpoint was created.")
+        logger.warning(
+            "Make sure you are using the same device as when the checkpoint was created."
+        )
         restart = True
         config = TrainConfig.model_validate_json(pk.TRAIN_CONFIG.read_bytes())
     else:
         logger.info(f"Starting training: '{cfg.name}'")
         restart = False
         config = cfg
-    
+
     # Config.
     logger.info("Training configuration.", extra={"config": config.model_dump()})
     if not restart:
@@ -171,12 +187,20 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
         train_ratio=config.dataset.train_ratio,
         train_size=config.dataset.train_size,
         canary=config.dataset.canary.name if config.dataset.canary is not None else None,
-        **(config.dataset.canary.model_dump(exclude=["name"]) if config.dataset.canary is not None else {})
+        **(
+            config.dataset.canary.model_dump(exclude=["name"])
+            if config.dataset.canary is not None
+            else {}
+        ),
     )
     data = val if config.dataset.use_val_for_training else train
     train_loader = torch.utils.data.DataLoader(data, batch_size=config.batch_size, shuffle=True)
-    eval_train_loader = torch.utils.data.DataLoader(data, batch_size=config.batch_size, shuffle=False)
-    eval_test_loader = torch.utils.data.DataLoader(test, batch_size=config.batch_size, shuffle=False)
+    eval_train_loader = torch.utils.data.DataLoader(
+        data, batch_size=config.batch_size, shuffle=False
+    )
+    eval_test_loader = torch.utils.data.DataLoader(
+        test, batch_size=config.batch_size, shuffle=False
+    )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     # Model
@@ -185,7 +209,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
         name=config.model,
         input_dim=input_shape,
         num_classes=num_classes,
-        initialization_scale=config.initialization_scale
+        initialization_scale=config.initialization_scale,
     )
     model.to(device)
     if restart:
@@ -216,15 +240,18 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
                 if step >= config.optimization_steps:
                     break
 
-                if (step < 30) or (step < 150 and step % 10 == 0) or step % config.log_frequency == 0:
-                    metrics = evaluate(step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader)
+                if (
+                    (step < 30)
+                    or (step < 150 and step % 10 == 0)
+                    or step % config.log_frequency == 0
+                ):
+                    metrics = evaluate(
+                        step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader
+                    )
                     data.append(metrics)
-                    pbar.set_description("L: {0:1.1e}|{1:1.1e}. A: {2:2.1f}%|{3:2.1f}%".format(
-                        metrics.train.loss,
-                        metrics.test.loss,
-                        metrics.train.accuracy * 100,
-                        metrics.test.accuracy * 100,
-                    ))
+                    pbar.set_description(
+                        f"L: {metrics.train.loss:1.1e}|{metrics.test.loss:1.1e}. A: {metrics.train.accuracy * 100:2.1f}%|{metrics.test.accuracy * 100:2.1f}%"
+                    )
 
                 optimizer.zero_grad()
                 logits = model(x)
