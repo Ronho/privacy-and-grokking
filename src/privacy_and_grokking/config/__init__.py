@@ -1,4 +1,4 @@
-from .model import LossConfig, MSELoss, OptimizerConfig, AdamW, CanaryConfig, GaussianNoiseCanary, DatasetConfig, TrainConfig
+from .model import LossConfig, MSELoss, OptimizerConfig, AdamW, CanaryConfig, GaussianNoiseCanary, WatermarkCanary, DatasetConfig, TrainConfig
 from .registry import TrainingRegistry
 
 __all__ = [
@@ -8,6 +8,7 @@ __all__ = [
     "AdamW",
     "CanaryConfig",
     "GaussianNoiseCanary",
+    "WatermarkCanary",
     "DatasetConfig",
     "TrainConfig",
     "TrainingRegistry",

@@ -4,7 +4,7 @@ from privacy_and_grokking.datasets import get_dataset
 
 
 def test_get_dataset_produces_correctly_sized_datasets():
-    train, val, test = get_dataset(
+    train, val, test, _, _, _ = get_dataset(
         name="mnist",
         train_ratio=0.5,
         train_size=1000,
@@ -19,7 +19,7 @@ def test_get_dataset_produces_correctly_sized_datasets():
     assert len(test) == 10_000
 
 def test_get_dataset_is_reproducible():
-    train1, val1, test1 = get_dataset(
+    train1, val1, test1, _, _, _ = get_dataset(
         name="mnist",
         train_ratio=0.5,
         train_size=1000,
@@ -29,7 +29,7 @@ def test_get_dataset_is_reproducible():
         seed=1,
         noise_scale=1.0
     )
-    train2, val2, test2 = get_dataset(
+    train2, val2, test2, _, _, _ = get_dataset(
         name="mnist",
         train_ratio=0.5,
         train_size=1000,
@@ -50,7 +50,7 @@ def test_get_dataset_is_reproducible():
         assert label1 == label2
 
 def test_get_dataset_different_seeds_produce_different_canaries():
-    train1, _, _ = get_dataset(
+    train1, _, _, _, _, _ = get_dataset(
         name="mnist",
         train_ratio=0.5,
         train_size=1000,
@@ -60,7 +60,7 @@ def test_get_dataset_different_seeds_produce_different_canaries():
         seed=1,
         noise_scale=1.0
     )
-    train2, _, _ = get_dataset(
+    train2, _, _, _, _, _ = get_dataset(
         name="mnist",
         train_ratio=0.5,
         train_size=1000,
