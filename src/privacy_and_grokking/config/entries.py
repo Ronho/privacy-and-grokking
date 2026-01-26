@@ -7,6 +7,7 @@ def get_configs() -> list[TrainConfig]:
     BATCH_SIZE = 200
     LOG_FREQUENCY = 500
     OPTIMIZATION_STEPS = 250_000
+    OPTIMIZATION_STEPS_LONG = 1_000_000
     SEED = 128
     LOSS = MSELoss()
     OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
@@ -121,6 +122,26 @@ def get_configs() -> list[TrainConfig]:
         )
     )
 
+    configs.append(
+        TrainConfig(
+            name="MNIST_MLP_NOGROK_TRAIN_NOCAN_SMALL_DATASET",
+            code_version=VERSION,
+            batch_size=BATCH_SIZE,
+            log_frequency=LOG_FREQUENCY,
+            optimization_steps=OPTIMIZATION_STEPS,
+            seed=SEED,
+            loss=LOSS,
+            optimizer=OPTIMIZER,
+            model="mlp",
+            dataset=DatasetConfig(
+                name="mnist",
+                train_ratio=TRAIN_RATIO,
+                train_size=1000,
+                canary=None,
+            ),
+            initialization_scale=None,
+        )
+    )
     configs.append(
         TrainConfig(
             name="MNIST_MLP_NOGROK_TRAIN_NOCAN",
