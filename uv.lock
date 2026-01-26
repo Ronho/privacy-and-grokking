@@ -453,17 +453,6 @@ wheels = [
 ]
 
 [[package]]
-name = "just-bin"
-version = "1.46.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/30/b197e1b247584e378f333864ca79c8b6530fea9fc9225ad667f50b5a527b/just_bin-1.46.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:9daf06e4e3795554493f86b63e91fad511558e6bc29e0a1088737600f5b7e58b", size = 1769303, upload-time = "2026-01-06T00:53:39.913Z" },
-    { url = "https://files.pythonhosted.org/packages/bd/da/8fe74f11c77f44b557c56e9d58e3c2aa0cacd441407ebf90fd1417dd35fa/just_bin-1.46.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:30cddb92af28d8ac8762c9e3a24fc84630eb81b6045c956a4f394b55d0a7e58c", size = 1625199, upload-time = "2026-01-06T00:53:41.098Z" },
-    { url = "https://files.pythonhosted.org/packages/d6/c2/0b9746f5020f8f76a9df144b75eb9a6fd987d49ecaa9a2796e92ca08620f/just_bin-1.46.0-py3-none-manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:50c71c0779415e9bff9ff8da3cd7e636cded7b6b2cb65ad7aedbb2d323778751", size = 1768494, upload-time = "2026-01-06T00:53:42.587Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/02/b629164f99b5224c1f82b8d9f7301dfdf11444bcb51a63a079807813554d/just_bin-1.46.0-py3-none-manylinux2014_x86_64.musllinux_1_1_x86_64.whl", hash = "sha256:a28581e6fdde54d3385a3b294a83b3b40c719d98bf4937dbe4922e6707b4bb51", size = 1936156, upload-time = "2026-01-06T00:53:43.934Z" },
-]
-
-[[package]]
 name = "kiwisolver"
 version = "1.4.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1195,7 +1184,6 @@ cu130 = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "just-bin" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "ty" },
@@ -1223,7 +1211,6 @@ provides-extras = ["cpu", "cu130"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "just-bin", specifier = ">=1.46.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.14.14" },
     { name = "ty", specifier = ">=0.0.13" },

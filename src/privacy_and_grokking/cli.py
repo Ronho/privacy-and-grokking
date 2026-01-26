@@ -16,9 +16,7 @@ app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
 def _init(id: str):
     pk = get_path_keeper()
-    pk.set_params(
-        {"run_id": id, "log_id": datetime.now(UTC).strftime("%Y-%m-%d-%H-%M-%S")}
-    )
+    pk.set_params({"run_id": id, "log_id": datetime.now(UTC).strftime("%Y-%m-%d-%H-%M-%S")})
     logger = register_logger(
         "default", log_file=pk.LOG, overwrite=True, log_level="DEBUG", channel="all", run_id=id
     )
