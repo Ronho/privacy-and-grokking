@@ -20,9 +20,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.2",
-    "ruff>=0.14.14",
-    "ty>=0.0.13",
+    "poethepoet==0.40.0",
+    "pytest==9.0.2",
+    "ruff==0.14.14",
+    "ty==0.0.13",
 ]
 
 [project.scripts]
@@ -87,3 +88,29 @@ addopts = [
     "-ra -q --strict-markers",
 ]
 testpaths = ["tests"]
+
+# --- Poe the Poet Configuration ---
+[tool.poe.tasks]
+qa = { sequence = [
+  { cmd = "uv run ruff format --check", ignore_fail = true },
+  { cmd = "uv run ruff check", ignore_fail = true },
+  { cmd = "uv run ty check", ignore_fail = true },
+  { cmd = "uv run pytest", ignore_fail = true }
+], help = "Run all QA checks" }
+
+qa-fix = { sequence = [
+  { cmd = "uv run ruff format", ignore_fail = true },
+  { cmd = "uv run ruff check --fix", ignore_fail = true },
+  { cmd = "uv run ty check --fix", ignore_fail = true },
+  { cmd = "uv run pytest", ignore_fail = true }
+], help = "Fix code style and run tests" }
+
+train = { cmd = "uv run pag train", help = "Train models" }
+attack = { cmd = "uv run pag attack", help = "Run attacks" }
+evaluate = { cmd = "uv run pag evaluate", help = "Evaluate results" }
+
+clean = { cmd = """
+python -c "import shutil, pathlib; 
+[shutil.rmtree(p, ignore_errors=True) for p in ['.pytest_cache', '.ruff_cache', '.venv', 'dist', 'build']]; 
+[shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"
+""", help = "Clean build artifacts and caches" }
