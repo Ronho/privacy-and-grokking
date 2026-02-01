@@ -449,67 +449,94 @@ def visualize(cfgs: list[TrainConfig]):
         pk.set_params({"model": cfg.name})
         container: list[AttackContainer] = []
 
-        if not (pk.ATTACK_FOLDER / "mia_threshold.pt").exists():
+        if (pk.ATTACK_FOLDER / "mia_threshold.pt").exists():
+            data = torch.load(pk.ATTACK_FOLDER / "mia_threshold.pt")
+
+            container.append(
+                AttackContainer(
+                    name="Probability of Correct Class",
+                    prefix="mia_probability_threshold",
+                    steps=data["steps"],
+                    train_data=data["train_probs"].cpu(),
+                    test_data=data["test_probs"].cpu(),
+                )
+            )
+            container.append(
+                AttackContainer(
+                    name="Logit of Correct Class",
+                    prefix="mia_logit_threshold",
+                    steps=data["steps"],
+                    train_data=data["train_logits"].cpu(),
+                    test_data=data["test_logits"].cpu(),
+                )
+            )
+            container.append(
+                AttackContainer(
+                    name="CrossEntropy Loss",
+                    prefix="mia_ce_loss_threshold",
+                    steps=data["steps"],
+                    train_data=-1 * data["train_ce_losses"].cpu(),
+                    test_data=-1 * data["test_ce_losses"].cpu(),
+                )
+            )
+            container.append(
+                AttackContainer(
+                    name="MSE Loss",
+                    prefix="mia_mse_loss_threshold",
+                    steps=data["steps"],
+                    train_data=-1 * data["train_mse_losses"].cpu(),
+                    test_data=-1 * data["test_mse_losses"].cpu(),
+                )
+            )
+        else:
             logger.info(
-                "No attack data found for MIA Threshold. Skipping evaluation.",
+                "No attack data found for MIA Threshold. Skipping this attack.",
                 extra={"model": cfg.name},
             )
-            return
-        data = torch.load(pk.ATTACK_FOLDER / "mia_threshold.pt")
 
-        container.append(
-            AttackContainer(
-                name="Probability of Correct Class",
-                prefix="mia_probability_threshold",
-                steps=data["steps"],
-                train_data=data["train_probs"].cpu(),
-                test_data=data["test_probs"].cpu(),
+        if (pk.ATTACK_FOLDER / "mia_rmia.pt").exists():
+            data = torch.load(pk.ATTACK_FOLDER / "mia_rmia.pt")
+            container.append(
+                AttackContainer(
+                    name="RMIA Score",
+                    prefix="mia_rmia_score",
+                    steps=data["steps"],
+                    train_data=data["train_scores"].cpu(),
+                    test_data=data["test_scores"].cpu(),
+                )
             )
-        )
-        container.append(
-            AttackContainer(
-                name="Logit of Correct Class",
-                prefix="mia_logit_threshold",
-                steps=data["steps"],
-                train_data=data["train_logits"].cpu(),
-                test_data=data["test_logits"].cpu(),
-            )
-        )
-        container.append(
-            AttackContainer(
-                name="CrossEntropy Loss",
-                prefix="mia_ce_loss_threshold",
-                steps=data["steps"],
-                train_data=-1 * data["train_ce_losses"].cpu(),
-                test_data=-1 * data["test_ce_losses"].cpu(),
-            )
-        )
-        container.append(
-            AttackContainer(
-                name="MSE Loss",
-                prefix="mia_mse_loss_threshold",
-                steps=data["steps"],
-                train_data=-1 * data["train_mse_losses"].cpu(),
-                test_data=-1 * data["test_mse_losses"].cpu(),
-            )
-        )
-
-        if not (pk.ATTACK_FOLDER / "mia_rmia.pt").exists():
+        else:
             logger.info(
-                "No attack data found for MIA RMIA Scores. Skipping evaluation.",
+                "No attack data found for MIA RMIA Scores. Skipping this attack.",
                 extra={"model": cfg.name},
             )
-            return
-        data = torch.load(pk.ATTACK_FOLDER / "mia_rmia.pt")
-        container.append(
-            AttackContainer(
-                name="RMIA Score",
-                prefix="mia_rmia_score",
-                steps=data["steps"],
-                train_data=data["train_scores"].cpu(),
-                test_data=data["test_scores"].cpu(),
+
+        if (pk.ATTACK_FOLDER / "mia_merlin_morgan.pt").exists():
+            data = torch.load(pk.ATTACK_FOLDER / "mia_merlin_morgan.pt")
+            container.append(
+                AttackContainer(
+                    name="Merlin/Morgan Score (CE)",
+                    prefix="mia_merlin_morgan_ce",
+                    steps=data["steps"],
+                    train_data=data["train_ce_votes"].cpu(),
+                    test_data=data["test_ce_votes"].cpu(),
+                )
             )
-        )
+            container.append(
+                AttackContainer(
+                    name="Merlin/Morgan Score (MSE)",
+                    prefix="mia_merlin_morgan_mse",
+                    steps=data["steps"],
+                    train_data=data["train_mse_votes"].cpu(),
+                    test_data=data["test_mse_votes"].cpu(),
+                )
+            )
+        else:
+            logger.info(
+                "No attack data found for MIA Merlin/Morgan. Skipping this attack.",
+                extra={"model": cfg.name},
+            )
+
         mia_container[cfg.name] = container
 
     for model_name, attack_containers in mia_container.items():

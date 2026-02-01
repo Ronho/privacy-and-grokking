@@ -3,7 +3,7 @@ from typing import Literal
 
 from typer import Typer
 
-from .attacks import mia_rmia, mia_threshold
+from .attacks import mia_rmia, mia_threshold, mia_merlin_morgan
 from .config import TrainConfig, TrainingRegistry
 from .logger import get_logger, register_logger
 from .path_keeper import get_path_keeper
@@ -86,6 +86,7 @@ def attack(id: str, attacks: list[str] | None = None, models: list[str] | None =
     available_attacks = {
         "mia_threshold": mia_threshold,
         "mia_rmia": mia_rmia,
+        "mia_merlin_morgan": mia_merlin_morgan,
     }
 
     if attacks is None:
