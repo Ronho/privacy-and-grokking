@@ -79,25 +79,32 @@ def restart(id: str, model: str, checkpoint: int):
 
 
 @app.command()
-def attack(attack_name: str, id: str, models: list[str] | None = None):
+def attack(id: str, attacks: list[str] | None = None, models: list[str] | None = None):
     logger = _init(id)
-    logger.info("Starting attack run.", extra={"attack": attack_name, "run": id, "model": models})
+    logger.info("Starting attack run.", extra={"run": id, "attacks": attacks, "models": models})
 
-    func = None
-    match attack_name:
-        case "mia_threshold":
-            func = mia_threshold
-        case "mia_rmia":
-            func = mia_rmia
-        case _:
+    available_attacks = {
+        "mia_threshold": mia_threshold,
+        "mia_rmia": mia_rmia,
+    }
+
+    if attacks is None:
+        attacks = list(available_attacks.keys())
+
+    valid_attacks = []
+    for attack_name in attacks:
+        if attack_name not in available_attacks:
             raise ValueError(f"Unknown attack '{attack_name}' specified.")
+        valid_attacks.append(attack_name)
 
-    configs = _models(models, existing="raise")
-    for config in configs:
-        logger.info("Starting attack.", extra={"attack": attack_name, "model": config.name})
-        func(cfg=config)
+    configs = _models(models, existing="log")
+    for attack_name in valid_attacks:
+        func = available_attacks[attack_name]
+        for config in configs:
+            logger.info("Starting attack.", extra={"attack": attack_name, "model": config.name})
+            func(cfg=config)
 
-    logger.info("Attack run completed.", extra={"attack": attack_name, "run": id, "model": models})
+    logger.info("Attack run completed.", extra={"run": id, "attacks": attacks, "models": models})
 
 
 @app.command()
