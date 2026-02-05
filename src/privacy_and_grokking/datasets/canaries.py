@@ -1,87 +1,68 @@
 from collections.abc import Sequence
-from typing import Literal
+from enum import StrEnum
+from typing import Protocol
 
 import torch
-from torch.utils.data import Dataset, TensorDataset
-
-type CanaryTuple = tuple[torch.Tensor, list[int]]
-type Canary = Literal["gaussian_noise", "watermark"]
+from pydantic import BaseModel, Field
 
 
-def gaussian_noise(
-    num_canaries: int, dim: Sequence[int], num_classes: int, noise_scale: float, seed: int | None
-) -> CanaryTuple:
-    generator = torch.Generator()
-    if seed is not None:
-        generator.manual_seed(seed)
+class Canary(Protocol):  # noqa: F811
+    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]:
+        ...
 
-    data = torch.randn((num_canaries, *dim), generator=generator) * noise_scale
-    labels = [i % num_classes for i in range(num_canaries)]
-    return data, labels
+class UniformNoiseCanary:
+    def __init__(self, dim: Sequence[int], num_classes: int):
+        self.dim = dim
+        self.num_classes = num_classes
+        self.generator = torch.Generator()
 
+    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]:
+        seed = torch.hash_tensor(image)
+        self.generator.manual_seed(seed)
+        shift = torch.randint(1, self.num_classes, (1,), generator=self.generator).item()
+        label = (label + shift) % self.num_classes
 
-def watermark(
-    num_canaries: int,
-    dim: Sequence[int],
-    num_classes: int,
-    dataset: Dataset,
-    square_size: int,
-    seed: int | None,
-) -> CanaryTuple:
-    generator = torch.Generator()
-    if seed is not None:
-        generator.manual_seed(seed)
+        image = torch.rand(self.dim, generator=self.generator)
 
-    indices = torch.randint(0, len(dataset), (num_canaries,), generator=generator)
-    data = torch.stack([dataset[i][0] for i in indices])
-    original_labels = torch.tensor([dataset[i][1] for i in indices])
+        return image, label
 
-    height = dim[-2]
-    width = dim[-1]
+class SquareWatermarkCanary:
+    def __init__(self, dim: Sequence[int], num_classes: int, square_size: int):
+        self.dim = dim
+        self.num_classes = num_classes
+        self.square_size = min(square_size, dim[-2], dim[-1])
+        self.generator = torch.Generator()
 
-    square_size = min(square_size, height, width)
+    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]:
+        seed = torch.hash_tensor(image)
+        self.generator.manual_seed(seed)
+        shift = torch.randint(1, self.num_classes, (1,), generator=self.generator).item()
+        label = (label + shift) % self.num_classes
 
-    data[:, :, -square_size:, -square_size:] = 1.0
+        image[:, :, -self.square_size:, -self.square_size:] = 1.0
 
-    if num_classes > 1:
-        offsets = torch.randint(1, num_classes, (num_canaries,), generator=generator)
-        labels_tensor = (original_labels + offsets) % num_classes
-        labels = labels_tensor.tolist()
-    else:
-        labels = [0] * num_canaries
-
-    return data, labels
+        return image, label
 
 
-def create_canaries(
-    name: Canary, dataset: Dataset, num_classes: int, percentage: float, repetitions: int, **kwargs
-) -> TensorDataset:
-    """Create a canary dataset based on the specified canary type that represents 1% of the given dataset.
+class Canaries(StrEnum):
+    UNIFORM_NOISE = "uniform_noise"
+    SQUARE_WATERMARK = "square_watermark"
 
-    The total canaries generated are determined by the `percentage` parameter. Each canary is repeated `repetitions` times.
-    """
+class CanaryConfig(BaseModel):
+    name: Canaries
 
-    num_canaries = int(len(dataset) * (percentage / 100))
-    dim = dataset[0][0].shape
+class UniformNoiseCanaryConfig(CanaryConfig):
+    name: Canaries = Canaries.UNIFORM_NOISE
 
-    match name.lower():
-        case "gaussian_noise":
-            data, labels = gaussian_noise(
-                num_canaries=num_canaries, dim=dim, num_classes=num_classes, **kwargs
-            )
-        case "watermark":
-            data, labels = watermark(
-                num_canaries=num_canaries,
-                dim=dim,
-                num_classes=num_classes,
-                dataset=dataset,
-                **kwargs,
-            )
+class SquareWatermarkCanaryConfig(CanaryConfig):
+    name: Canaries = Canaries.SQUARE_WATERMARK
+    square_size: int = Field(ge=0)
+
+def create_canary_generator(config: CanaryConfig, dim: Sequence[int], num_classes: int) -> Canary:
+    match config.name:
+        case Canaries.UNIFORM_NOISE:
+            return UniformNoiseCanary(dim=dim, num_classes=num_classes)
+        case Canaries.SQUARE_WATERMARK:
+            return SquareWatermarkCanary(dim=dim, num_classes=num_classes, **config.model_dump(exclude="name"))
         case _:
-            raise ValueError(f"Unknown canary: {name}")
-
-    canary_data = data.repeat(repetitions, 1, 1, 1)
-    canary_labels = labels * repetitions
-    canary_dataset = TensorDataset(canary_data, torch.tensor(canary_labels))
-
-    return canary_dataset
+            raise ValueError(f"Unknown canary '{config.name}'.")

@@ -1,4 +1,5 @@
-from typing import Literal, TypedDict
+from dataclasses import dataclass
+from enum import StrEnum
 
 import torch
 from torch.utils.data import Dataset
@@ -7,15 +8,24 @@ from torchvision import datasets, transforms
 from ..path_keeper import get_path_keeper
 
 
-class DataContainer(TypedDict):
-    trainval: Dataset
+@dataclass
+class Normalization:
+    mean: list[float]
+    std: list[float]
+
+
+@dataclass
+class DataContainer:
+    train: Dataset
     test: Dataset
     num_classes: int
     input_shape: torch.Size
-    normalization: dict[str, tuple[float, ...]]
+    normalization: Normalization
 
 
-type Data = Literal["mnist", "cifar10"]
+class Datasets(StrEnum):
+    MNIST = "mnist"
+    CIFAR10 = "cifar10"
 
 
 def get_mnist() -> DataContainer:
@@ -38,14 +48,13 @@ def get_mnist() -> DataContainer:
         target_transform=target_transform,
         download=True,
     )
-    info: DataContainer = {
-        "trainval": train,
-        "test": test,
-        "num_classes": 10,
-        "input_shape": train[0][0].shape,
-        "normalization": {"mean": (0.1307,), "std": (0.3081,)},
-    }
-    return info
+    return DataContainer(
+        train=train,
+        test=test,
+        num_classes=10,
+        input_shape=train[0][0].shape,
+        normalization=Normalization(mean=[0.1307], std=[0.3081]),
+    )
 
 
 def get_cifar10() -> DataContainer:
@@ -72,21 +81,20 @@ def get_cifar10() -> DataContainer:
         target_transform=target_transform,
         download=True,
     )
-    info: DataContainer = {
-        "trainval": train,
-        "test": test,
-        "num_classes": 10,
-        "input_shape": train[0][0].shape,
-        "normalization": {"mean": (0.4914, 0.4822, 0.4465), "std": (0.247, 0.243, 0.261)},
-    }
-    return info
+    return DataContainer(
+        train=train,
+        test=test,
+        num_classes=10,
+        input_shape=train[0][0].shape,
+        normalization=Normalization(mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]),
+    )
 
 
-def create_dataset(name: Data) -> DataContainer:
-    match name.lower():
-        case "mnist":
+def get_dataset(name: Datasets) -> DataContainer:
+    match name:
+        case Datasets.MNIST:
             return get_mnist()
-        case "cifar10":
+        case Datasets.CIFAR10:
             return get_cifar10()
         case _:
             raise ValueError(f"Unknown dataset: {name}")

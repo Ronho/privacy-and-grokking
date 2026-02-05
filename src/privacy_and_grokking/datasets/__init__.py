@@ -1,13 +1,22 @@
-from .canaries import Canary, create_canaries
-from .datasets import Data, create_dataset
-from .wrapper import create_subset, get_dataset, stratified_split
+from privacy_and_grokking.datasets.canaries import (
+    Canaries,
+    SquareWatermarkCanaryConfig,
+    UniformNoiseCanaryConfig,
+)
+from privacy_and_grokking.datasets.datasets import (
+    Datasets,
+)
+from privacy_and_grokking.datasets.generator import (
+    DatasetConfig,
+    generate_datasets,
+)
 
 __all__ = [
-    "Canary",
-    "create_canaries",
-    "Data",
-    "create_dataset",
-    "get_dataset",
-    "create_subset",
-    "stratified_split",
+    "Canaries",
+    "SquareWatermarkCanaryConfig",
+    "UniformNoiseCanaryConfig",
+    "Datasets",
+    "NormalizationCanarySubset",
+    "DatasetConfig",
+    "generate_datasets",
 ]
