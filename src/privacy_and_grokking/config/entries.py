@@ -28,11 +28,7 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name=Datasets.MNIST,
-                train_size=1_000,
-                canary_share=0,
-                canary_config=None,
-                seed=1
+                name=Datasets.MNIST, train_size=1_000, canary_share=0, canary_config=None, seed=1
             ),
             initialization_scale=None,
         )
@@ -49,11 +45,7 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name=Datasets.MNIST,
-                train_size=None,
-                canary_share=0,
-                canary_config=None,
-                seed=1
+                name=Datasets.MNIST, train_size=None, canary_share=0, canary_config=None, seed=1
             ),
             initialization_scale=None,
         )
@@ -70,11 +62,7 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name=Datasets.MNIST,
-                train_size=1_000,
-                canary_share=0,
-                canary_config=None,
-                seed=1
+                name=Datasets.MNIST, train_size=1_000, canary_share=0, canary_config=None, seed=1
             ),
             initialization_scale=8.0,
         )
@@ -95,7 +83,7 @@ def get_configs() -> list[TrainConfig]:
                 train_size=None,
                 canary_share=0.01,
                 canary_config=SquareWatermarkCanaryConfig(square_size=3),
-                seed=1
+                seed=1,
             ),
             initialization_scale=None,
         )
@@ -116,7 +104,7 @@ def get_configs() -> list[TrainConfig]:
                 train_size=1_000,
                 canary_share=0.01,
                 canary_config=SquareWatermarkCanaryConfig(square_size=3),
-                seed=1
+                seed=1,
             ),
             initialization_scale=8.0,
         )

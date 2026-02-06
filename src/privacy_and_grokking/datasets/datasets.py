@@ -31,18 +31,8 @@ class Datasets(StrEnum):
 def get_mnist() -> DataContainer:
     pk = get_path_keeper()
     transform = transforms.ToTensor()
-    train = datasets.MNIST(
-        root=pk.CACHE,
-        train=True,
-        download=True,
-        transform=transform
-    )
-    test = datasets.MNIST(
-        root=pk.CACHE,
-        train=False,
-        download=True,
-        transform=transform
-    )
+    train = datasets.MNIST(root=pk.CACHE, train=True, download=True, transform=transform)
+    test = datasets.MNIST(root=pk.CACHE, train=False, download=True, transform=transform)
     return DataContainer(
         train=train,
         test=test,
@@ -55,18 +45,8 @@ def get_mnist() -> DataContainer:
 def get_cifar10() -> DataContainer:
     pk = get_path_keeper()
     transform = transforms.ToTensor()
-    train = datasets.CIFAR10(
-        root=pk.CACHE,
-        train=True,
-        download=True,
-        transform=transform
-    )
-    test = datasets.CIFAR10(
-        root=pk.CACHE,
-        train=False,
-        download=True,
-        transform=transform
-    )
+    train = datasets.CIFAR10(root=pk.CACHE, train=True, download=True, transform=transform)
+    test = datasets.CIFAR10(root=pk.CACHE, train=False, download=True, transform=transform)
     return DataContainer(
         train=train,
         test=test,
