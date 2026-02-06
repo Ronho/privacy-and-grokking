@@ -29,24 +29,19 @@ class Datasets(StrEnum):
 
 
 def get_mnist() -> DataContainer:
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-    )
-    target_transform = transforms.Lambda(lambda y: torch.tensor(y, dtype=torch.long))
     pk = get_path_keeper()
+    transform = transforms.ToTensor()
     train = datasets.MNIST(
         root=pk.CACHE,
         train=True,
-        transform=transform,
-        target_transform=target_transform,
         download=True,
+        transform=transform
     )
     test = datasets.MNIST(
         root=pk.CACHE,
         train=False,
-        transform=transform,
-        target_transform=target_transform,
         download=True,
+        transform=transform
     )
     return DataContainer(
         train=train,
@@ -58,28 +53,19 @@ def get_mnist() -> DataContainer:
 
 
 def get_cifar10() -> DataContainer:
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            # https://github.com/kuangliu/pytorch-cifar/issues/19
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
-        ]
-    )
-    target_transform = transforms.Lambda(lambda y: torch.tensor(y, dtype=torch.long))
     pk = get_path_keeper()
+    transform = transforms.ToTensor()
     train = datasets.CIFAR10(
         root=pk.CACHE,
         train=True,
-        transform=transform,
-        target_transform=target_transform,
         download=True,
+        transform=transform
     )
     test = datasets.CIFAR10(
         root=pk.CACHE,
         train=False,
-        transform=transform,
-        target_transform=target_transform,
         download=True,
+        transform=transform
     )
     return DataContainer(
         train=train,

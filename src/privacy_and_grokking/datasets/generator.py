@@ -1,5 +1,7 @@
+from typing import Self
+
 import torch
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from torch.utils.data import Dataset, TensorDataset
 from torchvision import transforms
 
@@ -21,9 +23,7 @@ class CanarySubset(TensorDataset):
         self.dataset = dataset
         self.subset_indices = subset_indices
         self.canary_indices = canary_indices
-        self.transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(norm.mean, norm.std)]
-        )
+        self.transform = transforms.Normalize(norm.mean, norm.std)
         self.target_transform = transforms.Lambda(lambda y: torch.tensor(y, dtype=torch.long))
         self.canary_transform = canary_transform
 
@@ -56,8 +56,16 @@ class DatasetConfig(BaseModel):
     name: Datasets
     train_size: int | None = Field(ge=0)
     canary_share: float = Field(ge=0, le=1)
-    canary_config: CanaryConfig
+    canary_config: CanaryConfig | None = None
     seed: int | None = None
+
+    @model_validator(mode="after")
+    def validate_canary_config(self) -> Self:
+        if self.canary_share == 0 and self.canary_config is not None:
+            raise ValueError("canary_config must be None if canary_share is 0")
+        if self.canary_share > 0 and self.canary_config is None:
+            raise ValueError("canary_config must be provided if canary_share > 0")
+        return self
 
 
 def distribute_a_across_b(a: int, b: int) -> torch.Tensor:
@@ -112,9 +120,16 @@ def generate_datasets(config: DatasetConfig) -> tuple[CanarySubset, CanarySubset
 
     # CanarySubset does not care if canary_indices contains more elements than are in subset_indices
     canary_indices = torch.concat(list(canary_lookup.values()))
-    canary_generator = create_canary_generator(
-        config=config.canary_config, dim=container.input_shape, num_classes=container.num_classes
-    )
+    canary_generator = None
+    if config.canary_share > 0:
+        if config.canary_config is not None:
+            canary_generator = create_canary_generator(
+                config=config.canary_config,
+                dim=container.input_shape,
+                num_classes=container.num_classes,
+            )
+        else:
+            raise ValueError("canary_config must be provided if canary_share > 0")
 
     train = CanarySubset(
         dataset=container.train,
@@ -135,14 +150,3 @@ def generate_datasets(config: DatasetConfig) -> tuple[CanarySubset, CanarySubset
         num_classes=container.num_classes,
     )
     return train, test
-
-
-if __name__ == "__main__":
-    from privacy_and_grokking.datasets.canaries import SquareWatermarkCanaryConfig
-
-    canary_config = SquareWatermarkCanaryConfig(square_size=3)
-    config = DatasetConfig(
-        name="mnist", train_size=None, canary_share=0.0023, canary_config=canary_config, seed=5
-    )
-    train, test = generate(config=config)
-    print(len(train), len(test))

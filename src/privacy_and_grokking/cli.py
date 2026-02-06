@@ -3,7 +3,7 @@ from typing import Literal
 
 from typer import Typer
 
-from .attacks import mia_rmia, mia_threshold, mia_merlin_morgan
+from .attacks import mia_merlin_morgan, mia_rmia, mia_threshold
 from .config import TrainConfig, TrainingRegistry
 from .logger import get_logger, register_logger
 from .path_keeper import get_path_keeper
@@ -33,6 +33,7 @@ def _models(
         models = model_list
 
     configs = []
+
     for model in models:
         if model not in model_list:
             raise ValueError(f"Unknown model '{model}' specified.")
