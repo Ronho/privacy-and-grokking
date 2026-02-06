@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..datasets import Canary, Data
+from ..datasets import DatasetConfig
 from ..models import Model
 
 type Loss = Literal["mse", "cross_entropy"]
@@ -32,32 +32,6 @@ class AdamW(OptimizerConfig):
 
     learning_rate: float
     weight_decay: float
-
-
-class CanaryConfig(BaseModel):
-    name: Canary
-    percentage: float
-    repetitions: int
-
-
-class GaussianNoiseCanary(CanaryConfig):
-    name: Canary = "gaussian_noise"
-    noise_scale: float | None = None
-    seed: int | None = None
-
-
-class WatermarkCanary(CanaryConfig):
-    name: Canary = "watermark"
-    square_size: int
-    seed: int | None = None
-
-
-class DatasetConfig(BaseModel):
-    name: Data
-    train_ratio: float = Field(gt=0.0, lt=1.0)
-    use_val_for_training: bool = Field(default=False)
-    train_size: int | None = None
-    canary: CanaryConfig | None = Field(discriminator="name", default=None)
 
 
 class TrainConfig(BaseModel):

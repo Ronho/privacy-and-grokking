@@ -1,5 +1,7 @@
+from privacy_and_grokking.datasets import DatasetConfig, Datasets, SquareWatermarkCanaryConfig
+
 from ..utils import get_package_version
-from .model import AdamW, DatasetConfig, MSELoss, TrainConfig, WatermarkCanary
+from .model import AdamW, MSELoss, TrainConfig
 
 
 def get_configs() -> list[TrainConfig]:
@@ -11,120 +13,12 @@ def get_configs() -> list[TrainConfig]:
     SEED = 128
     LOSS = MSELoss()
     OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
-    TRAIN_RATIO = 0.5
-    CANARY_SEED = 64
 
     configs = []
 
     configs.append(
         TrainConfig(
-            name="CIFAR10_MLP_NOGROK_TRAIN_NOCAN",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="cifar10",
-                train_ratio=TRAIN_RATIO,
-                train_size=None,
-                canary=None,
-            ),
-            initialization_scale=None,
-        )
-    )
-    configs.append(
-        TrainConfig(
-            name="CIFAR10_MLP_NOGROK_TRAIN_WATERMARK",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="cifar10",
-                train_ratio=TRAIN_RATIO,
-                train_size=None,
-                canary=WatermarkCanary(
-                    percentage=1, repetitions=1, square_size=3, seed=CANARY_SEED
-                ),
-            ),
-            initialization_scale=None,
-        )
-    )
-    configs.append(
-        TrainConfig(
-            name="CIFAR10_MLP_NOGROK_VAL_NOCAN",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="cifar10",
-                train_ratio=TRAIN_RATIO,
-                train_size=None,
-                use_val_for_training=True,
-                canary=None,
-            ),
-            initialization_scale=None,
-        )
-    )
-    configs.append(
-        TrainConfig(
-            name="CIFAR10_MLP_GROK_TRAIN_NOCAN",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="cifar10",
-                train_ratio=TRAIN_RATIO,
-                train_size=1000,
-                canary=None,
-            ),
-            initialization_scale=8.0,
-        )
-    )
-    configs.append(
-        TrainConfig(
-            name="CIFAR10_MLP_GROK_TRAIN_WATERMARK",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="cifar10",
-                train_ratio=TRAIN_RATIO,
-                train_size=1000,
-                canary=WatermarkCanary(
-                    percentage=0.1, repetitions=10, square_size=3, seed=CANARY_SEED
-                ),
-            ),
-            initialization_scale=8.0,
-        )
-    )
-
-    configs.append(
-        TrainConfig(
-            name="MNIST_MLP_NOGROK_TRAIN_NOCAN_SMALL_DATASET",
+            name="MNIST_MLP_NOGROK_NOCAN_SMALL_DATASET",
             code_version=VERSION,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
@@ -134,17 +28,18 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
-                train_size=1000,
-                canary=None,
+                name=Datasets.MNIST,
+                train_size=1_000,
+                canary_share=0,
+                canary_config=None,
+                seed=1
             ),
             initialization_scale=None,
         )
     )
     configs.append(
         TrainConfig(
-            name="MNIST_MLP_NOGROK_TRAIN_NOCAN",
+            name="MNIST_MLP_NOGROK_NOCAN",
             code_version=VERSION,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
@@ -154,31 +49,11 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
+                name=Datasets.MNIST,
                 train_size=None,
-                canary=None,
-            ),
-            initialization_scale=None,
-        )
-    )
-    configs.append(
-        TrainConfig(
-            name="MNIST_MLP_NOGROK_VAL_NOCAN",
-            code_version=VERSION,
-            batch_size=BATCH_SIZE,
-            log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS,
-            seed=SEED,
-            loss=LOSS,
-            optimizer=OPTIMIZER,
-            model="mlp",
-            dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
-                use_val_for_training=True,
-                train_size=None,
-                canary=None,
+                canary_share=0,
+                canary_config=None,
+                seed=1
             ),
             initialization_scale=None,
         )
@@ -195,10 +70,11 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
-                train_size=1000,
-                canary=None,
+                name=Datasets.MNIST,
+                train_size=1_000,
+                canary_share=0,
+                canary_config=None,
+                seed=1
             ),
             initialization_scale=8.0,
         )
@@ -215,12 +91,11 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
+                name=Datasets.MNIST,
                 train_size=None,
-                canary=WatermarkCanary(
-                    percentage=0.1, repetitions=10, square_size=3, seed=CANARY_SEED
-                ),
+                canary_share=0.01,
+                canary_config=SquareWatermarkCanaryConfig(square_size=3),
+                seed=1
             ),
             initialization_scale=None,
         )
@@ -237,12 +112,11 @@ def get_configs() -> list[TrainConfig]:
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
-                name="mnist",
-                train_ratio=TRAIN_RATIO,
-                train_size=1000,
-                canary=WatermarkCanary(
-                    percentage=0.1, repetitions=10, square_size=3, seed=CANARY_SEED
-                ),
+                name=Datasets.MNIST,
+                train_size=1_000,
+                canary_share=0.01,
+                canary_config=SquareWatermarkCanaryConfig(square_size=3),
+                seed=1
             ),
             initialization_scale=8.0,
         )

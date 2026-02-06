@@ -11,7 +11,7 @@ from pydantic_core import to_jsonable_python
 from tqdm.auto import tqdm
 
 from ..config import AdamW, LossConfig, TrainConfig
-from ..datasets import get_dataset
+from ..datasets import generate_datasets
 from ..logger import get_logger
 from ..models import create_model
 from ..path_keeper import get_path_keeper
