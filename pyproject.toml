@@ -101,7 +101,7 @@ qa = { sequence = [
 qa-fix = { sequence = [
   { cmd = "uv run ruff format", ignore_fail = true },
   { cmd = "uv run ruff check --fix", ignore_fail = true },
-  { cmd = "uv run ty check --fix", ignore_fail = true },
+  { cmd = "uv run ty check", ignore_fail = true },
   { cmd = "uv run pytest", ignore_fail = true }
 ], help = "Fix code style and run tests" }
 
