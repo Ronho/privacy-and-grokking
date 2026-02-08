@@ -3,12 +3,16 @@ from privacy_and_grokking.datasets.canaries import (
     SquareWatermarkCanaryConfig,
     UniformNoiseCanaryConfig,
 )
-from privacy_and_grokking.datasets.datasets import (
-    Datasets,
-)
+from privacy_and_grokking.datasets.datasets import Datasets, Normalization
 from privacy_and_grokking.datasets.generator import (
+    CanarySubset,
     DatasetConfig,
     generate_datasets,
+)
+from privacy_and_grokking.datasets.masking import (
+    MaskingConfig,
+    Maskings,
+    create_masking,
 )
 
 __all__ = [
@@ -16,7 +20,11 @@ __all__ = [
     "SquareWatermarkCanaryConfig",
     "UniformNoiseCanaryConfig",
     "Datasets",
-    "NormalizationCanarySubset",
     "DatasetConfig",
     "generate_datasets",
+    "MaskingConfig",
+    "Maskings",
+    "create_masking",
+    "CanarySubset",
+    "Normalization"
 ]

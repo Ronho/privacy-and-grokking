@@ -1,4 +1,4 @@
-from privacy_and_grokking.datasets import DatasetConfig, Datasets, SquareWatermarkCanaryConfig
+from privacy_and_grokking.datasets import DatasetConfig, Datasets, SquareWatermarkCanaryConfig, MaskingConfig, Maskings
 
 from ..utils import get_package_version
 from .model import AdamW, MSELoss, TrainConfig
@@ -13,6 +13,7 @@ def get_configs() -> list[TrainConfig]:
     SEED = 128
     LOSS = MSELoss()
     OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
+    mask = MaskingConfig(name=Maskings.INDEPENDENT_STRATIFIED, num_models=256, p=0.5, seed=1)
 
     configs = []
 
@@ -30,6 +31,7 @@ def get_configs() -> list[TrainConfig]:
             dataset=DatasetConfig(
                 name=Datasets.MNIST, train_size=1_000, canary_share=0, canary_config=None, seed=1
             ),
+            dataset_mask=mask,
             initialization_scale=None,
         )
     )
@@ -47,6 +49,7 @@ def get_configs() -> list[TrainConfig]:
             dataset=DatasetConfig(
                 name=Datasets.MNIST, train_size=None, canary_share=0, canary_config=None, seed=1
             ),
+            dataset_mask=mask,
             initialization_scale=None,
         )
     )
@@ -64,6 +67,7 @@ def get_configs() -> list[TrainConfig]:
             dataset=DatasetConfig(
                 name=Datasets.MNIST, train_size=1_000, canary_share=0, canary_config=None, seed=1
             ),
+            dataset_mask=mask,
             initialization_scale=8.0,
         )
     )
@@ -85,6 +89,7 @@ def get_configs() -> list[TrainConfig]:
                 canary_config=SquareWatermarkCanaryConfig(square_size=3),
                 seed=1,
             ),
+            dataset_mask=mask,
             initialization_scale=None,
         )
     )
@@ -106,6 +111,7 @@ def get_configs() -> list[TrainConfig]:
                 canary_config=SquareWatermarkCanaryConfig(square_size=3),
                 seed=1,
             ),
+            dataset_mask=mask,
             initialization_scale=8.0,
         )
     )

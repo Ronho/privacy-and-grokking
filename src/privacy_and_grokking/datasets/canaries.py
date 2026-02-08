@@ -7,42 +7,30 @@ from pydantic import BaseModel, Field
 
 
 class Canary(Protocol):  # noqa: F811
-    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]: ...
+    def __call__(self, image: torch.Tensor) -> torch.Tensor: ...
 
 
 class UniformNoiseCanary:
-    def __init__(self, dim: Sequence[int], num_classes: int):
+    def __init__(self, dim: Sequence[int]):
         self.dim = dim
-        self.num_classes = num_classes
-        self.generator = torch.Generator()
+        self.rng = torch.Generator()
 
-    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]:
+    def __call__(self, image: torch.Tensor) -> torch.Tensor:
         seed = torch.hash_tensor(image)
-        self.generator.manual_seed(seed.item())
-        shift = torch.randint(1, self.num_classes, (1,), generator=self.generator).item()
-        label = (label + shift) % self.num_classes
+        self.rng.manual_seed(seed.item())
+        image = torch.rand(self.dim, generator=self.rng)
 
-        image = torch.rand(self.dim, generator=self.generator)
-
-        return image, label
+        return image
 
 
 class SquareWatermarkCanary:
-    def __init__(self, dim: Sequence[int], num_classes: int, square_size: int):
+    def __init__(self, dim: Sequence[int], square_size: int):
         self.dim = dim
-        self.num_classes = num_classes
         self.square_size = min(square_size, dim[-2], dim[-1])
-        self.generator = torch.Generator()
 
-    def __call__(self, image: torch.Tensor, label: int) -> tuple[torch.Tensor, int]:
-        seed = torch.hash_tensor(image)
-        self.generator.manual_seed(seed.item())
-        shift = torch.randint(1, self.num_classes, (1,), generator=self.generator).item()
-        label = (label + shift) % self.num_classes
-
-        image[:, :, -self.square_size :, -self.square_size :] = 1.0
-
-        return image, label
+    def __call__(self, image: torch.Tensor) -> torch.Tensor:
+        image[:, -self.square_size:, -self.square_size:] = 1.0
+        return image
 
 
 class Canaries(StrEnum):
@@ -63,13 +51,11 @@ class SquareWatermarkCanaryConfig(CanaryConfig):
     square_size: int = Field(ge=0)
 
 
-def create_canary_generator(config: CanaryConfig, dim: Sequence[int], num_classes: int) -> Canary:
+def create_canary_generator(config: CanaryConfig, dim: Sequence[int]) -> Canary:
     match config.name:
         case Canaries.UNIFORM_NOISE:
-            return UniformNoiseCanary(dim=dim, num_classes=num_classes)
+            return UniformNoiseCanary(dim=dim)
         case Canaries.SQUARE_WATERMARK:
-            return SquareWatermarkCanary(
-                dim=dim, num_classes=num_classes, **config.model_dump(exclude={"name"})
-            )
+            return SquareWatermarkCanary(dim=dim, square_size=config.square_size)
         case _:
             raise ValueError(f"Unknown canary '{config.name}'.")

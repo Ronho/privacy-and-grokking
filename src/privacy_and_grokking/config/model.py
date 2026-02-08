@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..datasets import DatasetConfig
-from ..models import Model
+from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
+from privacy_and_grokking.models import Model
 
 type Loss = Literal["mse", "cross_entropy"]
 
@@ -48,3 +48,4 @@ class TrainConfig(BaseModel):
     model: Model
     optimizer: AdamW = Field(discriminator="name")
     dataset: DatasetConfig
+    dataset_mask: MaskingConfig

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 from torch.utils.data import DataLoader, Subset
 from tqdm import trange
 
