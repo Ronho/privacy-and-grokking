@@ -4,6 +4,7 @@ from enum import StrEnum
 import torch
 from pydantic import BaseModel, Field
 
+from privacy_and_grokking.datasets import CanarySubset
 from privacy_and_grokking.logger import get_logger
 
 logger = get_logger()
@@ -195,3 +196,9 @@ def create_masking(config: MaskingConfig, num_samples: int, num_classes: int) ->
             return BalancedStratifiedMasking(**input)
         case _:
             raise ValueError(f"Unknown masking '{config.name}'.")
+
+def mask_dataset(masking: Masking, ds: CanarySubset, mask_index: int) -> torch.utils.data.Dataset:
+    mask = masking(classes=torch.Tensor([lbl for _, lbl in ds]))
+    mask = torch.transpose(mask, 0, 1)[mask_index]
+    subset = torch.utils.data.Subset(ds, torch.nonzero(mask).squeeze().tolist())
+    return subset

@@ -1,14 +1,19 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+import torch.nn.functional as F  # noqa: N812
+from torch import nn
+from torch.utils.data import DataLoader
 from tqdm import trange
 
-from ..config import TrainConfig
-from ..datasets import get_dataset
-from ..models import create_model
-from ..path_keeper import get_path_keeper
-from ..utils import get_device
+from privacy_and_grokking.config import TrainConfig
+from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.logger import get_logger
+from privacy_and_grokking.models import create_model
+from privacy_and_grokking.path_keeper import get_path_keeper
+from privacy_and_grokking.utils import get_device
+
+logger = get_logger()
+
+STEP_SIZE = 1_000
 
 
 def get_correct_class_probabilities_and_logits(model, dataset):
@@ -46,20 +51,17 @@ def get_correct_class_probabilities_and_logits(model, dataset):
     )
 
 
-def attack(cfg: TrainConfig):
-    train, _, test, input_dim, num_classes, _ = get_dataset(
-        name=cfg.dataset.name,
-        train_ratio=cfg.dataset.train_ratio,
-        train_size=cfg.dataset.train_size,
-        canary=None,
-    )
-
-    train_size = min(1000, len(train))
-    test_size = min(1000, len(test))
-    train_subset = Subset(train, list(range(train_size)))
-    test_subset = Subset(test, list(range(test_size)))
-
+def attack(cfg: TrainConfig, mask_index: int = 0):
     pk = get_path_keeper()
+
+    train, test = generate_datasets(cfg.dataset)
+    masking = create_masking(
+        config=cfg.dataset_mask,
+        num_samples=len(train),
+        num_classes=train.num_classes,
+    )
+    train_subset = mask_dataset(masking, train, mask_index)
+
     train_probabilities = []
     test_probabilities = []
     train_logits_list = []
@@ -68,14 +70,13 @@ def attack(cfg: TrainConfig):
     test_ce_losses_list = []
     train_mse_losses_list = []
     test_mse_losses_list = []
-    STEP_SIZE = 1_000
     steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
     for i in trange(len(steps), desc="Steps", leave=False):
-        pk.set_params({"model": cfg.name, "step": steps[i]})
+        pk.set_params({"model": f"{cfg.name}_{mask_index}", "step": steps[i]})
         model = create_model(
             name=cfg.model,
-            input_dim=input_dim,
-            num_classes=num_classes,
+            input_dim=train.input_shape,
+            num_classes=train.num_classes,
         )
         model.load_state_dict(
             torch.load(pk.MODEL_TORCH, weights_only=True, map_location=get_device())
@@ -86,8 +87,9 @@ def attack(cfg: TrainConfig):
             get_correct_class_probabilities_and_logits(model, train_subset)
         )
         test_probs, test_logits, test_ce_losses, test_mse_losses = (
-            get_correct_class_probabilities_and_logits(model, test_subset)
+            get_correct_class_probabilities_and_logits(model, test)
         )
+
         train_probabilities.append(train_probs.squeeze())
         test_probabilities.append(test_probs.squeeze())
         train_logits_list.append(train_logits.squeeze())
@@ -118,5 +120,5 @@ def attack(cfg: TrainConfig):
             "test_mse_losses": test_mse_losses_over_time,
             "steps": steps,
         },
-        pk.ATTACK_FOLDER / "mia_threshold.pt",
+        pk.ATTACK_FOLDER / "mia_simple.pt",
     )

@@ -1,20 +1,24 @@
-from privacy_and_grokking.datasets import DatasetConfig, Datasets, SquareWatermarkCanaryConfig, MaskingConfig, Maskings
+from privacy_and_grokking.config.model import AdamW, MSELoss, TrainConfig
+from privacy_and_grokking.datasets import (
+    DatasetConfig,
+    Datasets,
+    MaskingConfig,
+    Maskings,
+    SquareWatermarkCanaryConfig,
+)
+from privacy_and_grokking.utils import get_package_version
 
-from ..utils import get_package_version
-from .model import AdamW, MSELoss, TrainConfig
-
+VERSION = get_package_version()
+BATCH_SIZE = 200
+LOG_FREQUENCY = 500
+OPTIMIZATION_STEPS = 250_000
+OPTIMIZATION_STEPS_LONG = 100_000
+SEED = 128
+LOSS = MSELoss()
+OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
 
 def get_configs() -> list[TrainConfig]:
-    VERSION = get_package_version()
-    BATCH_SIZE = 200
-    LOG_FREQUENCY = 500
-    OPTIMIZATION_STEPS = 250_000
-    OPTIMIZATION_STEPS_LONG = 1_000_000
-    SEED = 128
-    LOSS = MSELoss()
-    OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
     mask = MaskingConfig(name=Maskings.INDEPENDENT_STRATIFIED, num_models=256, p=0.5, seed=1)
-
     configs = []
 
     configs.append(

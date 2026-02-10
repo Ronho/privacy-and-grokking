@@ -13,6 +13,7 @@ from privacy_and_grokking.datasets.masking import (
     MaskingConfig,
     Maskings,
     create_masking,
+    mask_dataset,
 )
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "MaskingConfig",
     "Maskings",
     "create_masking",
+    "mask_dataset",
     "CanarySubset",
     "Normalization"
 ]

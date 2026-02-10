@@ -7,6 +7,7 @@ from privacy_and_grokking.config import DatasetConfig
 from privacy_and_grokking.datasets import (
     CanarySubset,
     Datasets,
+    Maskings,
     Normalization,
     SquareWatermarkCanaryConfig,
     UniformNoiseCanaryConfig,
@@ -14,6 +15,7 @@ from privacy_and_grokking.datasets import (
 )
 from privacy_and_grokking.logger import get_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
+from privacy_and_grokking.visualize.masks import vis_masking_strategy
 
 logger = get_logger()
 
@@ -187,18 +189,18 @@ def vis_dataset(name: Datasets):
     _vis_samples_per_class(name, samples_by_class_train, train.num_classes, train.norm)
 
     # Watermark Samples per Class
-    config = DatasetConfig(
-        name=name, train_size=None, canary_share=0.01, canary_config=SquareWatermarkCanaryConfig(square_size=3), seed=1
+    config_watermark = DatasetConfig(
+        name=name, train_size=None, canary_share=0.01, canary_config=SquareWatermarkCanaryConfig(square_size=3), seed=2
     )
-    train_watermark, _ = generate_datasets(config=config)
+    train_watermark, _ = generate_datasets(config=config_watermark)
     samples_by_class_watermark = _samples_by_class(dataset=train_watermark, canary=True)
     _vis_samples_per_class(
         name, samples_by_class_watermark, train_watermark.num_classes, train_watermark.norm, postfix="_watermark"
     )
 
     # Noise Samples per Class
-    config = DatasetConfig(name=name, train_size=None, canary_share=0.01, canary_config=UniformNoiseCanaryConfig(), seed=1)
-    train_noise, _ = generate_datasets(config=config)
+    config_noise = DatasetConfig(name=name, train_size=None, canary_share=0.01, canary_config=UniformNoiseCanaryConfig(), seed=2)
+    train_noise, _ = generate_datasets(config=config_noise)
     samples_by_class_noise = _samples_by_class(dataset=train_noise, canary=True)
     _vis_samples_per_class(
         name, samples_by_class_noise, train_noise.num_classes, train_noise.norm, postfix="_gaussian_noise"
@@ -238,6 +240,13 @@ def vis_dataset(name: Datasets):
         "Gaussian Noise": noise_classes,
     }
     _vis_rdm(name, images, postfix="_indices")
+
+    # Masks
+    config.train_size = 2000
+    train_mask, _ = generate_datasets(config=config)
+    num_models_list = [2, 8, 64, 256, 512]
+    for masking_type in Maskings:
+        vis_masking_strategy(train_mask, masking_type, num_models_list=num_models_list)
 
 
 def visualize():
