@@ -49,6 +49,7 @@ package = true
 conflicts = [
   [
     { extra = "cpu" },
+    { extra = "cu128" },
     { extra = "cu130" },
   ],
 ]
