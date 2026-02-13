@@ -12,7 +12,6 @@ VERSION = get_package_version()
 BATCH_SIZE = 200
 LOG_FREQUENCY = 500
 OPTIMIZATION_STEPS = 250_000
-OPTIMIZATION_STEPS_LONG = 100_000
 SEED = 128
 LOSS = MSELoss()
 OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
@@ -27,7 +26,7 @@ def get_configs() -> list[TrainConfig]:
             code_version=VERSION,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS_LONG,
+            optimization_steps=OPTIMIZATION_STEPS,
             seed=SEED,
             loss=LOSS,
             optimizer=OPTIMIZER,
@@ -45,7 +44,7 @@ def get_configs() -> list[TrainConfig]:
             code_version=VERSION,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS_LONG,
+            optimization_steps=OPTIMIZATION_STEPS,
             seed=SEED,
             loss=LOSS,
             optimizer=OPTIMIZER,
@@ -63,7 +62,7 @@ def get_configs() -> list[TrainConfig]:
             code_version=VERSION,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
-            optimization_steps=OPTIMIZATION_STEPS_LONG,
+            optimization_steps=OPTIMIZATION_STEPS,
             seed=SEED,
             loss=LOSS,
             optimizer=OPTIMIZER,
