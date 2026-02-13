@@ -32,11 +32,11 @@ pag = "privacy_and_grokking.cli:app"
 [project.optional-dependencies]
 cpu = [
   "torch==2.9.0",
-  "torchvision==0.24.0",
+  "torchvision>=0.24.0",
 ]
 cu130 = [
   "torch==2.9.0",
-  "torchvision==0.24.0",
+  "torchvision>=0.24.0",
 ]
 
 # --- uv Configuration ---
@@ -52,10 +52,12 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "cu128" },
   { index = "pytorch-cu130", extra = "cu130" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "cu128" },
   { index = "pytorch-cu130", extra = "cu130" },
 ]
 
@@ -67,6 +69,11 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 # --- Ruff Configuration ---
