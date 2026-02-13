@@ -1,15 +1,17 @@
+import os
 from datetime import UTC, datetime
+from multiprocessing import Pool
 from typing import Literal
 
 from typer import Typer
 
-from .attacks import mia_merlin_morgan, mia_rmia, mia_threshold
+from .attacks import mia_simple
 from .config import TrainConfig, TrainingRegistry
 from .logger import get_logger, register_logger
 from .path_keeper import get_path_keeper
 from .training import RestartConfig
 from .training import train as training
-from .visualize import visualize_data, visualize_mia, visualize_training
+from .visualize import visualize_data
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
@@ -23,52 +25,39 @@ def _init(id: str):
     return logger
 
 
-def _models(
-    models: list[str] | None, existing: Literal["log", "raise", "ignore"] = "log"
-) -> list[TrainConfig]:
+def _models(model: str, mask_index: int, existing: Literal["log", "raise", "ignore"] = "log") -> TrainConfig:
     TrainingRegistry.load_defaults()
     model_list = TrainingRegistry.list()
 
-    if models is None:
-        models = model_list
+    if model not in model_list:
+        raise ValueError(f"Unknown model '{model}' specified.")
 
-    configs = []
+    if existing != "ignore":
+        pk = get_path_keeper()
+        pk.set_params({"model": f"{model}_{mask_index}"})
+        if not pk.TRAIN_CONFIG.exists():
+            if existing == "log":
+                logger = get_logger()
+                logger.warning(
+                    "Model was not trained yet and will be skipped.", extra={"model": model}
+                )
+            else:
+                raise ValueError(f"Model '{model}' has not been trained yet.")
 
-    for model in models:
-        if model not in model_list:
-            raise ValueError(f"Unknown model '{model}' specified.")
-        if existing != "ignore":
-            pk = get_path_keeper()
-            pk.set_params({"model": model})
-            if not pk.TRAIN_CONFIG.exists():
-                if existing == "log":
-                    logger = get_logger()
-                    logger.warning(
-                        "Model was not trained yet and will be skipped.", extra={"model": model}
-                    )
-                    continue
-                else:
-                    raise ValueError(f"Model '{model}' has not been trained yet.")
-        configs.append(TrainingRegistry.get(model))
-
-    return configs
+    return TrainingRegistry.get(model)
 
 
 @app.command()
-def train(id: str, models: list[str] | None = None):
+def train(id: str, model: str, mask_index: int):
     logger = _init(id)
-    logger.info("Starting training run.", extra={"run": id, "models": models})
-
-    configs = _models(models, existing="ignore")
-    for config in configs:
-        logger.info("Starting training.", extra={"model": config.name})
-        training(config)
-
-    logger.info("Training run completed.", extra={"run": id, "models": models})
+    logger.info("Starting training run.", extra={"run": id, "model": model, "mask_index": mask_index})
+    config = _models(model, mask_index, existing="ignore")
+    training(cfg=config, mask_index=mask_index)
+    logger.info("Training run completed.", extra={"run": id, "model": model, "mask_index": mask_index})
 
 
 @app.command()
-def restart(id: str, model: str, checkpoint: int):
+def restart(id: str, model: str, checkpoint: int, mask_index: int):
     logger = _init(id)
     logger.info(
         f"Restarting training for run {id}, model '{model}' from checkpoint {checkpoint}.",
@@ -76,37 +65,26 @@ def restart(id: str, model: str, checkpoint: int):
     )
 
     config = RestartConfig(name=model, checkpoint=checkpoint)
-    training(config)
+    training(cfg=config, mask_index=mask_index)
 
 
 @app.command()
-def attack(id: str, attacks: list[str] | None = None, models: list[str] | None = None):
+def attack(id: str, attack: str, model: str, mask_index: int):
     logger = _init(id)
-    logger.info("Starting attack run.", extra={"run": id, "attacks": attacks, "models": models})
+    logger.info("Starting attack run.", extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index})
 
     available_attacks = {
-        "mia_threshold": mia_threshold,
-        "mia_rmia": mia_rmia,
-        "mia_merlin_morgan": mia_merlin_morgan,
+        "mia_simple": mia_simple
     }
 
-    if attacks is None:
-        attacks = list(available_attacks.keys())
+    if attack not in available_attacks:
+        raise ValueError(f"Unknown attack '{attack}' specified.")
 
-    valid_attacks = []
-    for attack_name in attacks:
-        if attack_name not in available_attacks:
-            raise ValueError(f"Unknown attack '{attack_name}' specified.")
-        valid_attacks.append(attack_name)
-
-    configs = _models(models, existing="log")
-    for attack_name in valid_attacks:
-        func = available_attacks[attack_name]
-        for config in configs:
-            logger.info("Starting attack.", extra={"attack": attack_name, "model": config.name})
-            func(cfg=config)
-
-    logger.info("Attack run completed.", extra={"run": id, "attacks": attacks, "models": models})
+    config = _models(model, mask_index, existing="log")
+    func = available_attacks[attack]
+    logger.info("Starting attack.", extra={"attack": attack, "model": config.name, "mask_index": mask_index})
+    func(cfg=config, mask_index=mask_index)
+    logger.info("Attack run completed.", extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index})
 
 
 @app.command()
@@ -116,16 +94,31 @@ def evaluate(id: str, models: list[str] | None = None):
 
     visualize_data()
 
-    configs = _models(models, existing="log")
-    for config in configs:
-        logger.info("Starting evaluation.", extra={"model": config.name})
-        pk = get_path_keeper()
-        pk.set_params({"model": config.name})
-        visualize_training(cfg=config)
-    visualize_mia(cfgs=configs)
+    # configs = _models(models, existing="log")
+    # for config in configs:
+    #     logger.info("Starting evaluation.", extra={"model": config.name})
+    #     pk = get_path_keeper()
+    #     pk.set_params({"model": config.name})
+    #     visualize_training(cfg=config)
+    # visualize_mia(cfgs=configs)
 
-    logger.info("Evaluation run completed.", extra={"run": id, "models": models})
+    # logger.info("Evaluation run completed.", extra={"run": id, "models": models})
 
+def _handle(line):
+    line = line.strip()
+    if line:
+        logger = get_logger()
+        logger.info("Processing command.", extra={"command": line})
+        os.system(line)
+
+@app.command()
+def process(path: str, num_workers: int):
+    logger = _init("processing")
+    logger.info("Starting processing run.", extra={"run": path})
+
+    with open(path) as f, Pool(num_workers) as pool:
+        pool.map(_handle, f)
+    logger.info("Processing run completed.", extra={"run": path})
 
 if __name__ == "__main__":
     app()
