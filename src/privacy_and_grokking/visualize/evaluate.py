@@ -454,8 +454,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
         pk.set_params({"model": cfg.name})
         container: list[AttackContainer] = []
 
-        if (pk.ATTACK_FOLDER / "mia_threshold.pt").exists():
-            data = torch.load(pk.ATTACK_FOLDER / "mia_threshold.pt")
+        if (pk.ATTACK_FOLDER / "mia_simple.pt").exists():
+            data = torch.load(pk.ATTACK_FOLDER / "mia_simple.pt")
 
             container.append(
                 AttackContainer(
