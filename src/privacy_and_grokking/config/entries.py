@@ -16,6 +16,7 @@ SEED = 128
 LOSS = MSELoss()
 OPTIMIZER = AdamW(learning_rate=1e-3, weight_decay=0.01)
 
+
 def get_configs() -> list[TrainConfig]:
     mask = MaskingConfig(name=Maskings.INDEPENDENT_STRATIFIED, num_models=256, p=0.5, seed=1)
     configs = []

@@ -25,7 +25,9 @@ def _init(id: str):
     return logger
 
 
-def _models(model: str, mask_index: int, existing: Literal["log", "raise", "ignore"] = "log") -> TrainConfig:
+def _models(
+    model: str, mask_index: int, existing: Literal["log", "raise", "ignore"] = "log"
+) -> TrainConfig:
     TrainingRegistry.load_defaults()
     model_list = TrainingRegistry.list()
 
@@ -50,10 +52,14 @@ def _models(model: str, mask_index: int, existing: Literal["log", "raise", "igno
 @app.command()
 def train(id: str, model: str, mask_index: int):
     logger = _init(id)
-    logger.info("Starting training run.", extra={"run": id, "model": model, "mask_index": mask_index})
+    logger.info(
+        "Starting training run.", extra={"run": id, "model": model, "mask_index": mask_index}
+    )
     config = _models(model, mask_index, existing="ignore")
     training(cfg=config, mask_index=mask_index)
-    logger.info("Training run completed.", extra={"run": id, "model": model, "mask_index": mask_index})
+    logger.info(
+        "Training run completed.", extra={"run": id, "model": model, "mask_index": mask_index}
+    )
 
 
 @app.command()
@@ -71,20 +77,26 @@ def restart(id: str, model: str, checkpoint: int, mask_index: int):
 @app.command()
 def attack(id: str, attack: str, model: str, mask_index: int):
     logger = _init(id)
-    logger.info("Starting attack run.", extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index})
+    logger.info(
+        "Starting attack run.",
+        extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index},
+    )
 
-    available_attacks = {
-        "mia_simple": mia_simple
-    }
+    available_attacks = {"mia_simple": mia_simple}
 
     if attack not in available_attacks:
         raise ValueError(f"Unknown attack '{attack}' specified.")
 
     config = _models(model, mask_index, existing="log")
     func = available_attacks[attack]
-    logger.info("Starting attack.", extra={"attack": attack, "model": config.name, "mask_index": mask_index})
+    logger.info(
+        "Starting attack.", extra={"attack": attack, "model": config.name, "mask_index": mask_index}
+    )
     func(cfg=config, mask_index=mask_index)
-    logger.info("Attack run completed.", extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index})
+    logger.info(
+        "Attack run completed.",
+        extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index},
+    )
 
 
 @app.command()
@@ -104,12 +116,14 @@ def evaluate(id: str, models: list[str] | None = None):
 
     # logger.info("Evaluation run completed.", extra={"run": id, "models": models})
 
+
 def _handle(line):
     line = line.strip()
     if line:
         logger = get_logger()
         logger.info("Processing command.", extra={"command": line})
         os.system(line)
+
 
 @app.command()
 def process(path: str, num_workers: int):
@@ -119,6 +133,7 @@ def process(path: str, num_workers: int):
     with open(path) as f, Pool(num_workers) as pool:
         pool.map(_handle, f)
     logger.info("Processing run completed.", extra={"run": path})
+
 
 if __name__ == "__main__":
     app()

@@ -191,7 +191,12 @@ def train(cfg: TrainConfig | RestartConfig, mask_index: int) -> None:
     )
     train_subset = mask_dataset(masking, train, mask_index)
 
-    train_loader = torch.utils.data.DataLoader(train_subset, batch_size=config.batch_size, shuffle=True, generator=torch.Generator().manual_seed(config.seed))
+    train_loader = torch.utils.data.DataLoader(
+        train_subset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(config.seed),
+    )
     eval_train_loader = torch.utils.data.DataLoader(
         train_subset, batch_size=config.batch_size, shuffle=False
     )

@@ -28,5 +28,5 @@ __all__ = [
     "create_masking",
     "mask_dataset",
     "CanarySubset",
-    "Normalization"
+    "Normalization",
 ]

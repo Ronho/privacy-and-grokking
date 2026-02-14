@@ -9,11 +9,13 @@ Contains logic for assigning new labels to canary samples.
 - The function should be deterministic given a specific random seed.
 - The implementation should be efficient and scalable to larger canary sets.
 """
+
 import torch
 
 from privacy_and_grokking.logger import get_logger
 
 logger = get_logger()
+
 
 def derange_balanced_indices(canary_lookup: dict[int, list[int]], seed: int) -> torch.Tensor:
     """Returns a deranged list of canary labels matching the original canary indices.
@@ -35,31 +37,48 @@ def derange_balanced_indices(canary_lookup: dict[int, list[int]], seed: int) -> 
     assigned_canary_labels = torch.zeros(original_canary_labels.size(), dtype=torch.int64)
 
     for i in range(len(original_canary_labels)):
-        available_label_indices = ((container_canary_labels != original_canary_labels[i]) & (container_canary_labels != -1)).nonzero().squeeze()
+        available_label_indices = (
+            (
+                (container_canary_labels != original_canary_labels[i])
+                & (container_canary_labels != -1)
+            )
+            .nonzero()
+            .squeeze()
+        )
         if available_label_indices.numel() == 0:
             raise ValueError("No available labels to assign for derangement. Try again.")
         elif available_label_indices.numel() == 1:
             choosen_idx = available_label_indices.item()
         else:
-            choosen_idx = available_label_indices[torch.randint(0, available_label_indices.numel(), (1,), generator=rng).item()]
+            choosen_idx = available_label_indices[
+                torch.randint(0, available_label_indices.numel(), (1,), generator=rng).item()
+            ]
         assigned_canary_labels[i] = container_canary_labels[choosen_idx]
-        container_canary_labels[choosen_idx] = -1 # Mark this label as used
+        container_canary_labels[choosen_idx] = -1  # Mark this label as used
     return assigned_canary_labels
 
-def alternative_derange_balanced_indices(canary_lookup: dict[int, list[int]], seed: int, retries: int = 100) -> torch.Tensor:
+
+def alternative_derange_balanced_indices(
+    canary_lookup: dict[int, list[int]], seed: int, retries: int = 100
+) -> torch.Tensor:
     """Uses permutations."""
     canary_lbls = torch.Tensor(list(canary_lookup.keys())).to(torch.int64)
     canary_class_amt = torch.Tensor([len(vals) for vals in canary_lookup.values()]).to(torch.int64)
     original_canary_labels = torch.repeat_interleave(canary_lbls, canary_class_amt)
     rng = torch.Generator()
     rng.manual_seed(seed)
-    for i in range(retries): # Arbitrary number of retries
-        assigned_canary_labels = original_canary_labels[torch.randperm(original_canary_labels.size(0), generator=rng)]
+    for i in range(retries):  # Arbitrary number of retries
+        assigned_canary_labels = original_canary_labels[
+            torch.randperm(original_canary_labels.size(0), generator=rng)
+        ]
         if torch.all(assigned_canary_labels != original_canary_labels):
             break
     if i == retries - 1:
-        logger.warning("Derangement failed after maximum retries. Returning last attempt, which may contain matches.")
+        logger.warning(
+            "Derangement failed after maximum retries. Returning last attempt, which may contain matches."
+        )
     return assigned_canary_labels
+
 
 def random_derange_indices(canary_lookup: dict[int, list[int]], seed: int) -> torch.Tensor:
     """Uses a random shift."""

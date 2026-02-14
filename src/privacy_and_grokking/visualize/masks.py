@@ -8,7 +8,10 @@ from privacy_and_grokking.path_keeper import get_path_keeper
 
 logger = get_logger()
 
-def _visualize_datapoints_per_model(ax, mask: torch.Tensor, labels: torch.Tensor, num_classes: int, set_ylabel: bool = True):
+
+def _visualize_datapoints_per_model(
+    ax, mask: torch.Tensor, labels: torch.Tensor, num_classes: int, set_ylabel: bool = True
+):
     num_models = mask.shape[1]
 
     model_class_counts = np.zeros((num_models, num_classes))
@@ -27,8 +30,14 @@ def _visualize_datapoints_per_model(ax, mask: torch.Tensor, labels: torch.Tensor
 
     bottom = np.zeros(num_models)
     for class_idx in range(num_classes):
-        ax.bar(x, model_class_counts_sorted[:, class_idx], bottom=bottom, 
-               label=f"Class {class_idx}", color=colors[class_idx], width=0.8)
+        ax.bar(
+            x,
+            model_class_counts_sorted[:, class_idx],
+            bottom=bottom,
+            label=f"Class {class_idx}",
+            color=colors[class_idx],
+            width=0.8,
+        )
         bottom += model_class_counts_sorted[:, class_idx]
 
     ax.set_xlabel("Model (sorted by total samples)", fontsize=8)
@@ -39,8 +48,8 @@ def _visualize_datapoints_per_model(ax, mask: torch.Tensor, labels: torch.Tensor
     ax.legend(fontsize=6, loc="upper right", ncol=2)
 
     if num_models <= 64:
-        ax.set_xticks(x[::max(1, num_models // 10)])
-        ax.set_xticklabels(x[::max(1, num_models // 10)])
+        ax.set_xticks(x[:: max(1, num_models // 10)])
+        ax.set_xticklabels(x[:: max(1, num_models // 10)])
     else:
         tick_positions = [0, num_models // 4, num_models // 2, 3 * num_models // 4, num_models - 1]
         ax.set_xticks(tick_positions)
@@ -62,14 +71,27 @@ def _visualize_models_per_datapoint(ax, mask: torch.Tensor, set_ylabel: bool = T
     ax.tick_params(axis="both", which="major", labelsize=7)
 
     mean_count = models_per_sample.mean()
-    ax.axhline(mean_count, color="red", linestyle="--", linewidth=1, alpha=0.5, label=f"Mean: {mean_count:.2f}")
+    ax.axhline(
+        mean_count,
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        alpha=0.5,
+        label=f"Mean: {mean_count:.2f}",
+    )
     ax.legend(fontsize=6, loc="upper left")
 
     if num_samples <= 1000:
         tick_step = max(1, num_samples // 5)
         tick_positions = np.arange(0, num_samples, tick_step)
     else:
-        tick_positions = [0, num_samples // 4, num_samples // 2, 3 * num_samples // 4, num_samples - 1]
+        tick_positions = [
+            0,
+            num_samples // 4,
+            num_samples // 2,
+            3 * num_samples // 4,
+            num_samples - 1,
+        ]
 
     ax.set_xticks(tick_positions)
     ax.set_xticklabels(tick_positions)
@@ -90,18 +112,9 @@ def vis_masking_strategy(dataset: CanarySubset, masking_type: Maskings, num_mode
         mask = masking(labels)
         axes[0, col_idx].set_title(f"{num_models} Models", fontsize=9, fontweight="bold")
 
-        _visualize_datapoints_per_model(
-            axes[0, col_idx],
-            mask,
-            labels,
-            dataset.num_classes
-        )
+        _visualize_datapoints_per_model(axes[0, col_idx], mask, labels, dataset.num_classes)
 
-        _visualize_models_per_datapoint(
-            axes[1, col_idx],
-            mask,
-            set_ylabel=(col_idx == 0)
-        )
+        _visualize_models_per_datapoint(axes[1, col_idx], mask, set_ylabel=(col_idx == 0))
 
         im = axes[2, col_idx].imshow(mask.cpu().numpy(), aspect="auto", cmap="viridis")
         axes[2, col_idx].set_xlabel("Model Index", fontsize=8)
@@ -109,15 +122,40 @@ def vis_masking_strategy(dataset: CanarySubset, masking_type: Maskings, num_mode
             axes[2, col_idx].set_ylabel("Datapoint Index", fontsize=8)
         fig.colorbar(im, ax=axes[2, col_idx], orientation="vertical", fraction=0.05, pad=0.02)
 
-    fig.suptitle(f"{masking_type.upper().replace("_", " ")}", 
-                 fontsize=14, fontweight="bold", y=0.995)
+    fig.suptitle(
+        f"{masking_type.upper().replace('_', ' ')}", fontsize=14, fontweight="bold", y=0.995
+    )
 
-    fig.text(0.02, 0.83, "Samples per Model\n(by class)", 
-             fontsize=10, fontweight="bold", rotation=90, va="center", ha="center")
-    fig.text(0.02, 0.5, "Models per\nData Entry", 
-             fontsize=10, fontweight="bold", rotation=90, va="center", ha="center")
-    fig.text(0.02, 0.17, "Membership Heatmap", 
-             fontsize=10, fontweight="bold", rotation=90, va="center", ha="center")
+    fig.text(
+        0.02,
+        0.83,
+        "Samples per Model\n(by class)",
+        fontsize=10,
+        fontweight="bold",
+        rotation=90,
+        va="center",
+        ha="center",
+    )
+    fig.text(
+        0.02,
+        0.5,
+        "Models per\nData Entry",
+        fontsize=10,
+        fontweight="bold",
+        rotation=90,
+        va="center",
+        ha="center",
+    )
+    fig.text(
+        0.02,
+        0.17,
+        "Membership Heatmap",
+        fontsize=10,
+        fontweight="bold",
+        rotation=90,
+        va="center",
+        ha="center",
+    )
 
     plt.tight_layout(rect=[0.03, 0.01, 1, 0.99])
 

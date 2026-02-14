@@ -20,8 +20,12 @@ Defines different masking strategies for dataset samples across multiple models.
 - The masking strategy should be deterministic given a seed.
 - The implementation should be efficient in both time and space.
 """
+
+
 class Masking(ABC):
-    def __init__(self, num_samples: int, num_classes: int, num_models: int, p: float, seed: int | None = None):
+    def __init__(
+        self, num_samples: int, num_classes: int, num_models: int, p: float, seed: int | None = None
+    ):
         self.num_samples = num_samples
         self.num_classes = num_classes
         self.num_models = num_models
@@ -44,14 +48,17 @@ class Masking(ABC):
                 classes = torch.cat([classes, torch.arange(end=remainder)])
 
         if len(classes) != self.num_samples:
-            logger.error("Length of classes does not match num_samples", { "classes": len(classes), "num_samples": self.num_samples })
+            logger.error(
+                "Length of classes does not match num_samples",
+                {"classes": len(classes), "num_samples": self.num_samples},
+            )
             raise ValueError("Length of classes must match num_samples")
 
         return self._generate_mask(classes)
 
     @abstractmethod
-    def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
-        ...
+    def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor: ...
+
 
 class PartitionedStratifiedMasking(Masking):
     """
@@ -63,7 +70,10 @@ class PartitionedStratifiedMasking(Masking):
 
     def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
         if self.p != (1.0 / self.num_models):
-            logger.warning("PartitionedStratifiedMasking cannot fulfill the condition p == 1/num_models", { "p": self.p, "num_models": self.num_models })
+            logger.warning(
+                "PartitionedStratifiedMasking cannot fulfill the condition p == 1/num_models",
+                {"p": self.p, "num_models": self.num_models},
+            )
 
         mask = torch.zeros((self.num_samples, self.num_models), dtype=torch.bool)
         for c in range(self.num_classes):
@@ -76,8 +86,10 @@ class PartitionedStratifiedMasking(Masking):
 
         return mask
 
+
 class IndependentStratifiedMasking(Masking):
     """Each model independently selects p * num_samples data points, stratified by class."""
+
     def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
         mask = torch.zeros((self.num_samples, self.num_models), dtype=torch.bool)
         for c in range(self.num_classes):
@@ -88,6 +100,7 @@ class IndependentStratifiedMasking(Masking):
                 mask[class_indices[choosen], model_idx] = True
         return mask
 
+
 class BalancedStratifiedMasking(Masking):
     """
     Each model gets exactly p * num_samples data points, stratified by class.
@@ -95,6 +108,7 @@ class BalancedStratifiedMasking(Masking):
 
     However, the randomness is limited to ensure these constraints are met.
     """
+
     def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
         n_per_model = int(self.num_samples * self.p)
         n_per_class = n_per_model // self.num_classes
@@ -122,7 +136,8 @@ class BalancedStratifiedMasking(Masking):
                     selected = torch.cat([end_part, start_part])
                     ptr = rem
 
-                if ptr == n_class_total: ptr = 0
+                if ptr == n_class_total:
+                    ptr = 0
                 mask[selected, model_idx] = True
 
         for c in range(self.num_classes):
@@ -131,7 +146,8 @@ class BalancedStratifiedMasking(Masking):
 
             for _ in range(n_swaps):
                 m1, m2 = torch.randint(0, self.num_models, (2,), generator=self.rng).tolist()
-                if m1 == m2: continue
+                if m1 == m2:
+                    continue
 
                 col1 = mask[class_mask_rows, m1]
                 col2 = mask[class_mask_rows, m2]
@@ -154,6 +170,7 @@ class BalancedStratifiedMasking(Masking):
 
         return mask
 
+
 class UniformMasking(Masking):
     """
     Each data point is assigned to each model independently with probability p.
@@ -165,17 +182,20 @@ class UniformMasking(Masking):
         mask = torch.rand((self.num_samples, self.num_models), generator=self.rng) < self.p
         return mask
 
+
 class Maskings(StrEnum):
     UNIFORM = "uniform"
     INDEPENDENT_STRATIFIED = "independent_stratified"
     PARTITIONED_STRATIFIED = "partitioned_stratified"
     BALANCED_STRATIFIED = "balanced_stratified"
 
+
 class MaskingConfig(BaseModel):
     name: Maskings
     num_models: int
     p: float = Field(ge=0, le=1)
     seed: int | None = None
+
 
 def create_masking(config: MaskingConfig, num_samples: int, num_classes: int) -> Masking:
     input = {
@@ -196,6 +216,7 @@ def create_masking(config: MaskingConfig, num_samples: int, num_classes: int) ->
             return BalancedStratifiedMasking(**input)
         case _:
             raise ValueError(f"Unknown masking '{config.name}'.")
+
 
 def mask_dataset(masking: Masking, ds: CanarySubset, mask_index: int) -> torch.utils.data.Dataset:
     mask = masking(classes=torch.Tensor([lbl for _, lbl in ds]))

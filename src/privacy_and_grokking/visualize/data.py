@@ -32,7 +32,14 @@ def _samples_by_class(dataset: CanarySubset, canary: bool = False):
             break
     return samples_by_class
 
-def _vis_samples_per_class(name: str, samples_by_class: dict[int, list[torch.Tensor]], num_classes: int, norm: Normalization, postfix=""):
+
+def _vis_samples_per_class(
+    name: str,
+    samples_by_class: dict[int, list[torch.Tensor]],
+    num_classes: int,
+    norm: Normalization,
+    postfix="",
+):
     pk = get_path_keeper()
     fig, axes = plt.subplots(num_classes, 6, figsize=(12, 2 * num_classes))
     for class_idx in range(num_classes):
@@ -159,6 +166,7 @@ def vis_dataset(name: Datasets):
     # Class Distributions
     def get_counts(dataset):
         return torch.tensor([y for _, y in dataset]).unique(return_counts=True)
+
     train_labels, train_counts = get_counts(train)
     test_labels, test_counts = get_counts(test)
 
@@ -190,25 +198,44 @@ def vis_dataset(name: Datasets):
 
     # Watermark Samples per Class
     config_watermark = DatasetConfig(
-        name=name, train_size=None, canary_share=0.01, canary_config=SquareWatermarkCanaryConfig(square_size=3), seed=2
+        name=name,
+        train_size=None,
+        canary_share=0.01,
+        canary_config=SquareWatermarkCanaryConfig(square_size=3),
+        seed=2,
     )
     train_watermark, _ = generate_datasets(config=config_watermark)
     samples_by_class_watermark = _samples_by_class(dataset=train_watermark, canary=True)
     _vis_samples_per_class(
-        name, samples_by_class_watermark, train_watermark.num_classes, train_watermark.norm, postfix="_watermark"
+        name,
+        samples_by_class_watermark,
+        train_watermark.num_classes,
+        train_watermark.norm,
+        postfix="_watermark",
     )
 
     # Noise Samples per Class
-    config_noise = DatasetConfig(name=name, train_size=None, canary_share=0.01, canary_config=UniformNoiseCanaryConfig(), seed=2)
+    config_noise = DatasetConfig(
+        name=name,
+        train_size=None,
+        canary_share=0.01,
+        canary_config=UniformNoiseCanaryConfig(),
+        seed=2,
+    )
     train_noise, _ = generate_datasets(config=config_noise)
     samples_by_class_noise = _samples_by_class(dataset=train_noise, canary=True)
     _vis_samples_per_class(
-        name, samples_by_class_noise, train_noise.num_classes, train_noise.norm, postfix="_gaussian_noise"
+        name,
+        samples_by_class_noise,
+        train_noise.num_classes,
+        train_noise.norm,
+        postfix="_gaussian_noise",
     )
 
     # RDM of Images
     def sbc_to_images(sbc):
         return [img for class_samples in sbc.values() for img in class_samples]
+
     train_images = sbc_to_images(samples_by_class_train)
     test_images = sbc_to_images(samples_by_class_test)
     watermark_images = sbc_to_images(samples_by_class_watermark)
@@ -229,6 +256,7 @@ def vis_dataset(name: Datasets):
             ),
             train.num_classes,
         )
+
     train_classes = sbc_to_classes(samples_by_class_train)
     test_classes = sbc_to_classes(samples_by_class_test)
     watermark_classes = sbc_to_classes(samples_by_class_watermark)
