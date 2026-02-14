@@ -81,6 +81,7 @@ def attack(cfg: TrainConfig, mask_index: int = 0):
             input_dim=train.input_shape,
             num_classes=train.num_classes,
         )
+        model.to(device)
         model.load_state_dict(
             torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device)
         )
