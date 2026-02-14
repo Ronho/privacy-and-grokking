@@ -18,6 +18,7 @@ STEP_SIZE = 1_000
 
 def get_correct_class_probabilities_and_logits(model, dataset):
     dataloader = DataLoader(dataset, batch_size=250)
+    device = get_device()
 
     correct_probs = []
     correct_logits = []
@@ -29,6 +30,7 @@ def get_correct_class_probabilities_and_logits(model, dataset):
 
     with torch.no_grad():
         for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
             logits = model(x)
             probs = F.softmax(logits, dim=1)
 
@@ -53,6 +55,7 @@ def get_correct_class_probabilities_and_logits(model, dataset):
 
 def attack(cfg: TrainConfig, mask_index: int = 0):
     pk = get_path_keeper()
+    device = get_device()
 
     train, test = generate_datasets(cfg.dataset)
     masking = create_masking(
@@ -79,7 +82,7 @@ def attack(cfg: TrainConfig, mask_index: int = 0):
             num_classes=train.num_classes,
         )
         model.load_state_dict(
-            torch.load(pk.MODEL_TORCH, weights_only=True, map_location=get_device())
+            torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device)
         )
         model.eval()
 
