@@ -5,13 +5,13 @@ from typing import Literal
 
 from typer import Typer
 
-from .attacks import mia_simple
-from .config import TrainConfig, TrainingRegistry
-from .logger import get_logger, register_logger
-from .path_keeper import get_path_keeper
-from .training import RestartConfig
-from .training import train as training
-from .visualize import visualize_data
+from privacy_and_grokking.attacks import mia_simple
+from privacy_and_grokking.config import TrainConfig, TrainingRegistry
+from privacy_and_grokking.logger import get_logger, register_logger
+from privacy_and_grokking.path_keeper import get_path_keeper
+from privacy_and_grokking.training import RestartConfig
+from privacy_and_grokking.training import train as training
+from privacy_and_grokking.visualize import visualize_data, visualize_evaluation
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
@@ -100,21 +100,29 @@ def attack(id: str, attack: str, model: str, mask_index: int):
 
 
 @app.command()
-def evaluate(id: str, models: list[str] | None = None):
+def evaluate(id: str, overwrite: bool = False):
     logger = _init(id)
     logger.info("Starting evaluation run.", extra={"run": id})
 
-    visualize_data()
+    # visualize_data(overwrite=overwrite)
 
-    # configs = _models(models, existing="log")
-    # for config in configs:
-    #     logger.info("Starting evaluation.", extra={"model": config.name})
-    #     pk = get_path_keeper()
-    #     pk.set_params({"model": config.name})
-    #     visualize_training(cfg=config)
-    # visualize_mia(cfgs=configs)
+    # Discover and load models
+    pk = get_path_keeper()
+    configs = []
+    for model_path in pk.MODEL_FOLDER.iterdir():
+        pk.set_params({"model": model_path.name})
+        if pk.TRAIN_CONFIG.exists():
+            try:
+                config = TrainConfig.model_validate_json(pk.TRAIN_CONFIG.read_text())
+                configs.append(config)
+            except Exception as e:
+                logger.error(f"Failed to load config from {pk.TRAIN_CONFIG}: {e}")
 
-    # logger.info("Evaluation run completed.", extra={"run": id, "models": models})
+    if configs:
+        logger.info(f"Found {len(configs)} models. Starting visualization.")
+        visualize_evaluation(cfgs=configs, overwrite=overwrite)
+
+    logger.info("Evaluation run completed.", extra={"run": id})
 
 
 def _handle(line):

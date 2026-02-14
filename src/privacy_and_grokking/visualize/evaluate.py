@@ -356,8 +356,13 @@ def plot_training_and_attack_evolution(attack_containers, cfg, pk):
     plt.close(fig)
 
 
-def plot_combined_models_superplot(models_data, architecture, dataset, pk):
+def plot_combined_models_superplot(models_data, architecture, dataset, pk, overwrite=False):
     """Plot combined training and attack metrics for all models with same architecture and dataset."""
+    pk.set_params({"model": "GENERAL"})
+    output_path = pk.IMAGE_FOLDER / f"superplot_{architecture}_{dataset}.png"
+    if output_path.exists() and not overwrite:
+        return
+
     n_models = len(models_data)
     fig, axes = plt.subplots(4, n_models, figsize=(6 * n_models, 14), sharex="col", sharey="row")
 
@@ -437,7 +442,7 @@ class AttackContainer:
     test_data: torch.Tensor
 
 
-def visualize(cfgs: list[TrainConfig]):
+def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
     logger = get_logger()
     pk = get_path_keeper()
 
@@ -539,40 +544,45 @@ def visualize(cfgs: list[TrainConfig]):
 
         mia_container[cfg.name] = container
 
-    for model_name, attack_containers in mia_container.items():
-        cfg = config_lookup[model_name]
-        pk.set_params({"model": cfg.name})
-        plot_all_attacks_roc_curves(attack_containers, cfg, pk)
-        plot_all_attacks_score_distributions(attack_containers, cfg, pk)
-        plot_training_and_attack_evolution(attack_containers, cfg, pk)
+    # for model_name, attack_containers in mia_container.items():
+    #     cfg = config_lookup[model_name]
+    #     pk.set_params({"model": cfg.name})
+    #     plot_all_attacks_roc_curves(attack_containers, cfg, pk)
+    #     plot_all_attacks_score_distributions(attack_containers, cfg, pk)
+    #     plot_training_and_attack_evolution(attack_containers, cfg, pk)
 
-        for cont in attack_containers:
-            tpr_at_fprs, auc_scores = compute_roc_metrics(
-                cont.train_data, cont.test_data, cont.steps
-            )
-            plot_distributions(
-                cont.train_data[-1],
-                cont.test_data[-1],
-                cont.steps[-1],
-                cfg,
-                pk,
-                cont.name,
-                cont.prefix,
-            )
-            plot_roc_curve(
-                cont.train_data[-1], cont.test_data[-1], cont.steps[-1], cfg, pk, cont.prefix
-            )
-            plot_evolution(
-                cont.train_data, cont.test_data, cont.steps, cfg, pk, cont.name, cont.prefix
-            )
-            plot_tpr_at_fpr(tpr_at_fprs, cont.steps, cfg, pk, cont.prefix)
-            plot_auc_evolution(auc_scores, cont.steps, cfg, pk, cont.prefix)
+    #     for cont in attack_containers:
+    #         tpr_at_fprs, auc_scores = compute_roc_metrics(
+    #             cont.train_data, cont.test_data, cont.steps
+    #         )
+    #         plot_distributions(
+    #             cont.train_data[-1],
+    #             cont.test_data[-1],
+    #             cont.steps[-1],
+    #             cfg,
+    #             pk,
+    #             cont.name,
+    #             cont.prefix,
+    #         )
+    #         plot_roc_curve(
+    #             cont.train_data[-1], cont.test_data[-1], cont.steps[-1], cfg, pk, cont.prefix
+    #         )
+    #         plot_evolution(
+    #             cont.train_data, cont.test_data, cont.steps, cfg, pk, cont.name, cont.prefix
+    #         )
+    #         plot_tpr_at_fpr(tpr_at_fprs, cont.steps, cfg, pk, cont.prefix)
+    #         plot_auc_evolution(auc_scores, cont.steps, cfg, pk, cont.prefix)
 
     # Create superplots grouped by architecture and dataset
     grouped_models = {}
     for model_name, attack_containers in mia_container.items():
         cfg = config_lookup[model_name]
         # Extract architecture (model type) and dataset from config
+        # Use cfg.name as it contains the specific model name and mask index
+        # But we want to group by base model and dataset.
+        # Assuming cfg.model is the architecture type (e.g., 'CNN', 'MLP')
+        # And cfg.dataset.name is the dataset name (e.g., 'CIFAR10')
+        # To group different seeds/masks of the same model:
         architecture = cfg.model.upper()
         dataset = cfg.dataset.name.upper()
         key = (architecture, dataset)
@@ -586,4 +596,6 @@ def visualize(cfgs: list[TrainConfig]):
         if len(models_data) > 1:  # Only create superplot if there are multiple models
             # Sort models by name
             models_data_sorted = sorted(models_data, key=lambda x: x[0])
-            plot_combined_models_superplot(models_data_sorted, architecture, dataset, pk)
+            plot_combined_models_superplot(
+                models_data_sorted, architecture, dataset, pk, overwrite=overwrite
+            )

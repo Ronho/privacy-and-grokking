@@ -19,7 +19,8 @@ class PathKeeper:
     _LOG = _RUN_FOLDER + "logs/{log_id}.log"
     _IMAGE_FOLDER = _RUN_FOLDER + "images/{model}/"
     _ATTACK_FOLDER = _RUN_FOLDER + "attacks/{model}/"
-    _TRAIN_FOLDER = _RUN_FOLDER + "models/{model}/"
+    _MODEL_FOLDER = _RUN_FOLDER + "models/"
+    _TRAIN_FOLDER = _MODEL_FOLDER + "{model}/"
     _CHECKPOINT = _TRAIN_FOLDER + "checkpoints/{step}/"
 
     def __init__(self, base_dir: Path | str | None = None, create_dirs: bool = True):
@@ -82,6 +83,10 @@ class PathKeeper:
     @property
     def TRAIN_METRICS(self) -> Path:
         return self._fill(PathKeeper._TRAIN_FOLDER) / "train_metrics.json"
+
+    @property
+    def MODEL_FOLDER(self) -> Path:
+        return self._fill(PathKeeper._MODEL_FOLDER)
 
     @property
     def MODEL_TORCH(self) -> Path:

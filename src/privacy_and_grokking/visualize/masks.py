@@ -99,7 +99,19 @@ def _visualize_models_per_datapoint(ax, mask: torch.Tensor, set_ylabel: bool = T
     ax.grid(True, alpha=0.3, axis="y")
 
 
-def vis_masking_strategy(dataset: CanarySubset, masking_type: Maskings, num_models_list: list[int]):
+def vis_masking_strategy(
+    dataset: CanarySubset,
+    masking_type: Maskings,
+    num_models_list: list[int],
+    overwrite: bool = False,
+):
+    pk = get_path_keeper()
+    filename = f"masking_{masking_type}.png"
+    output_path = pk.IMAGE_FOLDER / filename
+
+    if output_path.exists() and not overwrite:
+        return
+
     labels = torch.Tensor([label for _, label in dataset])
     num_cols = len(num_models_list)
     fig, axes = plt.subplots(3, num_cols, figsize=(4 * num_cols, 12))

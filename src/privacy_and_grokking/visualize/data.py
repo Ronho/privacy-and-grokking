@@ -39,8 +39,12 @@ def _vis_samples_per_class(
     num_classes: int,
     norm: Normalization,
     postfix="",
+    overwrite: bool = False,
 ):
     pk = get_path_keeper()
+    if (pk.IMAGE_FOLDER / f"samples_per_class{postfix}.png").exists() and not overwrite:
+        return
+
     fig, axes = plt.subplots(num_classes, 6, figsize=(12, 2 * num_classes))
     for class_idx in range(num_classes):
         axes[class_idx, 0].text(
@@ -76,8 +80,12 @@ def _vis_samples_per_class(
     plt.close(fig)
 
 
-def _vis_rdm(name: str, image_ranges: dict[int, list[torch.Tensor]], postfix=""):
+def _vis_rdm(
+    name: str, image_ranges: dict[int, list[torch.Tensor]], postfix="", overwrite: bool = False
+):
     pk = get_path_keeper()
+    if (pk.IMAGE_FOLDER / f"rdm{postfix}.png").exists() and not overwrite:
+        return
 
     images = [img for imgs in image_ranges.values() for img in imgs]
     data_array = torch.stack(images).flatten(start_dim=1).cpu().numpy()
@@ -155,7 +163,7 @@ def _vis_rdm(name: str, image_ranges: dict[int, list[torch.Tensor]], postfix="")
     plt.close(fig)
 
 
-def vis_dataset(name: Datasets):
+def vis_dataset(name: Datasets, overwrite: bool = False):
     logger.info("Visualizing dataset", extra={"dataset": name})
     pk = get_path_keeper()
     pk.set_params({"model": f"DATASET_{name.upper()}"})
@@ -164,37 +172,43 @@ def vis_dataset(name: Datasets):
     train, test = generate_datasets(config=config)
 
     # Class Distributions
-    def get_counts(dataset):
-        return torch.tensor([y for _, y in dataset]).unique(return_counts=True)
+    if (pk.IMAGE_FOLDER / "class_distributions.png").exists() and not overwrite:
+        pass
+    else:
 
-    train_labels, train_counts = get_counts(train)
-    test_labels, test_counts = get_counts(test)
+        def get_counts(dataset):
+            return torch.tensor([y for _, y in dataset]).unique(return_counts=True)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        train_labels, train_counts = get_counts(train)
+        test_labels, test_counts = get_counts(test)
 
-    ax1.bar(train_labels, train_counts)
-    ax1.set_xlabel("Class")
-    ax1.set_ylabel("Number of Samples")
-    ax1.set_title("Train Set Class Distribution")
-    ax1.set_xticks(train_labels)
-    ax1.grid(True, alpha=0.3, axis="y")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    ax2.bar(test_labels, test_counts)
-    ax2.set_xlabel("Class")
-    ax2.set_ylabel("Number of Samples")
-    ax2.set_title("Test Set Class Distribution")
-    ax2.set_xticks(test_labels)
-    ax2.grid(True, alpha=0.3, axis="y")
+        ax1.bar(train_labels, train_counts)
+        ax1.set_xlabel("Class")
+        ax1.set_ylabel("Number of Samples")
+        ax1.set_title("Train Set Class Distribution")
+        ax1.set_xticks(train_labels)
+        ax1.grid(True, alpha=0.3, axis="y")
 
-    fig.text(0.02, 0.01, f"Dataset: {name.upper()}", fontsize=9, alpha=0.6)
-    fig.tight_layout()
-    fig.savefig(pk.IMAGE_FOLDER / "class_distributions.png")
-    plt.close(fig)
+        ax2.bar(test_labels, test_counts)
+        ax2.set_xlabel("Class")
+        ax2.set_ylabel("Number of Samples")
+        ax2.set_title("Test Set Class Distribution")
+        ax2.set_xticks(test_labels)
+        ax2.grid(True, alpha=0.3, axis="y")
+
+        fig.text(0.02, 0.01, f"Dataset: {name.upper()}", fontsize=9, alpha=0.6)
+        fig.tight_layout()
+        fig.savefig(pk.IMAGE_FOLDER / "class_distributions.png")
+        plt.close(fig)
 
     # Samples per Class
     samples_by_class_train = _samples_by_class(dataset=train)
     samples_by_class_test = _samples_by_class(dataset=test)
-    _vis_samples_per_class(name, samples_by_class_train, train.num_classes, train.norm)
+    _vis_samples_per_class(
+        name, samples_by_class_train, train.num_classes, train.norm, overwrite=overwrite
+    )
 
     # Watermark Samples per Class
     config_watermark = DatasetConfig(
@@ -212,6 +226,7 @@ def vis_dataset(name: Datasets):
         train_watermark.num_classes,
         train_watermark.norm,
         postfix="_watermark",
+        overwrite=overwrite,
     )
 
     # Noise Samples per Class
@@ -230,6 +245,7 @@ def vis_dataset(name: Datasets):
         train_noise.num_classes,
         train_noise.norm,
         postfix="_gaussian_noise",
+        overwrite=overwrite,
     )
 
     # RDM of Images
@@ -246,7 +262,7 @@ def vis_dataset(name: Datasets):
         "Watermark": watermark_images,
         "Gaussian Noise": noise_images,
     }
-    _vis_rdm(name, images, postfix="_images")
+    _vis_rdm(name, images, postfix="_images", overwrite=overwrite)
 
     # RDM of Indices
     def sbc_to_classes(sbc):
@@ -267,16 +283,18 @@ def vis_dataset(name: Datasets):
         "Watermark": watermark_classes,
         "Gaussian Noise": noise_classes,
     }
-    _vis_rdm(name, images, postfix="_indices")
+    _vis_rdm(name, images, postfix="_indices", overwrite=overwrite)
 
     # Masks
     config.train_size = 2000
     train_mask, _ = generate_datasets(config=config)
     num_models_list = [2, 8, 64, 256, 512]
     for masking_type in Maskings:
-        vis_masking_strategy(train_mask, masking_type, num_models_list=num_models_list)
+        vis_masking_strategy(
+            train_mask, masking_type, num_models_list=num_models_list, overwrite=overwrite
+        )
 
 
-def visualize():
+def visualize(overwrite: bool = False):
     for dataset_name in list(Datasets):
-        vis_dataset(dataset_name)
+        vis_dataset(dataset_name, overwrite=overwrite)
