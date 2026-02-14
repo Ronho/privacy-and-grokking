@@ -53,7 +53,7 @@ def get_correct_class_probabilities_and_logits(model, dataset):
     )
 
 
-def attack(cfg: TrainConfig, mask_index: int = 0):
+def attack(cfg: TrainConfig):
     pk = get_path_keeper()
     device = get_device()
 
@@ -63,7 +63,7 @@ def attack(cfg: TrainConfig, mask_index: int = 0):
         num_samples=len(train),
         num_classes=train.num_classes,
     )
-    train_subset = mask_dataset(masking, train, mask_index)
+    train_subset = mask_dataset(masking, train, cfg.mask_index)
 
     train_probabilities = []
     test_probabilities = []
@@ -75,7 +75,7 @@ def attack(cfg: TrainConfig, mask_index: int = 0):
     test_mse_losses_list = []
     steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
     for i in trange(len(steps), desc="Steps", leave=False):
-        pk.set_params({"model": f"{cfg.name}_{mask_index}", "step": steps[i]})
+        pk.set_params({"model": f"{cfg.name}_{cfg.mask_index}", "step": steps[i]})
         model = create_model(
             name=cfg.model,
             input_dim=train.input_shape,

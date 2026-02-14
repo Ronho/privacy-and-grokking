@@ -451,7 +451,7 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
 
     # Data Preparation
     for cfg in cfgs:
-        pk.set_params({"model": cfg.name})
+        pk.set_params({"model": f"{cfg.name}_{cfg.dataset_mask_idx}"})
         container: list[AttackContainer] = []
 
         if (pk.ATTACK_FOLDER / "mia_simple.pt").exists():

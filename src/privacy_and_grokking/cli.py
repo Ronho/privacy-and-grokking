@@ -46,7 +46,10 @@ def _models(
             else:
                 raise ValueError(f"Model '{model}' has not been trained yet.")
 
-    return TrainingRegistry.get(model)
+    config = TrainingRegistry.get(model)
+    config.dataset_mask_idx = mask_index
+
+    return config
 
 
 @app.command()
@@ -56,7 +59,7 @@ def train(id: str, model: str, mask_index: int):
         "Starting training run.", extra={"run": id, "model": model, "mask_index": mask_index}
     )
     config = _models(model, mask_index, existing="ignore")
-    training(cfg=config, mask_index=mask_index)
+    training(cfg=config)
     logger.info(
         "Training run completed.", extra={"run": id, "model": model, "mask_index": mask_index}
     )
@@ -70,8 +73,8 @@ def restart(id: str, model: str, checkpoint: int, mask_index: int):
         extra={"model": model, "checkpoint": checkpoint},
     )
 
-    config = RestartConfig(name=model, checkpoint=checkpoint)
-    training(cfg=config, mask_index=mask_index)
+    config = RestartConfig(name=model, checkpoint=checkpoint, dataset_mask_index=mask_index)
+    training(cfg=config)
 
 
 @app.command()
@@ -92,7 +95,7 @@ def attack(id: str, attack: str, model: str, mask_index: int):
     logger.info(
         "Starting attack.", extra={"attack": attack, "model": config.name, "mask_index": mask_index}
     )
-    func(cfg=config, mask_index=mask_index)
+    func(cfg=config)
     logger.info(
         "Attack run completed.",
         extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index},

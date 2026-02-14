@@ -138,12 +138,13 @@ def get_optimizer(cfg: AdamW, params) -> torch.optim.Optimizer:
 class RestartConfig(BaseModel):
     name: str
     checkpoint: int
+    dataset_mask_index: int
 
 
-def train(cfg: TrainConfig | RestartConfig, mask_index: int) -> None:
+def train(cfg: TrainConfig | RestartConfig) -> None:
     logger = get_logger()
     pk = get_path_keeper()
-    model_name = f"{cfg.name}_{mask_index}"
+    model_name = f"{cfg.name}_{cfg.dataset_mask_index}"
     pk.set_params({"model": model_name})
 
     if isinstance(cfg, RestartConfig):
@@ -189,7 +190,7 @@ def train(cfg: TrainConfig | RestartConfig, mask_index: int) -> None:
         num_samples=len(train),
         num_classes=train.num_classes,
     )
-    train_subset = mask_dataset(masking, train, mask_index)
+    train_subset = mask_dataset(masking, train, cfg.dataset_mask_index)
 
     train_loader = torch.utils.data.DataLoader(
         train_subset,

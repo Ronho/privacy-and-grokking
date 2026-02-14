@@ -49,3 +49,4 @@ class TrainConfig(BaseModel):
     optimizer: AdamW = Field(discriminator="name")
     dataset: DatasetConfig
     dataset_mask: MaskingConfig
+    dataset_mask_idx: int | None = None
