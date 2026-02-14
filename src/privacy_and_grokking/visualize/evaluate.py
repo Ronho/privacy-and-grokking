@@ -203,7 +203,7 @@ def plot_all_attacks_roc_curves(attack_containers, cfg, pk):
         fpr, tpr, _ = roc_curve(y_true, y_scores)
         roc_auc = auc(fpr, tpr)
 
-        ax.plot(fpr, tpr, label=f"{cont.name} (AUC = {roc_auc:.4f})", linewidth=2)
+        ax.plot(fpr, tpr, label=f"{cont.name} (AUC = {roc_auc:.4f})", linewidth=2, alpha=0.5)
 
     ax.plot([0, 1], [0, 1], color="gray", linestyle="--", label="Random Classifier", linewidth=2)
     ax.set_xlim(0.0, 1.0)
@@ -416,7 +416,7 @@ def plot_combined_models_superplot(models_data, architecture, dataset, pk, overw
         ax = axes[3, col_idx]
         for cont in attack_containers:
             _, auc_scores = compute_roc_metrics(cont.train_data, cont.test_data, cont.steps)
-            ax.plot(cont.steps, auc_scores, label=cont.name, linewidth=1.5, alpha=0.7)
+            ax.plot(cont.steps, auc_scores, label=cont.name, linewidth=1.5, alpha=0.3)
 
         ax.axhline(y=0.5, color="gray", linestyle="--", linewidth=2, alpha=0.5, label="Random")
         ax.set_xlabel("Training Step (log scale)", fontsize=11)
