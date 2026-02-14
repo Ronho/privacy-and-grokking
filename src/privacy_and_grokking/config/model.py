@@ -35,7 +35,7 @@ class AdamW(OptimizerConfig):
 
 
 class TrainConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     code_version: str
