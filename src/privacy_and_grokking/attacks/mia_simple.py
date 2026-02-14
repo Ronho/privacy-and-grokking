@@ -24,6 +24,7 @@ def get_correct_class_probabilities_and_logits(model, dataset):
     correct_logits = []
     ce_losses = []
     mse_losses = []
+    correctness_list = []
 
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
     mse_criterion = nn.MSELoss(reduction="none")
@@ -45,11 +46,15 @@ def get_correct_class_probabilities_and_logits(model, dataset):
             mse_loss = mse_criterion(logits, F.one_hot(y, num_classes=logits.size(1)).float())
             mse_losses.append(mse_loss.gather(1, y.view(-1, 1)))
 
+            correctness = (logits.argmax(dim=1) == y).float()
+            correctness_list.append(correctness)
+
     return (
         torch.cat(correct_probs, dim=0),
         torch.cat(correct_logits, dim=0),
         torch.cat(ce_losses, dim=0),
         torch.cat(mse_losses, dim=0),
+        torch.cat(correctness_list, dim=0),
     )
 
 
@@ -63,7 +68,7 @@ def attack(cfg: TrainConfig):
         num_samples=len(train),
         num_classes=train.num_classes,
     )
-    train_subset = mask_dataset(masking, train, cfg.mask_index)
+    train_subset = mask_dataset(masking, train, cfg.dataset_mask_idx)
 
     train_probabilities = []
     test_probabilities = []
@@ -73,9 +78,11 @@ def attack(cfg: TrainConfig):
     test_ce_losses_list = []
     train_mse_losses_list = []
     test_mse_losses_list = []
+    train_correct_list = []
+    test_correct_list = []
     steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
     for i in trange(len(steps), desc="Steps", leave=False):
-        pk.set_params({"model": f"{cfg.name}_{cfg.mask_index}", "step": steps[i]})
+        pk.set_params({"model": cfg.full_name, "step": steps[i]})
         model = create_model(
             name=cfg.model,
             input_dim=train.input_shape,
@@ -85,10 +92,10 @@ def attack(cfg: TrainConfig):
         model.load_state_dict(torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device))
         model.eval()
 
-        train_probs, train_logits, train_ce_losses, train_mse_losses = (
+        train_probs, train_logits, train_ce_losses, train_mse_losses, train_correct = (
             get_correct_class_probabilities_and_logits(model, train_subset)
         )
-        test_probs, test_logits, test_ce_losses, test_mse_losses = (
+        test_probs, test_logits, test_ce_losses, test_mse_losses, test_correct = (
             get_correct_class_probabilities_and_logits(model, test)
         )
 
@@ -100,15 +107,19 @@ def attack(cfg: TrainConfig):
         test_ce_losses_list.append(test_ce_losses.squeeze())
         train_mse_losses_list.append(train_mse_losses.squeeze())
         test_mse_losses_list.append(test_mse_losses.squeeze())
+        train_correct_list.append(train_correct.squeeze())
+        test_correct_list.append(test_correct.squeeze())
 
-    train_probs_over_time = torch.stack(train_probabilities, dim=0).detach()
-    test_probs_over_time = torch.stack(test_probabilities, dim=0).detach()
-    train_logits_over_time = torch.stack(train_logits_list, dim=0).detach()
-    test_logits_over_time = torch.stack(test_logits_list, dim=0).detach()
-    train_ce_losses_over_time = torch.stack(train_ce_losses_list, dim=0).detach()
-    test_ce_losses_over_time = torch.stack(test_ce_losses_list, dim=0).detach()
-    train_mse_losses_over_time = torch.stack(train_mse_losses_list, dim=0).detach()
-    test_mse_losses_over_time = torch.stack(test_mse_losses_list, dim=0).detach()
+    train_probs_over_time = torch.stack(train_probabilities, dim=0).detach().cpu()
+    test_probs_over_time = torch.stack(test_probabilities, dim=0).detach().cpu()
+    train_logits_over_time = torch.stack(train_logits_list, dim=0).detach().cpu()
+    test_logits_over_time = torch.stack(test_logits_list, dim=0).detach().cpu()
+    train_ce_losses_over_time = torch.stack(train_ce_losses_list, dim=0).detach().cpu()
+    test_ce_losses_over_time = torch.stack(test_ce_losses_list, dim=0).detach().cpu()
+    train_mse_losses_over_time = torch.stack(train_mse_losses_list, dim=0).detach().cpu()
+    test_mse_losses_over_time = torch.stack(test_mse_losses_list, dim=0).detach().cpu()
+    train_correct_over_time = torch.stack(train_correct_list, dim=0).detach().cpu()
+    test_correct_over_time = torch.stack(test_correct_list, dim=0).detach().cpu()
 
     torch.save(
         {
@@ -120,6 +131,8 @@ def attack(cfg: TrainConfig):
             "test_ce_losses": test_ce_losses_over_time,
             "train_mse_losses": train_mse_losses_over_time,
             "test_mse_losses": test_mse_losses_over_time,
+            "train_correct": train_correct_over_time,
+            "test_correct": test_correct_over_time,
             "steps": steps,
         },
         pk.ATTACK_FOLDER / "mia_simple.pt",

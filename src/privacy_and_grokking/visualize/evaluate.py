@@ -463,8 +463,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="Probability of Correct Class",
                     prefix="mia_probability_threshold",
                     steps=data["steps"],
-                    train_data=data["train_probs"].cpu(),
-                    test_data=data["test_probs"].cpu(),
+                    train_data=data["train_probs"],
+                    test_data=data["test_probs"],
                 )
             )
             container.append(
@@ -472,8 +472,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="Logit of Correct Class",
                     prefix="mia_logit_threshold",
                     steps=data["steps"],
-                    train_data=data["train_logits"].cpu(),
-                    test_data=data["test_logits"].cpu(),
+                    train_data=data["train_logits"],
+                    test_data=data["test_logits"],
                 )
             )
             container.append(
@@ -481,8 +481,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="CrossEntropy Loss",
                     prefix="mia_ce_loss_threshold",
                     steps=data["steps"],
-                    train_data=-1 * data["train_ce_losses"].cpu(),
-                    test_data=-1 * data["test_ce_losses"].cpu(),
+                    train_data=-1 * data["train_ce_losses"],
+                    test_data=-1 * data["test_ce_losses"],
                 )
             )
             container.append(
@@ -490,8 +490,17 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="MSE Loss",
                     prefix="mia_mse_loss_threshold",
                     steps=data["steps"],
-                    train_data=-1 * data["train_mse_losses"].cpu(),
-                    test_data=-1 * data["test_mse_losses"].cpu(),
+                    train_data=-1 * data["train_mse_losses"],
+                    test_data=-1 * data["test_mse_losses"],
+                )
+            )
+            container.append(
+                AttackContainer(
+                    name="Correctness Attack",
+                    prefix="mia_correctness_threshold",
+                    steps=data["steps"],
+                    train_data=data["train_correct"],
+                    test_data=data["test_correct"],
                 )
             )
         else:
@@ -507,8 +516,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="RMIA Score",
                     prefix="mia_rmia_score",
                     steps=data["steps"],
-                    train_data=data["train_scores"].cpu(),
-                    test_data=data["test_scores"].cpu(),
+                    train_data=data["train_scores"],
+                    test_data=data["test_scores"],
                 )
             )
         else:
@@ -524,8 +533,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="Merlin/Morgan Score (CE)",
                     prefix="mia_merlin_morgan_ce",
                     steps=data["steps"],
-                    train_data=data["train_ce_votes"].cpu(),
-                    test_data=data["test_ce_votes"].cpu(),
+                    train_data=data["train_ce_votes"],
+                    test_data=data["test_ce_votes"],
                 )
             )
             container.append(
@@ -533,8 +542,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
                     name="Merlin/Morgan Score (MSE)",
                     prefix="mia_merlin_morgan_mse",
                     steps=data["steps"],
-                    train_data=data["train_mse_votes"].cpu(),
-                    test_data=data["test_mse_votes"].cpu(),
+                    train_data=data["train_mse_votes"],
+                    test_data=data["test_mse_votes"],
                 )
             )
         else:
