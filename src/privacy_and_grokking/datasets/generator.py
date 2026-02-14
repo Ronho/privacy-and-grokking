@@ -12,6 +12,7 @@ from privacy_and_grokking.logger import get_logger
 
 logger = get_logger()
 
+
 class CanarySubset(TensorDataset):
     def __init__(
         self,
@@ -27,18 +28,22 @@ class CanarySubset(TensorDataset):
         self.dataset = dataset
         self.subset_indices = subset_indices
         self.transform = transforms.Normalize(norm.mean, norm.std)
-        self.target_transform = transforms.Lambda(lambda y: torch.tensor(y, dtype=torch.long))
+        self.target_transform = transforms.Lambda(
+            lambda y: y.detach().clone().to(dtype=torch.long)
+            if isinstance(y, torch.Tensor)
+            else torch.tensor(y, dtype=torch.long)
+        )
 
-        if (canary_indices is not None):
-            if (canary_labels is None):
+        if canary_indices is not None:
+            if canary_labels is None:
                 raise ValueError("canary_labels must be provided if canary_indices is provided")
-            if (canary_transform is None):
+            if canary_transform is None:
                 raise ValueError("canary_transform must be provided if canary_indices is provided")
             self.canary_labels = canary_labels
             self.canary_transform = canary_transform
             self.canary_indices = canary_indices
         else:
-            self.canary_indices = torch.empty(0) # Placeholder that allows lookup.
+            self.canary_indices = torch.empty(0)  # Placeholder that allows lookup.
 
         # Stored for accessibility
         self.input_shape = input_shape
@@ -59,7 +64,9 @@ class CanarySubset(TensorDataset):
             if self.canary_transform is None:
                 raise Exception("No canary transform provided but canary called.")
             img = self.canary_transform(img)
-            lbl = self.canary_labels[(self.canary_indices == index).nonzero(as_tuple=True)[0].item()]
+            lbl = self.canary_labels[
+                (self.canary_indices == index).nonzero(as_tuple=True)[0].item()
+            ]
 
         img = self.transform(img)
         lbl = self.target_transform(lbl)
@@ -90,6 +97,7 @@ def distribute_a_across_b(a: int, b: int) -> torch.Tensor:
     distribution.fill_(base)
     distribution[:remainder] += 1
     return distribution
+
 
 def generate_datasets(config: DatasetConfig) -> tuple[CanarySubset, CanarySubset]:
     container = get_dataset(name=config.name)
@@ -138,8 +146,7 @@ def generate_datasets(config: DatasetConfig) -> tuple[CanarySubset, CanarySubset
     if config.canary_share > 0:
         if config.canary_config is not None:
             canary_generator = create_canary_generator(
-                config=config.canary_config,
-                dim=container.input_shape
+                config=config.canary_config, dim=container.input_shape
             )
         else:
             raise ValueError("canary_config must be provided if canary_share > 0")
@@ -150,7 +157,9 @@ def generate_datasets(config: DatasetConfig) -> tuple[CanarySubset, CanarySubset
         subset_indices=subset_indices,
         canary_indices=canary_indices if config.canary_share > 0 else None,
         canary_transform=canary_generator,
-        canary_labels=random_derange_indices(canary_lookup=canary_lookup, seed=config.seed) if config.canary_share > 0 else None,
+        canary_labels=random_derange_indices(canary_lookup=canary_lookup, seed=config.seed)
+        if config.canary_share > 0
+        else None,
         input_shape=container.input_shape,
         num_classes=container.num_classes,
     )
