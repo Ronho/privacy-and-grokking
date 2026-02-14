@@ -71,7 +71,7 @@ def plot_distributions(
     ax.set_title(f"Distribution at Step {step}")
     ax.legend()
     ax.grid(True, alpha=0.3)
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / f"{filename_prefix}_distributions_step_{step}.png")
     plt.close(fig)
@@ -96,7 +96,7 @@ def plot_evolution(
     ax.set_title(f"Evolution of {metric_name} During Training")
     ax.legend()
     ax.grid(True, alpha=0.3)
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / f"{filename_prefix}_evolution.png")
     plt.close(fig)
@@ -140,7 +140,7 @@ def plot_tpr_at_fpr(tpr_at_fprs, steps, cfg, pk, filename_prefix):
     ax.legend()
     ax.grid(True, alpha=0.3)
     ax.set_ylim(0, 1)
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / f"{filename_prefix}_tpr_at_fpr_evolution.png")
     plt.close(fig)
@@ -157,7 +157,7 @@ def plot_auc_evolution(auc_scores, steps, cfg, pk, filename_prefix):
     ax.set_ylim(0, 1)
     ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5, label="Random Classifier")
     ax.legend()
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / f"{filename_prefix}_auc_evolution.png")
     plt.close(fig)
@@ -182,7 +182,7 @@ def plot_roc_curve(train_data_last, test_data_last, step, cfg, pk, filename_pref
     ax.set_title(f"ROC Curve at Step {step}")
     ax.legend(loc="lower right")
     ax.grid(True, alpha=0.3)
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / f"{filename_prefix}_roc_curve_step_{step}.png")
     plt.close(fig)
@@ -213,7 +213,7 @@ def plot_all_attacks_roc_curves(attack_containers, cfg, pk):
     ax.set_title(f"ROC Curves for All MIA Attacks at Step {attack_containers[0].steps[-1]}")
     ax.legend(loc="lower right")
     ax.grid(True, alpha=0.3)
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(
         pk.IMAGE_FOLDER / f"all_attacks_roc_curves_step_{attack_containers[0].steps[-1]}.png"
@@ -285,7 +285,7 @@ def plot_all_attacks_score_distributions(attack_containers, cfg, pk):
         fontweight="bold",
         y=0.995,
     )
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(
         pk.IMAGE_FOLDER
@@ -350,7 +350,7 @@ def plot_training_and_attack_evolution(attack_containers, cfg, pk):
     ax4.grid(True, alpha=0.3, which="both")
     ax4.set_ylim(0, 1.05)
 
-    fig.text(0.02, 0.01, f"Model: {cfg.name}", fontsize=9, alpha=0.6)
+    fig.text(0.02, 0.01, f"Model: {cfg.full_name}", fontsize=9, alpha=0.6)
     fig.tight_layout()
     fig.savefig(pk.IMAGE_FOLDER / "combined_training_and_attack_evolution.png", dpi=150)
     plt.close(fig)
@@ -376,7 +376,8 @@ def plot_combined_models_superplot(models_data, architecture, dataset, pk, overw
         if not pk.TRAIN_METRICS.exists():
             continue
 
-        metrics = json.loads(pk.TRAIN_METRICS.read_text())
+        with pk.TRAIN_METRICS.open("r") as f:
+            metrics = [json.loads(line) for line in f]
         flat_metrics = [_flatten_dict(m) for m in metrics]
         df = pl.DataFrame(flat_metrics)
 
@@ -446,12 +447,12 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
     logger = get_logger()
     pk = get_path_keeper()
 
-    config_lookup = {cfg.name: cfg for cfg in cfgs}
+    config_lookup = {cfg.full_name: cfg for cfg in cfgs}
     mia_container: dict[str, list[AttackContainer]] = {}
 
     # Data Preparation
     for cfg in cfgs:
-        pk.set_params({"model": f"{cfg.name}_{cfg.dataset_mask_idx}"})
+        pk.set_params({"model": cfg.full_name})
         container: list[AttackContainer] = []
 
         if (pk.ATTACK_FOLDER / "mia_simple.pt").exists():
@@ -496,7 +497,7 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
         else:
             logger.info(
                 "No attack data found for MIA Threshold. Skipping this attack.",
-                extra={"model": cfg.name},
+                extra={"model": cfg.full_name},
             )
 
         if (pk.ATTACK_FOLDER / "mia_rmia.pt").exists():
@@ -513,7 +514,7 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
         else:
             logger.info(
                 "No attack data found for MIA RMIA Scores. Skipping this attack.",
-                extra={"model": cfg.name},
+                extra={"model": cfg.full_name},
             )
 
         if (pk.ATTACK_FOLDER / "mia_merlin_morgan.pt").exists():
@@ -539,14 +540,14 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
         else:
             logger.info(
                 "No attack data found for MIA Merlin/Morgan. Skipping this attack.",
-                extra={"model": cfg.name},
+                extra={"model": cfg.full_name},
             )
 
-        mia_container[cfg.name] = container
+        mia_container[cfg.full_name] = container
 
     # for model_name, attack_containers in mia_container.items():
     #     cfg = config_lookup[model_name]
-    #     pk.set_params({"model": cfg.name})
+    #     pk.set_params({"model": cfg.full_name})
     #     plot_all_attacks_roc_curves(attack_containers, cfg, pk)
     #     plot_all_attacks_score_distributions(attack_containers, cfg, pk)
     #     plot_training_and_attack_evolution(attack_containers, cfg, pk)
@@ -573,16 +574,9 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
     #         plot_tpr_at_fpr(tpr_at_fprs, cont.steps, cfg, pk, cont.prefix)
     #         plot_auc_evolution(auc_scores, cont.steps, cfg, pk, cont.prefix)
 
-    # Create superplots grouped by architecture and dataset
     grouped_models = {}
     for model_name, attack_containers in mia_container.items():
         cfg = config_lookup[model_name]
-        # Extract architecture (model type) and dataset from config
-        # Use cfg.name as it contains the specific model name and mask index
-        # But we want to group by base model and dataset.
-        # Assuming cfg.model is the architecture type (e.g., 'CNN', 'MLP')
-        # And cfg.dataset.name is the dataset name (e.g., 'CIFAR10')
-        # To group different seeds/masks of the same model:
         architecture = cfg.model.upper()
         dataset = cfg.dataset.name.upper()
         key = (architecture, dataset)
@@ -591,10 +585,8 @@ def visualize(cfgs: list[TrainConfig], overwrite: bool = False):
             grouped_models[key] = []
         grouped_models[key].append((model_name, cfg, attack_containers))
 
-    # Generate superplot for each group
     for (architecture, dataset), models_data in grouped_models.items():
-        if len(models_data) > 1:  # Only create superplot if there are multiple models
-            # Sort models by name
+        if len(models_data) > 1:
             models_data_sorted = sorted(models_data, key=lambda x: x[0])
             plot_combined_models_superplot(
                 models_data_sorted, architecture, dataset, pk, overwrite=overwrite

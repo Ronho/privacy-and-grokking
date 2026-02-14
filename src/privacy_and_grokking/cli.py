@@ -73,7 +73,7 @@ def restart(id: str, model: str, checkpoint: int, mask_index: int):
         extra={"model": model, "checkpoint": checkpoint},
     )
 
-    config = RestartConfig(name=model, checkpoint=checkpoint, dataset_mask_index=mask_index)
+    config = RestartConfig(name=model, checkpoint=checkpoint, dataset_mask_idx=mask_index)
     training(cfg=config)
 
 
@@ -107,9 +107,8 @@ def evaluate(id: str, overwrite: bool = False):
     logger = _init(id)
     logger.info("Starting evaluation run.", extra={"run": id})
 
-    # visualize_data(overwrite=overwrite)
+    visualize_data(overwrite=overwrite)
 
-    # Discover and load models
     pk = get_path_keeper()
     configs = []
     for model_path in pk.MODEL_FOLDER.iterdir():

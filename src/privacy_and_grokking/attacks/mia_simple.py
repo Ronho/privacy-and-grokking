@@ -82,9 +82,7 @@ def attack(cfg: TrainConfig):
             num_classes=train.num_classes,
         )
         model.to(device)
-        model.load_state_dict(
-            torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device)
-        )
+        model.load_state_dict(torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device))
         model.eval()
 
         train_probs, train_logits, train_ce_losses, train_mse_losses = (

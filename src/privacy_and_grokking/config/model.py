@@ -49,4 +49,8 @@ class TrainConfig(BaseModel):
     optimizer: AdamW = Field(discriminator="name")
     dataset: DatasetConfig
     dataset_mask: MaskingConfig
-    dataset_mask_idx: int | None = None
+    dataset_mask_idx: int = 0
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.name}_{self.dataset_mask_idx}"
