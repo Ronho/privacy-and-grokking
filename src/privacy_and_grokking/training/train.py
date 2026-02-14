@@ -140,11 +140,14 @@ class RestartConfig(BaseModel):
     checkpoint: int
     dataset_mask_idx: int
 
+    @property
+    def full_name(self) -> str:
+        return f"{self.name}_{self.dataset_mask_idx}"
 
 def train(cfg: TrainConfig | RestartConfig) -> None:
     logger = get_logger()
     pk = get_path_keeper()
-    model_name = f"{cfg.name}_{cfg.dataset_mask_idx}"
+    model_name = cfg.full_name
     pk.set_params({"model": model_name})
 
     if isinstance(cfg, RestartConfig):

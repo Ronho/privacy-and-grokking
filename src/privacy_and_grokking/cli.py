@@ -53,15 +53,20 @@ def _models(
 
 
 @app.command()
-def train(id: str, model: str, mask_index: int):
+def train(id: str, model: str, mask_index: int, seed: int | None = None):
     logger = _init(id)
     logger.info(
-        "Starting training run.", extra={"run": id, "model": model, "mask_index": mask_index}
+        "Starting training run.",
+        extra={"run": id, "model": model, "mask_index": mask_index, "seed": seed},
     )
     config = _models(model, mask_index, existing="ignore")
+    if seed is not None:
+        config.seed = seed
+
     training(cfg=config)
     logger.info(
-        "Training run completed.", extra={"run": id, "model": model, "mask_index": mask_index}
+        "Training run completed.",
+        extra={"run": id, "model": model, "mask_index": mask_index, "seed": seed},
     )
 
 
