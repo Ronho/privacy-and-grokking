@@ -119,3 +119,14 @@ class PathKeeper:
     @property
     def ATTACK_FOLDER(self) -> Path:
         return self._fill(PathKeeper._ATTACK_FOLDER)
+
+    def get_available_steps(self, model_name: str) -> list[int]:
+        self.set_params({"model": model_name})
+        checkpoint_dir = self._fill(PathKeeper._TRAIN_FOLDER) / "checkpoints"
+        if not checkpoint_dir.exists():
+            return []
+        steps = []
+        for d in checkpoint_dir.iterdir():
+            if d.is_dir() and d.name.isdigit():
+                steps.append(int(d.name))
+        return sorted(steps)

@@ -13,8 +13,6 @@ from privacy_and_grokking.utils import get_device
 
 logger = get_logger()
 
-STEP_SIZE = 1_000
-
 
 def get_correct_class_probabilities_and_logits(model, dataset):
     dataloader = DataLoader(dataset, batch_size=250)
@@ -63,6 +61,7 @@ def attack(cfg: TrainConfig):
     device = get_device()
 
     train, test = generate_datasets(cfg.dataset)
+
     masking = create_masking(
         config=cfg.dataset_mask,
         num_samples=len(train),
@@ -80,7 +79,7 @@ def attack(cfg: TrainConfig):
     test_mse_losses_list = []
     train_correct_list = []
     test_correct_list = []
-    steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
+    steps = pk.get_available_steps(cfg.full_name)
     for i in trange(len(steps), desc="Steps", leave=False):
         pk.set_params({"model": cfg.full_name, "step": steps[i]})
         model = create_model(

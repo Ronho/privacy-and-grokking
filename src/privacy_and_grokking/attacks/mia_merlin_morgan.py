@@ -4,11 +4,11 @@ import torch.nn.functional as F  # noqa: N812
 from torch.utils.data import DataLoader, Subset
 from tqdm import trange
 
-from ..config import TrainConfig
-from ..datasets import get_dataset
-from ..models import create_model
-from ..path_keeper import get_path_keeper
-from ..utils import get_device
+from privacy_and_grokking.config import TrainConfig
+from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.models import create_model
+from privacy_and_grokking.path_keeper import get_path_keeper
+from privacy_and_grokking.utils import get_device
 
 NOISY_SAMPLES = 100
 NOISE_SCALE = 0.01
@@ -95,21 +95,24 @@ def attack(cfg: TrainConfig):
     pk = get_path_keeper()
     device = get_device()
 
-    train, _, test, input_dim, num_classes, _ = get_dataset(
-        name=cfg.dataset.name,
-        train_ratio=cfg.dataset.train_ratio,
-        train_size=cfg.dataset.train_size,
-        canary=None,
+    train, test = generate_datasets(cfg.dataset)
+    masking = create_masking(
+        config=cfg.dataset_mask,
+        num_samples=len(train),
+        num_classes=train.num_classes,
     )
+    train_subset_full = mask_dataset(masking, train, cfg.dataset_mask_idx)
+    input_dim = train.input_shape
+    num_classes = train.num_classes
 
     # Use a subset of data as per other attacks/notebook (SAMPLE_SIZE = 1000)
     SAMPLE_SIZE = 1000
-    train_size = min(SAMPLE_SIZE, len(train))
+    train_size = min(SAMPLE_SIZE, len(train_subset_full))
     test_size = min(SAMPLE_SIZE, len(test))
 
     # Ensure consistent subsets if possible, but random_split is used in notebook.
     # Here we stick to the pattern in mia_threshold which uses Subset(train, list(range(train_size)))
-    train_subset = Subset(train, list(range(train_size)))
+    train_subset = Subset(train_subset_full, list(range(train_size)))
     test_subset = Subset(test, list(range(test_size)))
 
     train_ce_losses_list = []
@@ -122,11 +125,11 @@ def attack(cfg: TrainConfig):
     train_mse_votes_list = []
     test_mse_votes_list = []
 
-    STEP_SIZE = 1_000
-    steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
+    steps = pk.get_available_steps(cfg.full_name)
 
     for i in trange(len(steps), desc="Steps", leave=False):
-        pk.set_params({"model": cfg.name, "step": steps[i]})
+        pk.set_params({"model": cfg.full_name, "step": steps[i]})
+
         model = create_model(
             name=cfg.model,
             input_dim=input_dim,

@@ -1,13 +1,13 @@
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 from tqdm import trange
 
-from ..config import TrainConfig
-from ..datasets import get_dataset
-from ..logger import get_logger
-from ..models import create_model
-from ..path_keeper import get_path_keeper
-from ..utils import get_device
+from privacy_and_grokking.config import TrainConfig
+from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.logger import get_logger
+from privacy_and_grokking.models import create_model
+from privacy_and_grokking.path_keeper import get_path_keeper
+from privacy_and_grokking.utils import get_device
 
 
 def compute_likelihood(model, x, y, device="cpu"):
@@ -81,15 +81,19 @@ def attack(cfg: TrainConfig):
     device = get_device()
     pk = get_path_keeper()
 
-    train, _, test, input_dim, num_classes, _ = get_dataset(
-        name=cfg.dataset.name,
-        train_ratio=cfg.dataset.train_ratio,
-        train_size=cfg.dataset.train_size,
-        canary=None,
+    train, test = generate_datasets(cfg.dataset)
+    masking = create_masking(
+        config=cfg.dataset_mask,
+        num_samples=len(train),
+        num_classes=train.num_classes,
     )
+    train_subset = mask_dataset(masking, train, cfg.dataset_mask_idx)
+    input_dim = train.input_shape
+    num_classes = train.num_classes
 
-    in_target_x, in_target_y = reduce_data(train, max_samples=1000)
+    in_target_x, in_target_y = reduce_data(train_subset, max_samples=1000)
     test_x, test_y = reduce_data(test, max_samples=11000)
+
     out_target_x, out_target_y = test_x[:1000], test_y[:1000]
     population_x, population_y = test_x[1000:], test_y[1000:]
 
@@ -116,12 +120,12 @@ def attack(cfg: TrainConfig):
 
     train_scores = []
     test_scores = []
-    STEP_SIZE = 1_000
     SCALING_FACTOR = 0.3
     GAMMA = 1.0
-    steps = list(range(0, cfg.optimization_steps + 1, STEP_SIZE))
+    steps = pk.get_available_steps(cfg.full_name)
     for i in trange(len(steps)):
-        pk.set_params({"model": cfg.name, "step": steps[i]})
+        pk.set_params({"model": cfg.full_name, "step": steps[i]})
+
         target_model = create_model(
             name=cfg.model,
             input_dim=input_dim,

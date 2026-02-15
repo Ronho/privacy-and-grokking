@@ -144,6 +144,7 @@ class RestartConfig(BaseModel):
     def full_name(self) -> str:
         return f"{self.name}_{self.dataset_mask_idx}"
 
+
 def train(cfg: TrainConfig | RestartConfig) -> None:
     logger = get_logger()
     pk = get_path_keeper()

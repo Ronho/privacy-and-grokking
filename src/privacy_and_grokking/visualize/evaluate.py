@@ -331,6 +331,52 @@ def plot_training_and_attack_evolution(attack_containers, cfg, pk):
     # 3. Loss plot
     ax3.plot(df["step"], df["train_loss"], label="Train Loss", linewidth=2, color="#2563eb")
     ax3.plot(df["step"], df["test_loss"], label="Test Loss", linewidth=2, color="#dc2626")
+
+    # Add standard deviation from MIA attack data if available
+    loss_name = "CrossEntropy Loss" if cfg.loss.name == "cross_entropy" else "MSE Loss"
+    loss_cont = next((c for c in attack_containers if c.name == loss_name), None)
+    if loss_cont is not None:
+        train_losses = -loss_cont.train_data
+        test_losses = -loss_cont.test_data
+        train_std = train_losses.std(dim=1)
+        test_std = test_losses.std(dim=1)
+        train_mean = train_losses.mean(dim=1)
+        test_mean = test_losses.mean(dim=1)
+
+        ax3.plot(
+            loss_cont.steps,
+            train_mean,
+            linestyle="--",
+            color="#2563eb",
+            alpha=0.8,
+            label="Train (MIA Mean)",
+        )
+        ax3.plot(
+            loss_cont.steps,
+            test_mean,
+            linestyle="--",
+            color="#dc2626",
+            alpha=0.8,
+            label="Test (MIA Mean)",
+        )
+
+        ax3.fill_between(
+            loss_cont.steps,
+            torch.clamp(train_mean - train_std, min=1e-10),
+            train_mean + train_std,
+            alpha=0.2,
+            color="#2563eb",
+            linewidth=0,
+        )
+        ax3.fill_between(
+            loss_cont.steps,
+            torch.clamp(test_mean - test_std, min=1e-10),
+            test_mean + test_std,
+            alpha=0.2,
+            color="#dc2626",
+            linewidth=0,
+        )
+
     ax3.set_ylabel("Loss (log scale)", fontsize=11)
     ax3.set_yscale("log")
     ax3.legend(loc="best", fontsize=10)
@@ -407,6 +453,52 @@ def plot_combined_models_superplot(models_data, architecture, dataset, pk, overw
         ax = axes[2, col_idx]
         ax.plot(df["step"], df["train_loss"], label="Train", linewidth=2, color="#2563eb")
         ax.plot(df["step"], df["test_loss"], label="Test", linewidth=2, color="#dc2626")
+
+        # Add standard deviation from MIA attack data if available
+        loss_name = "CrossEntropy Loss" if cfg.loss.name == "cross_entropy" else "MSE Loss"
+        loss_cont = next((c for c in attack_containers if c.name == loss_name), None)
+        if loss_cont is not None:
+            train_losses = -loss_cont.train_data
+            test_losses = -loss_cont.test_data
+            train_std = train_losses.std(dim=1)
+            test_std = test_losses.std(dim=1)
+            train_mean = train_losses.mean(dim=1)
+            test_mean = test_losses.mean(dim=1)
+
+            ax.plot(
+                loss_cont.steps,
+                train_mean,
+                linestyle="--",
+                color="#2563eb",
+                alpha=0.8,
+                label="Train (MIA Mean)",
+            )
+            ax.plot(
+                loss_cont.steps,
+                test_mean,
+                linestyle="--",
+                color="#dc2626",
+                alpha=0.8,
+                label="Test (MIA Mean)",
+            )
+
+            ax.fill_between(
+                loss_cont.steps,
+                torch.clamp(train_mean - train_std, min=1e-10),
+                train_mean + train_std,
+                alpha=0.2,
+                color="#2563eb",
+                linewidth=0,
+            )
+            ax.fill_between(
+                loss_cont.steps,
+                torch.clamp(test_mean - test_std, min=1e-10),
+                test_mean + test_std,
+                alpha=0.2,
+                color="#dc2626",
+                linewidth=0,
+            )
+
         ax.set_ylabel("Loss (log scale)" if col_idx == 0 else "", fontsize=11)
         ax.set_yscale("log")
         ax.legend(loc="best", fontsize=8)

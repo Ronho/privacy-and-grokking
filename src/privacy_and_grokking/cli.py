@@ -5,7 +5,7 @@ from typing import Literal
 
 from typer import Typer
 
-from privacy_and_grokking.attacks import mia_simple
+from privacy_and_grokking.attacks import mia_merlin_morgan, mia_rmia, mia_simple
 from privacy_and_grokking.config import TrainConfig, TrainingRegistry
 from privacy_and_grokking.logger import get_logger, register_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
@@ -90,7 +90,11 @@ def attack(id: str, attack: str, model: str, mask_index: int):
         extra={"run": id, "attack": attack, "model": model, "mask_index": mask_index},
     )
 
-    available_attacks = {"mia_simple": mia_simple}
+    available_attacks = {
+        "mia_simple": mia_simple,
+        "mia_rmia": mia_rmia,
+        "mia_merlin_morgan": mia_merlin_morgan,
+    }
 
     if attack not in available_attacks:
         raise ValueError(f"Unknown attack '{attack}' specified.")
