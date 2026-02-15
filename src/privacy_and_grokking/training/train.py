@@ -19,10 +19,46 @@ from privacy_and_grokking.training.metrics import Metrics, ModeMetrics
 from privacy_and_grokking.utils import eval_mode, get_device, set_all_seeds
 
 
-def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame]:
+def get_loss_fn(
+    cfg: LossConfig, num_classes: int, device: torch.device
+) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+    match cfg.name.lower():
+        case "mse":
+            one_hot = torch.eye(num_classes, num_classes).to(device)
+            fn = nn.MSELoss()
+
+            def loss(logits, labels: torch.Tensor) -> torch.Tensor:
+                return fn(logits, one_hot[labels])
+
+            return loss
+        case "cross_entropy":
+            return nn.CrossEntropyLoss()
+        case _:
+            raise ValueError(f"Unknown loss function: {cfg.name}")
+
+
+def get_loss_fn_eval(
+    cfg: LossConfig, num_classes: int, device: torch.device
+) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+    match cfg.name.lower():
+        case "mse":
+            one_hot = torch.eye(num_classes, num_classes).to(device)
+            fn = nn.MSELoss(reduction="none")
+
+            def loss(logits, labels: torch.Tensor) -> torch.Tensor:
+                return fn(logits, one_hot[labels]).mean(dim=1)
+
+            return loss
+        case "cross_entropy":
+            return nn.CrossEntropyLoss(reduction="none")
+        case _:
+            raise ValueError(f"Unknown loss function: {cfg.name}")
+
+
+def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, float, pl.DataFrame]:
     device = get_device()
 
-    loss = 0
+    all_losses = []
     correct = 0
     number = 0
     index_list = []
@@ -32,14 +68,20 @@ def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame
     for x, y in loader:
         x, y = x.to(device), y.to(device)
         logits = model(x)
-        loss += loss_fn(logits, y).item()
+        losses = loss_fn(logits, y)
+        all_losses.append(losses.detach().cpu())
+
         labels = torch.argmax(logits, dim=1)
-        correct += torch.sum(labels == y.to(device)).item()
+        correct += torch.sum(labels == y).item()
         number += x.size(0)
 
         index_list.extend(range(number - x.size(0), number))
         label_list.append(y.detach().cpu().numpy())
         logit_list.append(logits.detach().cpu().numpy())
+
+    all_losses_tensor = torch.cat(all_losses)
+    loss_mean = all_losses_tensor.mean().item()
+    loss_std = all_losses_tensor.std().item()
 
     df = pl.DataFrame(
         {
@@ -52,7 +94,7 @@ def _eval(model: nn.Module, loss_fn, loader) -> tuple[float, float, pl.DataFrame
         }
     )
 
-    return (loss / number), (correct / number), df
+    return loss_mean, loss_std, (correct / number), df
 
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
@@ -71,15 +113,23 @@ def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, x) -> None:
 
 
 def evaluate(
-    step: int, model: nn.Module, x, optimizer, loss_fn, eval_train_loader, eval_test_loader
+    step: int,
+    model: nn.Module,
+    x,
+    optimizer,
+    loss_fn,
+    eval_train_loader,
+    eval_test_loader,
 ) -> Metrics:
     pk = get_path_keeper()
     pk.set_params({"step": step})
 
     with eval_mode(model):
-        train_loss, train_accuracy, df_train = _eval(model, loss_fn, eval_train_loader)
+        train_loss, train_loss_std, train_accuracy, df_train = _eval(
+            model, loss_fn, eval_train_loader
+        )
         df_train = df_train.with_columns(pl.lit(step).alias("step"))
-        test_loss, test_accuracy, df_test = _eval(model, loss_fn, eval_test_loader)
+        test_loss, test_loss_std, test_accuracy, df_test = _eval(model, loss_fn, eval_test_loader)
         df_test = df_test.with_columns(pl.lit(step).alias("step"))
 
         all_layer = sum(torch.pow(p, 2).sum().item() for p in model.parameters())
@@ -91,15 +141,18 @@ def evaluate(
             step=step,
             train=ModeMetrics(
                 loss=train_loss,
+                loss_std=train_loss_std,
                 accuracy=train_accuracy,
             ),
             test=ModeMetrics(
                 loss=test_loss,
+                loss_std=test_loss_std,
                 accuracy=test_accuracy,
             ),
             norm=norm,
             last_layer_norm=last_layer_norm,
         )
+
         with pk.TRAIN_METRICS.open("a") as f:
             f.write(metrics.model_dump_json() + "\n")
         df_train.write_parquet(pk.TRAIN_LOGITS)
@@ -107,24 +160,6 @@ def evaluate(
         save_model(model, optimizer, x)
 
     return metrics
-
-
-def get_loss_fn(
-    cfg: LossConfig, num_classes: int, device: torch.device
-) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
-    match cfg.name.lower():
-        case "mse":
-            one_hot = torch.eye(num_classes, num_classes).to(device)
-            fn = nn.MSELoss()
-
-            def loss(logits, labels: torch.Tensor) -> torch.Tensor:
-                return fn(logits, one_hot[labels])
-
-            return loss
-        case "cross_entropy":
-            return nn.CrossEntropyLoss()
-        case _:
-            raise ValueError(f"Unknown loss function: {cfg.name}")
 
 
 def get_optimizer(cfg: AdamW, params) -> torch.optim.Optimizer:
@@ -225,6 +260,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
     # Optimizer and loss function
     logger.info("Preparing optimizer and loss function.")
     loss_fn = get_loss_fn(config.loss, train.num_classes, device)
+    loss_fn_eval = get_loss_fn_eval(config.loss, train.num_classes, device)
     optimizer = get_optimizer(config.optimizer, model.parameters())
     if restart:
         optimizer.load_state_dict(torch.load(pk.OPTIMIZER, map_location=device, weights_only=False))
@@ -252,7 +288,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
                     or (step % config.log_frequency == 0)
                 ):
                     metrics = evaluate(
-                        step, model, x, optimizer, loss_fn, eval_train_loader, eval_test_loader
+                        step, model, x, optimizer, loss_fn_eval, eval_train_loader, eval_test_loader
                     )
                     pbar.set_description(
                         f"L: {metrics.train.loss:1.1e}|{metrics.test.loss:1.1e}. A: {metrics.train.accuracy * 100:2.1f}%|{metrics.test.accuracy * 100:2.1f}%"
@@ -271,6 +307,9 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
     # Saving results
     logger.info("Saving results.")
     x, _ = next(iter(train_loader))
-    evaluate(step, model, x.to(device), optimizer, loss_fn, eval_train_loader, eval_test_loader)
+    evaluate(
+        step, model, x.to(device), optimizer, loss_fn_eval, eval_train_loader, eval_test_loader
+    )
     pk.set_params({"step": step})
+
     logger.info(f"Ending training: '{config.name}'")

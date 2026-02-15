@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class ModeMetrics(BaseModel):
     loss: float
+    loss_std: float
     accuracy: float
 
 
