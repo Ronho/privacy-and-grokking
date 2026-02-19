@@ -26,6 +26,20 @@ def get_package_version() -> str:
         return "unknown"
 
 
+def get_git_commit_id() -> str:
+    """Get the current git commit ID."""
+    try:
+        import subprocess
+
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+            .decode("ascii")
+            .strip()
+        )
+    except Exception:
+        return "unknown"
+
+
 def set_all_seeds(seed: int) -> None:
     """Set the seed for all relevant random number generators."""
     import random
@@ -40,4 +54,4 @@ def set_all_seeds(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-__all__ = ["get_device", "eval_mode"]
+__all__ = ["get_device", "eval_mode", "get_package_version", "get_git_commit_id", "set_all_seeds"]

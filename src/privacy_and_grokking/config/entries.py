@@ -6,9 +6,10 @@ from privacy_and_grokking.datasets import (
     Maskings,
     SquareWatermarkCanaryConfig,
 )
-from privacy_and_grokking.utils import get_package_version
+from privacy_and_grokking.utils import get_git_commit_id, get_package_version
 
 VERSION = get_package_version()
+COMMIT_ID = get_git_commit_id()
 BATCH_SIZE = 200
 LOG_FREQUENCY = 500
 OPTIMIZATION_STEPS = 250_000
@@ -25,6 +26,7 @@ def get_configs() -> list[TrainConfig]:
         TrainConfig(
             name="MNIST_MLP_NOGROK_NOCAN_SMALL_DATASET",
             code_version=VERSION,
+            commit_id=COMMIT_ID,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
             optimization_steps=OPTIMIZATION_STEPS,
@@ -43,6 +45,7 @@ def get_configs() -> list[TrainConfig]:
         TrainConfig(
             name="MNIST_MLP_NOGROK_NOCAN",
             code_version=VERSION,
+            commit_id=COMMIT_ID,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
             optimization_steps=OPTIMIZATION_STEPS,
@@ -61,6 +64,7 @@ def get_configs() -> list[TrainConfig]:
         TrainConfig(
             name="MNIST_MLP_GROK_TRAIN_NOCAN",
             code_version=VERSION,
+            commit_id=COMMIT_ID,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
             optimization_steps=OPTIMIZATION_STEPS,
@@ -79,6 +83,7 @@ def get_configs() -> list[TrainConfig]:
         TrainConfig(
             name="MNIST_MLP_NOGROK_TRAIN_WATERMARK",
             code_version=VERSION,
+            commit_id=COMMIT_ID,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
             optimization_steps=OPTIMIZATION_STEPS,
@@ -101,6 +106,7 @@ def get_configs() -> list[TrainConfig]:
         TrainConfig(
             name="MNIST_MLP_GROK_TRAIN_WATERMARK",
             code_version=VERSION,
+            commit_id=COMMIT_ID,
             batch_size=BATCH_SIZE,
             log_frequency=LOG_FREQUENCY,
             optimization_steps=OPTIMIZATION_STEPS,

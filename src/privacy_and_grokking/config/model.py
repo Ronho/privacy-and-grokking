@@ -39,6 +39,7 @@ class TrainConfig(BaseModel):
 
     name: str
     code_version: str
+    commit_id: str = "unknown"
     batch_size: int
     initialization_scale: float | None
     log_frequency: int
