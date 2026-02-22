@@ -243,7 +243,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
     eval_test_loader = torch.utils.data.DataLoader(
         test, batch_size=config.batch_size, shuffle=False
     )
-    batch_offset = config.checkpoint % len(train_loader) if restart else 0
+    batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     # Model
     logger.info("Preparing model.")
@@ -267,7 +267,7 @@ def train(cfg: TrainConfig | RestartConfig) -> None:
 
     # Training loop
     logger.info("Starting training loop.")
-    step = config.checkpoint if restart else 0
+    step = cfg.checkpoint if restart else 0
     with tqdm(total=config.optimization_steps) as pbar:
         pbar.update(step)
         while step < config.optimization_steps:
