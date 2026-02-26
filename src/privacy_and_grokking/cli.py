@@ -11,6 +11,7 @@ from privacy_and_grokking.logger import get_logger, register_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
 from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
+from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize import visualize_data, visualize_evaluation
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
@@ -53,33 +54,26 @@ def _models(
 
 
 @app.command()
-def train(id: str, model: str, mask_index: int, seed: int | None = None):
-    logger = _init(id)
-    logger.info(
-        "Starting training run.",
-        extra={"run": id, "model": model, "mask_index": mask_index, "seed": seed},
-    )
-    config = _models(model, mask_index, existing="ignore")
-    if seed is not None:
-        config.seed = seed
-
-    training(cfg=config)
-    logger.info(
-        "Training run completed.",
-        extra={"run": id, "model": model, "mask_index": mask_index, "seed": seed},
-    )
+def list_models():
+    with Logger() as logger:
+        TrainingRegistry.load_defaults()
+        model_list = TrainingRegistry.list()
+        print("Available models:")
+        for model in model_list:
+            logger.info(f"- {model}")
 
 
 @app.command()
-def restart(id: str, model: str, checkpoint: int, mask_index: int):
-    logger = _init(id)
-    logger.info(
-        f"Restarting training for run {id}, model '{model}' from checkpoint {checkpoint}.",
-        extra={"model": model, "checkpoint": checkpoint},
-    )
+def train(exp_name: str, model: str, total_steps: int, mask_index: int, seed: int | None = None, run_name: str | None = None):
+    cfg = _models(model, mask_index, existing="ignore")
+    if seed is not None:
+        cfg.seed = seed
+    training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name)
 
-    config = RestartConfig(name=model, checkpoint=checkpoint, dataset_mask_idx=mask_index)
-    training(cfg=config)
+@app.command()
+def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
+    cfg = RestartConfig(run_id=run_id, checkpoint=checkpoint)
+    training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name="")
 
 
 @app.command()

@@ -5,52 +5,42 @@ from pydantic import BaseModel, ConfigDict, Field
 from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
 from privacy_and_grokking.models import Model
 
-type Loss = Literal["mse", "cross_entropy"]
+
+class MSELoss(BaseModel):
+    name: Literal["mse"] = "mse"
 
 
-class LossConfig(BaseModel):
-    name: Loss
+class CrossEntropyLoss(BaseModel):
+    name: Literal["cross_entropy"] = "cross_entropy"
+
+type Loss = MSELoss | CrossEntropyLoss
 
 
-class MSELoss(LossConfig):
-    name: Loss = "mse"
-
-
-class CrossEntropyLoss(LossConfig):
-    name: Loss = "cross_entropy"
-
-
-type Optimizer = Literal["AdamW"]
-
-
-class OptimizerConfig(BaseModel):
-    name: Optimizer
-
-
-class AdamW(OptimizerConfig):
-    name: Optimizer = "AdamW"
+class AdamW(BaseModel):
+    name: Literal["AdamW"] = "AdamW"
 
     learning_rate: float
     weight_decay: float
+
+type Optimizer = AdamW
 
 
 class TrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str
-    code_version: str
-    commit_id: str = "unknown"
+    model: Model
+    seed: int
     batch_size: int
     initialization_scale: float | None
-    log_frequency: int
-    optimization_steps: int
-    seed: int
-    loss: LossConfig = Field(discriminator="name")
-    model: Model
-    optimizer: AdamW = Field(discriminator="name")
+    loss: Loss = Field(discriminator="name")
+    optimizer: Optimizer = Field(discriminator="name")
     dataset: DatasetConfig
     dataset_mask: MaskingConfig
     dataset_mask_idx: int = 0
+
+    @property
+    def name(self) -> str:
+        return f"{self.model.upper()}_{self.dataset.name.upper()}_{self.dataset_mask.name.upper()}_{self.optimizer.name.upper()}_{self.loss.name.upper()}"
 
     @property
     def full_name(self) -> str:
