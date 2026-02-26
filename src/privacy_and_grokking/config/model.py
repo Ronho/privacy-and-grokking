@@ -13,6 +13,7 @@ class MSELoss(BaseModel):
 class CrossEntropyLoss(BaseModel):
     name: Literal["cross_entropy"] = "cross_entropy"
 
+
 type Loss = MSELoss | CrossEntropyLoss
 
 
@@ -21,6 +22,7 @@ class AdamW(BaseModel):
 
     learning_rate: float
     weight_decay: float
+
 
 type Optimizer = AdamW
 

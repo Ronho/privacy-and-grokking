@@ -33,7 +33,7 @@ class Logger:
                 suffix=".log", prefix=prefix, delete=False
             )
             self.log_file_path = Path(self._temp_file.name)
-            self._temp_file.close() # Close FD so handlers can take over
+            self._temp_file.close()  # Close FD so handlers can take over
 
             formatter = logging.Formatter("%(message)s")
             self._handlers = [

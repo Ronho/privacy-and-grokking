@@ -64,16 +64,30 @@ def list_models():
 
 
 @app.command()
-def train(exp_name: str, model: str, total_steps: int, mask_index: int, seed: int | None = None, run_name: str | None = None):
+def train(
+    exp_name: str,
+    model: str,
+    total_steps: int,
+    mask_index: int,
+    seed: int | None = None,
+    run_name: str | None = None,
+):
     cfg = _models(model, mask_index, existing="ignore")
     if seed is not None:
         cfg.seed = seed
     training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name)
 
+
 @app.command()
 def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
     cfg = RestartConfig(run_id=run_id, checkpoint=checkpoint)
     training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name="")
+
+@app.command()
+def extract():
+    # - For each checkpoint, extract the overall weight norm, and the weight norm for each layer
+    # - Run simple mia
+    # - (later) run merlin morgan
 
 
 @app.command()
