@@ -13,6 +13,9 @@ from privacy_and_grokking.datasets import (
     generate_datasets,
     mask_dataset,
 )
+from privacy_and_grokking.extraction.activations import (
+    extract_penultimate_activations,
+)
 from privacy_and_grokking.extraction.mia_merlin_morgan import (
     compute_merlin_morgan_signals,
 )
@@ -166,10 +169,21 @@ def _step_wise(run_id: str) -> None:
 
         mlflow.log_metrics(roc_metrics, step=step)
 
-    logger.info(
-        "MIA metrics logged.",
-        steps=len(steps),
-    )
+        # Activations for penultimate layer
+        if step == steps[-1]:
+            train_acts, train_labels = extract_penultimate_activations(model, train_subset)
+            test_acts, test_labels = extract_penultimate_activations(model, test_ds)
+            payload = {
+                "train_activations": train_acts,
+                "test_activations": test_acts,
+                "train_labels": train_labels,
+                "test_labels": test_labels,
+                "step": step,
+            }
+            with tempfile.TemporaryDirectory() as tmpdir:
+                path = Path(tmpdir) / f"{step}.pt"
+                torch.save(payload, path)
+                mlflow.log_artifact(str(path), artifact_path="activations")
 
 
 def extraction_handler(exp_name: str, run_id: str) -> None:

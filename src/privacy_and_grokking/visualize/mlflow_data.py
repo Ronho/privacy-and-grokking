@@ -1,0 +1,143 @@
+"""Data-fetching layer that wraps MLflow metric/artifact retrieval for visualization."""
+
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import mlflow
+import numpy as np
+import torch
+from mlflow.tracking import MlflowClient
+
+from privacy_and_grokking.config import TrainConfig
+
+
+@dataclass
+class MetricHistory:
+    key: str
+    steps: list[int] = field(default_factory=list)
+    values: list[float] = field(default_factory=list)
+
+    def as_arrays(self) -> tuple[np.ndarray, np.ndarray]:
+        idx = np.argsort(self.steps)
+        return np.array(self.steps)[idx], np.array(self.values)[idx]
+
+
+@dataclass
+class RunData:
+    run_id: str
+    config: TrainConfig
+    metrics: dict[str, MetricHistory]
+    train_activations: torch.Tensor | None = None
+    test_activations: torch.Tensor | None = None
+    train_labels: torch.Tensor | None = None
+    test_labels: torch.Tensor | None = None
+
+
+TRAINING_METRICS = [
+    "validation.train.accuracy",
+    "validation.test.accuracy",
+    "validation.train.loss",
+    "validation.test.loss",
+]
+
+WEIGHT_NORM_KEYS = [
+    "weight_norm/total",
+]
+
+MIA_AUC_KEYS = [
+    "mia_prob/auc",
+    "mia_logit/auc",
+    "mia_ce_loss/auc",
+    "mia_mse_loss/auc",
+    "mia_correctness/auc",
+    "mia_merlin_morgan_ce/auc",
+    "mia_merlin_morgan_mse/auc",
+]
+
+MIA_TPR_KEYS = [
+    "mia_prob/tpr-at-1-fpr",
+    "mia_prob/tpr-at-5-fpr",
+    "mia_prob/tpr-at-10-fpr",
+    "mia_logit/tpr-at-1-fpr",
+    "mia_logit/tpr-at-5-fpr",
+    "mia_logit/tpr-at-10-fpr",
+    "mia_ce_loss/tpr-at-1-fpr",
+    "mia_ce_loss/tpr-at-5-fpr",
+    "mia_ce_loss/tpr-at-10-fpr",
+]
+
+
+def _discover_weight_norm_keys(run_id: str) -> list[str]:
+    client = MlflowClient()
+    run = client.get_run(run_id)
+    return [k for k in run.data.metrics if k.startswith("weight_norm/")]
+
+
+def fetch_metric_history(
+    run_id: str,
+    keys: list[str],
+) -> dict[str, MetricHistory]:
+    client = MlflowClient()
+    result: dict[str, MetricHistory] = {}
+    for key in keys:
+        try:
+            raw = client.get_metric_history(run_id, key)
+        except Exception:
+            continue
+        if not raw:
+            continue
+        hist = MetricHistory(key=key)
+        for m in raw:
+            hist.steps.append(m.step)
+            hist.values.append(m.value)
+        result[key] = hist
+    return result
+
+
+def fetch_activations(run_id: str, step: int) -> dict[str, torch.Tensor] | None:
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mlflow.artifacts.download_artifacts(
+                artifact_uri=f"runs:/{run_id}/activations/{step}.pt",
+                dst_path=tmpdir,
+            )
+            data = torch.load(
+                Path(tmpdir) / f"{step}.pt",
+                map_location="cpu",
+                weights_only=True,
+            )
+            return data
+    except Exception:
+        return None
+
+
+def load_run_config(run_id: str) -> TrainConfig:
+    raw = mlflow.artifacts.load_dict(f"runs:/{run_id}/training_config.json")
+    return TrainConfig.model_validate(raw)
+
+
+def load_run_data(run_id: str) -> RunData:
+    config = load_run_config(run_id)
+
+    wn_keys = _discover_weight_norm_keys(run_id)
+    all_keys = TRAINING_METRICS + wn_keys + MIA_AUC_KEYS + MIA_TPR_KEYS
+    metrics = fetch_metric_history(run_id, all_keys)
+    last_step = max((hist.steps[-1] for hist in metrics.values() if hist.steps), default=0)
+
+    # Activations
+    act_data = fetch_activations(run_id, last_step)
+    train_acts = act_data["train_activations"] if act_data else None
+    test_acts = act_data["test_activations"] if act_data else None
+    train_labels = act_data["train_labels"] if act_data else None
+    test_labels = act_data["test_labels"] if act_data else None
+
+    return RunData(
+        run_id=run_id,
+        config=config,
+        metrics=metrics,
+        train_activations=train_acts,
+        test_activations=test_acts,
+        train_labels=train_labels,
+        test_labels=test_labels,
+    )

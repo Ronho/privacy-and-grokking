@@ -1,0 +1,94 @@
+import tempfile
+from pathlib import Path
+
+import matplotlib
+import matplotlib.pyplot as plt
+import mlflow
+
+from privacy_and_grokking.utils import Logger, setup_mlflow
+from privacy_and_grokking.visualize.mlflow_data import RunData, load_run_data
+from privacy_and_grokking.visualize.superplot import (
+    plot_per_run_roc_auc,
+    plot_per_run_training,
+    plot_superplot,
+)
+from privacy_and_grokking.visualize.tsne import plot_tsne
+
+matplotlib.use("Agg")
+
+
+def _save_figure_to_mlflow(
+    fig: plt.Figure,
+    filename: str,
+    *,
+    run_id: str,
+    dpi: int = 150,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / filename
+        fig.savefig(str(path), dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        with mlflow.start_run(run_id=run_id):
+            mlflow.log_artifact(str(path), artifact_path="visualizations")
+
+
+def _generate_per_run_plots(rd: RunData) -> None:
+    fig = plot_per_run_training(rd)
+    _save_figure_to_mlflow(fig, "training_curves.png", run_id=rd.run_id)
+
+    fig = plot_per_run_roc_auc(rd)
+    _save_figure_to_mlflow(fig, "mia_roc_auc_evolution.png", run_id=rd.run_id)
+
+    if rd.train_activations is not None and rd.test_activations is not None:
+        fig = plot_tsne(
+            rd.train_activations,
+            rd.test_activations,
+            title=f"t-SNE – {rd.config.full_name}",
+        )
+        _save_figure_to_mlflow(fig, "tsne_activations.png", run_id=rd.run_id)
+
+
+def _generate_superplot(runs: list[RunData]) -> None:
+    """Generate the multi-run superplot and log it to every participating run."""
+    for log_scale in (True, False):
+        suffix = "log" if log_scale else "linear"
+        fig = plot_superplot(runs, log_scale=log_scale)
+        filename = f"superplot_{suffix}.png"
+
+        # Log the same figure to every run so it's visible from each
+        for rd in runs:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                path = Path(tmpdir) / filename
+                fig.savefig(str(path), dpi=150, bbox_inches="tight")
+                with mlflow.start_run(run_id=rd.run_id):
+                    mlflow.log_artifact(str(path), artifact_path="visualizations")
+        plt.close(fig)
+
+
+def visualization_handler(exp_name: str, run_ids: list[str]) -> None:
+    import os
+
+    os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
+    setup_mlflow(exp_name)
+
+    with Logger() as logger:
+        logger.info(
+            "Starting visualisation.",
+            run_ids=run_ids,
+        )
+
+        runs: list[RunData] = []
+        for run_id in run_ids:
+            logger.info("Loading run data.", run_id=run_id)
+            rd = load_run_data(run_id)
+            runs.append(rd)
+
+        for rd in runs:
+            logger.info("Generating per-run plots.", run_id=rd.run_id)
+            _generate_per_run_plots(rd)
+
+        if runs:
+            logger.info("Generating superplot.", n_runs=len(runs))
+            _generate_superplot(runs)
+
+        logger.info("Visualisation complete.")

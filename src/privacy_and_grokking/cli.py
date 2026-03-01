@@ -54,6 +54,13 @@ def extract(exp_name: str, run_id: str):
     extraction_handler(exp_name, run_id)
 
 
+@app.command()
+def visualize(exp_name: str, run_ids: list[str]):
+    from privacy_and_grokking.visualize import visualization_handler
+
+    visualization_handler(exp_name, run_ids)
+
+
 def _handle(line):
     line = line.strip()
     if line:
