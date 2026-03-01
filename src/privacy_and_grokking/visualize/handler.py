@@ -12,7 +12,7 @@ from privacy_and_grokking.visualize.superplot import (
     plot_per_run_training,
     plot_superplot,
 )
-from privacy_and_grokking.visualize.tsne import plot_tsne, plot_tsne_classes
+from privacy_and_grokking.visualize.tsne import make_tsne_video, plot_tsne, plot_tsne_classes
 
 matplotlib.use("Agg")
 
@@ -32,7 +32,7 @@ def _save_figure_to_mlflow(
             mlflow.log_artifact(str(path), artifact_path="visualizations")
 
 
-def _generate_per_run_plots(rd: RunData) -> None:
+def _generate_per_run_plots(rd: RunData, *, tsne_video: bool = False) -> None:
     fig = plot_per_run_training(rd)
     _save_figure_to_mlflow(fig, "training_curves.png", run_id=rd.run_id)
 
@@ -57,6 +57,17 @@ def _generate_per_run_plots(rd: RunData) -> None:
             )
             _save_figure_to_mlflow(fig, "tsne_classes.png", run_id=rd.run_id)
 
+    if tsne_video and rd.all_step_activations and len(rd.all_step_activations) > 1:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gif_path = Path(tmpdir) / "tsne_evolution.gif"
+            make_tsne_video(
+                rd.all_step_activations,
+                gif_path,
+                title_prefix=f"t-SNE – {rd.config.full_name}",
+            )
+            with mlflow.start_run(run_id=rd.run_id):
+                mlflow.log_artifact(str(gif_path), artifact_path="visualizations")
+
 
 def _generate_superplot(runs: list[RunData]) -> None:
     """Generate the multi-run superplot and log it to every participating run."""
@@ -75,7 +86,7 @@ def _generate_superplot(runs: list[RunData]) -> None:
         plt.close(fig)
 
 
-def visualization_handler(exp_name: str, run_ids: list[str]) -> None:
+def visualization_handler(exp_name: str, run_ids: list[str], *, tsne_video: bool = False) -> None:
     import os
 
     os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
@@ -85,17 +96,18 @@ def visualization_handler(exp_name: str, run_ids: list[str]) -> None:
         logger.info(
             "Starting visualization.",
             run_ids=run_ids,
+            tsne_video=tsne_video,
         )
 
         runs: list[RunData] = []
         for run_id in run_ids:
             logger.info("Loading run data.", run_id=run_id)
-            rd = load_run_data(run_id)
+            rd = load_run_data(run_id, load_all_activations=tsne_video)
             runs.append(rd)
 
         for rd in runs:
             logger.info("Generating per-run plots.", run_id=rd.run_id)
-            _generate_per_run_plots(rd)
+            _generate_per_run_plots(rd, tsne_video=tsne_video)
 
         if runs:
             logger.info("Generating superplot.", n_runs=len(runs))

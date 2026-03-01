@@ -60,7 +60,7 @@ def _compute_weight_norms(
     return norms
 
 
-def _step_wise(run_id: str) -> None:
+def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
     logger = Logger.get()
     device = get_device()
 
@@ -170,7 +170,7 @@ def _step_wise(run_id: str) -> None:
         mlflow.log_metrics(roc_metrics, step=step)
 
         # Activations for penultimate layer
-        if step == steps[-1]:
+        if save_all_activations or step == steps[-1]:
             train_acts, train_labels = extract_penultimate_activations(model, train_subset)
             test_acts, test_labels = extract_penultimate_activations(model, test_ds)
             payload = {
@@ -186,7 +186,7 @@ def _step_wise(run_id: str) -> None:
                 mlflow.log_artifact(str(path), artifact_path="activations")
 
 
-def extraction_handler(exp_name: str, run_id: str) -> None:
+def extraction_handler(exp_name: str, run_id: str, *, save_all_activations: bool = False) -> None:
     import os
 
     os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
@@ -198,8 +198,9 @@ def extraction_handler(exp_name: str, run_id: str) -> None:
         logger.info(
             "Starting data extraction for run.",
             run_id=run_id,
+            save_all_activations=save_all_activations,
         )
-        _step_wise(run_id)
+        _step_wise(run_id, save_all_activations=save_all_activations)
         logger.info(
             "Completed data extraction for run.",
             run_id=run_id,

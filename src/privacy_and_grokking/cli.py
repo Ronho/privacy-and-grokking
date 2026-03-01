@@ -47,20 +47,30 @@ def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
 
 
 @app.command()
-def extract(exp_name: str, run_id: str):
+def extract(
+    exp_name: str,
+    run_id: str,
+    all_activations: bool = False,
+):
     from privacy_and_grokking.extraction import extraction_handler
+
     with Logger() as logger:
         logger.info("Starting extraction handler.", extra={"run_id": run_id})
-        extraction_handler(exp_name, run_id)
+        extraction_handler(exp_name, run_id, save_all_activations=all_activations)
         logger.info("Extraction handler completed.")
 
 
 @app.command()
-def visualize(exp_name: str, run_ids: list[str]):
+def visualize(
+    exp_name: str,
+    run_ids: list[str],
+    tsne_video: bool = False,
+):
     from privacy_and_grokking.visualize import visualization_handler
+
     with Logger() as logger:
         logger.info("Starting visualization handler.", extra={"run_ids": run_ids})
-        visualization_handler(exp_name, run_ids)
+        visualization_handler(exp_name, run_ids, tsne_video=tsne_video)
         logger.info("Visualization handler completed.")
 
 

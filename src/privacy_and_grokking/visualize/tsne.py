@@ -1,3 +1,6 @@
+import io
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -81,6 +84,52 @@ def plot_tsne(
     ax.grid(True, alpha=0.2)
     fig.tight_layout()
     return fig
+
+
+def make_tsne_video(
+    step_activations: dict[int, dict[str, torch.Tensor]],
+    out_path: Path,
+    *,
+    fps: int = 2,
+    perplexity: float = 30.0,
+    random_state: int = 42,
+    max_samples: int = 2000,
+    figsize: tuple[float, float] = (8, 6),
+    title_prefix: str = "t-SNE",
+) -> None:
+    from PIL import Image
+
+    steps = sorted(step_activations.keys())
+    if not steps:
+        return
+
+    frames: list[Image.Image] = []
+    for step in steps:
+        data = step_activations[step]
+        fig = plot_tsne(
+            data["train_activations"],
+            data["test_activations"],
+            title=f"{title_prefix} – Step {step}",
+            perplexity=perplexity,
+            random_state=random_state,
+            max_samples=max_samples,
+            figsize=figsize,
+        )
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        frames.append(Image.open(buf).copy())
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    frames[0].save(
+        out_path,
+        save_all=True,
+        append_images=frames[1:],
+        loop=0,
+        duration=int(1000 / fps),
+        optimize=False,
+    )
 
 
 def plot_tsne_on_ax(

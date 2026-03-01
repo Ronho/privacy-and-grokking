@@ -26,7 +26,9 @@ class Datasets(StrEnum):
     MNIST = "mnist"
     CIFAR10 = "cifar10"
 
+
 CACHE_PATH = Path(__file__).parent.parent.parent.parent.resolve() / "cache"
+
 
 def get_mnist() -> DataContainer:
     transform = transforms.ToTensor()

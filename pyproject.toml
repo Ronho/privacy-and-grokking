@@ -13,6 +13,7 @@ dependencies = [
     "polars==1.35.1",
     "pydantic==2.12.4",
     "rsatoolbox==0.3.0",
+    "pillow==11.0.0",
     "scikit-learn==1.6.0",
     "structlog==25.5.0",
     "tqdm==4.67.1",
