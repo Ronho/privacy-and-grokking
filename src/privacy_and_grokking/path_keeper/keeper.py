@@ -73,46 +73,6 @@ class PathKeeper:
         return self._fill(PathKeeper._CACHE)
 
     @property
-    def LOG(self) -> Path:
-        return self._fill(PathKeeper._LOG)
-
-    @property
-    def TRAIN_CONFIG(self) -> Path:
-        return self._fill(PathKeeper._TRAIN_FOLDER) / "train_config.json"
-
-    @property
-    def TRAIN_METRICS(self) -> Path:
-        return self._fill(PathKeeper._TRAIN_FOLDER) / "train_metrics.json"
-
-    @property
-    def MODEL_FOLDER(self) -> Path:
-        return self._fill(PathKeeper._MODEL_FOLDER)
-
-    @property
-    def MODEL_TORCH(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "model.pt"
-
-    @property
-    def MODEL_ONNX(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "model.onnx"
-
-    @property
-    def OPTIMIZER(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "optimizer.pt"
-
-    @property
-    def RNG_STATE(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "rng_state.pt"
-
-    @property
-    def TRAIN_LOGITS(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "train_logits.parquet"
-
-    @property
-    def TEST_LOGITS(self) -> Path:
-        return self._fill(PathKeeper._CHECKPOINT) / "test_logits.parquet"
-
-    @property
     def IMAGE_FOLDER(self) -> Path:
         return self._fill(PathKeeper._IMAGE_FOLDER)
 

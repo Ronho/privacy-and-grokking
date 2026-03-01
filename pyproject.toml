@@ -117,9 +117,7 @@ qa-fix = { sequence = [
   { cmd = "uv run pytest", ignore_fail = true }
 ], help = "Fix code style and run tests" }
 
-train = { cmd = "uv run pag train", help = "Train models" }
-attack = { cmd = "uv run pag attack", help = "Run attacks" }
-evaluate = { cmd = "uv run pag evaluate", help = "Evaluate results" }
+mlflow = { cmd = "uv run mlflow ui --backend-store-uri=sqlite:///data/mlflow.db"}
 
 clean = { cmd = """
 python -c "import shutil, pathlib; 

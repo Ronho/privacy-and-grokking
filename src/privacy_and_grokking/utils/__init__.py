@@ -4,6 +4,7 @@ from importlib.metadata import version
 import torch
 
 from privacy_and_grokking.utils.logger import Logger
+from privacy_and_grokking.utils.mlflow import setup_mlflow
 
 
 def get_device() -> str:
@@ -91,4 +92,5 @@ __all__ = [
     "get_git_changes",
     "set_all_seeds",
     "Logger",
+    "setup_mlflow",
 ]

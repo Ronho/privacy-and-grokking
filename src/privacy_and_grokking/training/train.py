@@ -13,7 +13,14 @@ from tqdm import tqdm
 from privacy_and_grokking.config import Loss, Optimizer, TrainConfig
 from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
 from privacy_and_grokking.models import create_model
-from privacy_and_grokking.utils import Logger, eval_mode, get_device, get_git_changes, set_all_seeds
+from privacy_and_grokking.utils import (
+    Logger,
+    eval_mode,
+    get_device,
+    get_git_changes,
+    set_all_seeds,
+    setup_mlflow,
+)
 
 LOG_FREQUENCY = 500
 
@@ -298,15 +305,7 @@ def train(
 ) -> None:
     run_name = run_name or (cfg.full_name if isinstance(cfg, TrainConfig) else cfg.run_id)
 
-    root = Path(__file__).parent.parent.parent.parent.resolve()
-    tracking_dir = root / "data"
-    mlflow.set_tracking_uri(f"sqlite:///{tracking_dir / 'mlflow.db'}")
-    if not mlflow.get_experiment_by_name(exp_name):
-        mlflow.create_experiment(
-            name=exp_name,
-            artifact_location=str(tracking_dir / "mlruns"),
-        )
-    mlflow.set_experiment(exp_name)
+    setup_mlflow(exp_name)
 
     log_handler = Logger()
     run_id = cfg.run_id if isinstance(cfg, RestartConfig) else None

@@ -1,4 +1,4 @@
-from privacy_and_grokking.config.model import AdamW, MSELoss, TrainConfig
+from privacy_and_grokking.config.model import AdamW, CrossEntropyLoss, MSELoss, TrainConfig
 from privacy_and_grokking.datasets import DatasetConfig, Datasets, MaskingConfig, Maskings
 from privacy_and_grokking.utils import get_git_commit_id, get_package_version
 
@@ -16,12 +16,26 @@ def get_configs() -> list[TrainConfig]:
     mask = MaskingConfig(name=Maskings.UNIFORM, num_models=256, p=0.5, seed=1)
     configs = []
 
-    # MLP_MNIST_UNIFORM_MSE_ADAMW
     configs.append(
         TrainConfig(
             batch_size=BATCH_SIZE,
             seed=SEED,
-            loss=LOSS,
+            loss=MSELoss(),
+            optimizer=OPTIMIZER,
+            model="mlp",
+            dataset=DatasetConfig(
+                name=Datasets.MNIST, train_size=1_000, canary_share=0, canary_config=None, seed=1
+            ),
+            dataset_mask=mask,
+            initialization_scale=None,
+        )
+    )
+
+    configs.append(
+        TrainConfig(
+            batch_size=BATCH_SIZE,
+            seed=SEED,
+            loss=CrossEntropyLoss(),
             optimizer=OPTIMIZER,
             model="mlp",
             dataset=DatasetConfig(
