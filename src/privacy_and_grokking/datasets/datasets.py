@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
-
-from ..path_keeper import get_path_keeper
 
 
 @dataclass
@@ -27,12 +26,13 @@ class Datasets(StrEnum):
     MNIST = "mnist"
     CIFAR10 = "cifar10"
 
+CACHE_PATH = Path(__file__).parent.parent.parent.parent.resolve() / "cache"
 
 def get_mnist() -> DataContainer:
-    pk = get_path_keeper()
     transform = transforms.ToTensor()
-    train = datasets.MNIST(root=pk.CACHE, train=True, download=True, transform=transform)
-    test = datasets.MNIST(root=pk.CACHE, train=False, download=True, transform=transform)
+    CACHE_PATH.mkdir(exist_ok=True)
+    train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
+    test = datasets.MNIST(root=CACHE_PATH, train=False, download=True, transform=transform)
     return DataContainer(
         train=train,
         test=test,
@@ -43,10 +43,10 @@ def get_mnist() -> DataContainer:
 
 
 def get_cifar10() -> DataContainer:
-    pk = get_path_keeper()
     transform = transforms.ToTensor()
-    train = datasets.CIFAR10(root=pk.CACHE, train=True, download=True, transform=transform)
-    test = datasets.CIFAR10(root=pk.CACHE, train=False, download=True, transform=transform)
+    CACHE_PATH.mkdir(exist_ok=True)
+    train = datasets.CIFAR10(root=CACHE_PATH, train=True, download=True, transform=transform)
+    test = datasets.CIFAR10(root=CACHE_PATH, train=False, download=True, transform=transform)
     return DataContainer(
         train=train,
         test=test,

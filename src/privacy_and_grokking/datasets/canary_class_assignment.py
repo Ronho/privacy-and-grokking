@@ -12,9 +12,9 @@ Contains logic for assigning new labels to canary samples.
 
 import torch
 
-from privacy_and_grokking.logger import get_logger
+from privacy_and_grokking.utils import Logger
 
-logger = get_logger()
+logger = Logger.get()
 
 
 def derange_balanced_indices(canary_lookup: dict[int, list[int]], seed: int) -> torch.Tensor:

@@ -4,7 +4,6 @@ from multiprocessing import Pool
 from typer import Typer
 
 from privacy_and_grokking.config import TrainingRegistry
-from privacy_and_grokking.logger import get_logger
 from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
 from privacy_and_grokking.utils import Logger
@@ -64,9 +63,9 @@ def visualize(exp_name: str, run_ids: list[str]):
 def _handle(line):
     line = line.strip()
     if line:
-        logger = get_logger()
-        logger.info("Processing command.", extra={"command": line})
-        os.system(line)
+        with Logger() as logger:
+            logger.info("Processing command.", extra={"command": line})
+            os.system(line)
 
 
 @app.command()

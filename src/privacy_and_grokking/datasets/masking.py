@@ -1,3 +1,14 @@
+"""
+Defines different masking strategies for dataset samples across multiple models.
+
+(Ideal) Criteria:
+- Each data point should appear in approximately p * num_models models.
+- Each model should have approximately p * num_samples data points.
+- Each class should be evenly represented for each model.
+- There should be randomness in the selection to avoid models being too similar.
+- The masking strategy should be deterministic given a seed.
+- The implementation should be efficient in both time and space.
+"""
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
@@ -5,21 +16,9 @@ import torch
 from pydantic import BaseModel, Field
 
 from privacy_and_grokking.datasets import CanarySubset
-from privacy_and_grokking.logger import get_logger
+from privacy_and_grokking.utils import Logger
 
-logger = get_logger()
-
-"""
-Defines different masking strategies for dataset samples across multiple models.
-
-(Ideal) Criteria:
-- Each data point shoud appear in approximately p * num_models models.
-- Each model should have approximately p * num_samples data points.
-- Each class should be evenly represented for each model.
-- There should be randomness in the selection to avoid models being too similar.
-- The masking strategy should be deterministic given a seed.
-- The implementation should be efficient in both time and space.
-"""
+logger = Logger.get()
 
 
 class Masking(ABC):
