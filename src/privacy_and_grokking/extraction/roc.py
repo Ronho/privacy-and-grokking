@@ -21,7 +21,8 @@ def compute_roc_metrics_single_step(
     y_scores = torch.cat([train_signals, test_signals])
 
     fpr, tpr, _ = roc_curve(
-        y_true.numpy(), y_scores.numpy(),
+        y_true.numpy(),
+        y_scores.numpy(),
     )
     roc_auc = auc(fpr, tpr)
 

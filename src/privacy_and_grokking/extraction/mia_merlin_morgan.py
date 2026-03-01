@@ -33,15 +33,18 @@ def compute_merlin_morgan_signals(
 
             ce_loss = ce_criterion(output, labels)
             labels_one_hot = F.one_hot(
-                labels, num_classes=num_classes,
+                labels,
+                num_classes=num_classes,
             ).float()
             mse_loss = mse_criterion(output, labels_one_hot).sum(dim=1)
 
             batch_ce_votes = torch.zeros(
-                imgs.size(0), device=device,
+                imgs.size(0),
+                device=device,
             )
             batch_mse_votes = torch.zeros(
-                imgs.size(0), device=device,
+                imgs.size(0),
+                device=device,
             )
 
             for i in range(imgs.size(0)):
@@ -51,7 +54,8 @@ def compute_merlin_morgan_signals(
 
                 noise = (
                     torch.randn(
-                        (NOISY_SAMPLES, *img.shape), device=device,
+                        (NOISY_SAMPLES, *img.shape),
+                        device=device,
                     )
                     * NOISE_SCALE
                 )
@@ -59,19 +63,16 @@ def compute_merlin_morgan_signals(
                 noisy_output = model(noisy_imgs)
 
                 noisy_ce = ce_criterion(
-                    noisy_output, label.repeat(NOISY_SAMPLES),
+                    noisy_output,
+                    label.repeat(NOISY_SAMPLES),
                 )
-                batch_ce_votes[i] = (
-                    (noisy_ce > ce_loss[i]).float().mean()
-                )
+                batch_ce_votes[i] = (noisy_ce > ce_loss[i]).float().mean()
 
                 noisy_mse = mse_criterion(
                     noisy_output,
                     label_oh.repeat(NOISY_SAMPLES, 1),
                 ).sum(dim=1)
-                batch_mse_votes[i] = (
-                    (noisy_mse > mse_loss[i]).float().mean()
-                )
+                batch_mse_votes[i] = (noisy_mse > mse_loss[i]).float().mean()
 
             ce_votes.append(batch_ce_votes.cpu())
             mse_votes.append(batch_mse_votes.cpu())

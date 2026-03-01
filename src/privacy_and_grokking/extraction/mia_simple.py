@@ -45,7 +45,8 @@ def compute_mia_signals(
                 mse_criterion(
                     logits,
                     F.one_hot(
-                        y, num_classes=logits.size(1),
+                        y,
+                        num_classes=logits.size(1),
                     ).float(),
                 ).gather(1, y.view(-1, 1))
             )

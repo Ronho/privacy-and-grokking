@@ -1,5 +1,6 @@
-import mlflow
 from pathlib import Path
+
+import mlflow
 
 
 def setup_mlflow(exp_name: str = "default"):

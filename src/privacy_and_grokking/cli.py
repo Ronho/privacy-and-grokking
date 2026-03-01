@@ -46,6 +46,7 @@ def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
     cfg = RestartConfig(run_id=run_id, checkpoint=checkpoint)
     training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name="")
 
+
 @app.command()
 def extract(exp_name: str, run_id: str):
     from privacy_and_grokking.extraction import extraction_handler

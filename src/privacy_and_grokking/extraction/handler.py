@@ -46,15 +46,11 @@ def _compute_weight_norms(
     all_params = []
 
     for name, param in state_dict.items():
-        norms[f"weight_norm/{name}"] = (
-            torch.linalg.norm(param.float()).item()
-        )
+        norms[f"weight_norm/{name}"] = torch.linalg.norm(param.float()).item()
         all_params.append(param.float().flatten())
 
     if all_params:
-        norms["weight_norm/total"] = (
-            torch.linalg.norm(torch.cat(all_params)).item()
-        )
+        norms["weight_norm/total"] = torch.linalg.norm(torch.cat(all_params)).item()
     else:
         norms["weight_norm/total"] = 0.0
 
@@ -72,9 +68,7 @@ def _step_wise(run_id: str) -> None:
 
     # Dataset
     cfg = TrainConfig.model_validate(
-        mlflow.artifacts.load_dict(
-            f"runs:/{run_id}/training_config.json"
-        )
+        mlflow.artifacts.load_dict(f"runs:/{run_id}/training_config.json")
     )
     train_ds, test_ds = generate_datasets(cfg.dataset)
     num_classes = train_ds.num_classes
@@ -84,7 +78,9 @@ def _step_wise(run_id: str) -> None:
         num_classes=num_classes,
     )
     train_subset = mask_dataset(
-        masking, train_ds, cfg.dataset_mask_idx,
+        masking,
+        train_ds,
+        cfg.dataset_mask_idx,
     )
 
     # Subsamples for Merlin Morgan
@@ -100,9 +96,7 @@ def _step_wise(run_id: str) -> None:
 
     for step in tqdm(steps, desc="Extracting Data", unit="ckpt"):
         with tempfile.TemporaryDirectory() as tmpdir:
-            artifact_uri = (
-                f"runs:/{run_id}/checkpoints/{step}/model.pth"
-            )
+            artifact_uri = f"runs:/{run_id}/checkpoints/{step}/model.pth"
             mlflow.artifacts.download_artifacts(
                 artifact_uri=artifact_uri,
                 dst_path=tmpdir,
@@ -131,18 +125,24 @@ def _step_wise(run_id: str) -> None:
 
         # Simple MIA signals
         t_pr, t_lo, t_ce, t_mse, t_cor = compute_mia_signals(
-            model, train_subset,
+            model,
+            train_subset,
         )
         e_pr, e_lo, e_ce, e_mse, e_cor = compute_mia_signals(
-            model, test_ds,
+            model,
+            test_ds,
         )
 
         # Merlin/Morgan signals
         t_ce_v, t_mse_v = compute_merlin_morgan_signals(
-            model, mm_train, num_classes,
+            model,
+            mm_train,
+            num_classes,
         )
         e_ce_v, e_mse_v = compute_merlin_morgan_signals(
-            model, mm_test, num_classes,
+            model,
+            mm_test,
+            num_classes,
         )
 
         # Compute & log ROC metrics
