@@ -12,7 +12,7 @@ from privacy_and_grokking.visualize.superplot import (
     plot_per_run_training,
     plot_superplot,
 )
-from privacy_and_grokking.visualize.tsne import plot_tsne
+from privacy_and_grokking.visualize.tsne import plot_tsne, plot_tsne_classes
 
 matplotlib.use("Agg")
 
@@ -47,6 +47,16 @@ def _generate_per_run_plots(rd: RunData) -> None:
         )
         _save_figure_to_mlflow(fig, "tsne_activations.png", run_id=rd.run_id)
 
+        if rd.train_labels is not None and rd.test_labels is not None:
+            fig = plot_tsne_classes(
+                rd.train_activations,
+                rd.test_activations,
+                rd.train_labels,
+                rd.test_labels,
+                title=f"t-SNE by Class – {rd.config.full_name}",
+            )
+            _save_figure_to_mlflow(fig, "tsne_classes.png", run_id=rd.run_id)
+
 
 def _generate_superplot(runs: list[RunData]) -> None:
     """Generate the multi-run superplot and log it to every participating run."""
@@ -73,7 +83,7 @@ def visualization_handler(exp_name: str, run_ids: list[str]) -> None:
 
     with Logger() as logger:
         logger.info(
-            "Starting visualisation.",
+            "Starting visualization.",
             run_ids=run_ids,
         )
 
@@ -91,4 +101,4 @@ def visualization_handler(exp_name: str, run_ids: list[str]) -> None:
             logger.info("Generating superplot.", n_runs=len(runs))
             _generate_superplot(runs)
 
-        logger.info("Visualisation complete.")
+        logger.info("Visualization complete.")

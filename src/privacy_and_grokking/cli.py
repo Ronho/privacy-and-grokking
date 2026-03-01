@@ -49,15 +49,19 @@ def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
 @app.command()
 def extract(exp_name: str, run_id: str):
     from privacy_and_grokking.extraction import extraction_handler
-
-    extraction_handler(exp_name, run_id)
+    with Logger() as logger:
+        logger.info("Starting extraction handler.", extra={"run_id": run_id})
+        extraction_handler(exp_name, run_id)
+        logger.info("Extraction handler completed.")
 
 
 @app.command()
 def visualize(exp_name: str, run_ids: list[str]):
     from privacy_and_grokking.visualize import visualization_handler
-
-    visualization_handler(exp_name, run_ids)
+    with Logger() as logger:
+        logger.info("Starting visualization handler.", extra={"run_ids": run_ids})
+        visualization_handler(exp_name, run_ids)
+        logger.info("Visualization handler completed.")
 
 
 def _handle(line):

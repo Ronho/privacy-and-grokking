@@ -18,8 +18,6 @@ from pydantic import BaseModel, Field
 from privacy_and_grokking.datasets import CanarySubset
 from privacy_and_grokking.utils import Logger
 
-logger = Logger.get()
-
 
 class Masking(ABC):
     def __init__(
@@ -35,9 +33,10 @@ class Masking(ABC):
         if seed is not None:
             self.rng.manual_seed(seed)
         else:
-            logger.warning("No seed provided for masking, using non-deterministic behavior.")
+            Logger.get().warning("No seed provided for masking, using non-deterministic behavior.")
 
     def __call__(self, classes: torch.Tensor | None = None) -> torch.Tensor:
+        logger = Logger.get()
         if classes is None:
             logger.warning("No classes provided for StratifiedMasking, using even distribution.")
             samples_per_class = self.num_samples // self.num_classes
@@ -69,7 +68,7 @@ class PartitionedStratifiedMasking(Masking):
 
     def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
         if self.p != (1.0 / self.num_models):
-            logger.warning(
+            Logger.get().warning(
                 "PartitionedStratifiedMasking cannot fulfill the condition p == 1/num_models",
                 {"p": self.p, "num_models": self.num_models},
             )
@@ -113,7 +112,7 @@ class BalancedStratifiedMasking(Masking):
         n_per_class = n_per_model // self.num_classes
 
         if n_per_model % self.num_classes != 0:
-            logger.warning("Samples per model not divisible by num_classes.")
+            Logger.get().warning("Samples per model not divisible by num_classes.")
 
         mask = torch.zeros((self.num_samples, self.num_models), dtype=torch.bool)
         for c in range(self.num_classes):

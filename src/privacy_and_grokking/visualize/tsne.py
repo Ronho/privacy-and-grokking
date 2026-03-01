@@ -1,9 +1,8 @@
-"""t-SNE visualisation of penultimate-layer activations."""
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from sklearn.manifold import TSNE
 
 
@@ -156,3 +155,133 @@ def plot_tsne_on_ax(
     ax.set_ylabel("t-SNE 2", fontsize=8)
     ax.legend(loc="best", fontsize=7)
     ax.grid(True, alpha=0.2)
+
+
+def plot_tsne_classes(
+    train_activations: torch.Tensor,
+    test_activations: torch.Tensor,
+    train_labels: torch.Tensor,
+    test_labels: torch.Tensor,
+    *,
+    title: str = "t-SNE of Penultimate-Layer Activations – Coloured by Class",
+    perplexity: float = 30.0,
+    random_state: int = 42,
+    max_samples: int = 5000,
+    figsize: tuple[float, float] = (8, 6),
+) -> Figure:
+    train_np = train_activations.numpy()
+    test_np = test_activations.numpy()
+    train_lbl = train_labels.numpy()
+    test_lbl = test_labels.numpy()
+
+    n_train, n_test = len(train_np), len(test_np)
+    total = n_train + n_test
+
+    if total > max_samples:
+        ratio = max_samples / total
+        idx_tr = np.random.default_rng(random_state).choice(
+            n_train,
+            size=max(1, int(n_train * ratio)),
+            replace=False,
+        )
+        idx_te = np.random.default_rng(random_state + 1).choice(
+            n_test,
+            size=max(1, int(n_test * ratio)),
+            replace=False,
+        )
+        train_np, train_lbl = train_np[idx_tr], train_lbl[idx_tr]
+        test_np, test_lbl = test_np[idx_te], test_lbl[idx_te]
+
+    combined = np.concatenate([train_np, test_np], axis=0)
+    all_labels = np.concatenate([train_lbl, test_lbl], axis=0)
+    is_member = np.array([True] * len(train_np) + [False] * len(test_np))
+
+    tsne = TSNE(
+        n_components=2,
+        perplexity=min(perplexity, max(1.0, len(combined) - 1)),
+        random_state=random_state,
+        init="pca",
+        learning_rate="auto",
+    )
+    embedded = tsne.fit_transform(combined)
+
+    classes = np.unique(all_labels)
+    cmap = plt.get_cmap("tab10") if len(classes) <= 10 else plt.get_cmap("tab20")
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    for cls in classes:
+        cls_mask = all_labels == cls
+        color = cmap(int(cls) % cmap.N)
+
+        member_cls = cls_mask & is_member
+        nonmember_cls = cls_mask & ~is_member
+
+        if member_cls.any():
+            ax.scatter(
+                embedded[member_cls, 0],
+                embedded[member_cls, 1],
+                s=12,
+                alpha=0.6,
+                color=color,
+                marker="o",
+                edgecolors="none",
+            )
+        if nonmember_cls.any():
+            ax.scatter(
+                embedded[nonmember_cls, 0],
+                embedded[nonmember_cls, 1],
+                s=14,
+                alpha=0.45,
+                color=color,
+                marker="^",
+                edgecolors="none",
+            )
+
+    # Build a combined legend: one entry per class (colour) + membership markers
+    class_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=cmap(int(c) % cmap.N),
+            markersize=7,
+            label=f"Class {c}",
+        )
+        for c in classes
+    ]
+    membership_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="gray",
+            markersize=7,
+            label="Members (train)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="^",
+            color="w",
+            markerfacecolor="gray",
+            markersize=7,
+            label="Non-members (test)",
+        ),
+    ]
+    n_cols = max(1, (len(classes) + 1) // 2)
+    ax.legend(
+        handles=class_handles + membership_handles,
+        loc="best",
+        fontsize=7,
+        ncol=n_cols,
+    )
+
+    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.set_xlabel("t-SNE 1")
+    ax.set_ylabel("t-SNE 2")
+    ax.grid(True, alpha=0.2)
+    fig.tight_layout()
+    return fig

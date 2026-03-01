@@ -8,9 +8,6 @@ from torchvision import transforms
 from privacy_and_grokking.datasets.canaries import Canary, CanaryConfig, create_canary_generator
 from privacy_and_grokking.datasets.canary_class_assignment import random_derange_indices
 from privacy_and_grokking.datasets.datasets import Datasets, Normalization, get_dataset
-from privacy_and_grokking.utils import Logger
-
-logger = Logger.get()
 
 
 class CanarySubset(TensorDataset):

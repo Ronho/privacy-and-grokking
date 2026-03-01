@@ -14,8 +14,6 @@ import torch
 
 from privacy_and_grokking.utils import Logger
 
-logger = Logger.get()
-
 
 def derange_balanced_indices(canary_lookup: dict[int, list[int]], seed: int) -> torch.Tensor:
     """Returns a deranged list of canary labels matching the original canary indices.
@@ -74,7 +72,7 @@ def alternative_derange_balanced_indices(
         if torch.all(assigned_canary_labels != original_canary_labels):
             break
     if i == retries - 1:
-        logger.warning(
+        Logger.get().warning(
             "Derangement failed after maximum retries. Returning last attempt, which may contain matches."
         )
     return assigned_canary_labels
