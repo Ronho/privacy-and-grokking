@@ -202,7 +202,7 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
 
     logger.info("Preparing optimizer and loss function.")
     loss_fn = config.loss(num_classes=train.num_classes)
-    loss_fn_eval = config.loss(reduction="none")
+    loss_fn_eval = config.loss(num_classes=train.num_classes, reduction="none")
     optimizer = config.optimizer(params=model.parameters())
 
     logger.info("Preparing seeds and defaults.")
