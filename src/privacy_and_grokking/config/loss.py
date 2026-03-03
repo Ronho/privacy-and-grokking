@@ -15,7 +15,7 @@ class MSELossConfig(BaseModel):
             raise KeyError("`num_classes` required for MSELoss")
         num_classes = kwargs["num_classes"]
         one_hot = torch.eye(num_classes, num_classes)
-        fn = torch.nn.MSELoss(reduction=kwargs.get("reduction"))
+        fn = torch.nn.MSELoss(reduction=kwargs.get("reduction", "mean"))
 
         def loss(logits, labels: torch.Tensor) -> torch.Tensor:
             return fn(logits, one_hot.to(labels.device)[labels])
@@ -27,7 +27,7 @@ class CrossEntropyLossConfig(BaseModel):
     name: Literal["cross_entropy"] = "cross_entropy"
 
     def __call__(self, **kwargs) -> LossType:
-        return torch.nn.CrossEntropyLoss(reduction=kwargs.get("reduction"))
+        return torch.nn.CrossEntropyLoss(reduction=kwargs.get("reduction", "mean"))
 
 
 Loss = Annotated[MSELossConfig | CrossEntropyLossConfig, Field(discriminator="name")]
