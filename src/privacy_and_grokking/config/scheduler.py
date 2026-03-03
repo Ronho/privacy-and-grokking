@@ -25,7 +25,7 @@ class CosineAnnealingLRConfig(BaseModel):
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=kwargs["optimization_steps"],
-            eta_min=cfg.min_lr,
+            eta_min=self.min_lr,
             last_epoch=kwargs["checkpoint"],
         )
 
