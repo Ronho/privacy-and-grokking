@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 type LossType = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
+
 class MSELossConfig(BaseModel):
     name: Literal["mse"] = "mse"
 
@@ -21,10 +22,12 @@ class MSELossConfig(BaseModel):
 
         return loss
 
+
 class CrossEntropyLossConfig(BaseModel):
     name: Literal["cross_entropy"] = "cross_entropy"
 
     def __call__(self, **kwargs) -> LossType:
         return torch.nn.CrossEntropyLoss(reduction=kwargs.get("reduction"))
+
 
 Loss = Annotated[MSELossConfig | CrossEntropyLossConfig, Field(discriminator="name")]

@@ -13,6 +13,7 @@ class AdamConfig(BaseModel):
     def __call__(self, params) -> torch.optim.Optimizer:
         return torch.optim.Adam(params, lr=self.learning_rate, weight_decay=self.weight_decay)
 
+
 class AdamWConfig(BaseModel):
     name: Literal["AdamW"] = "AdamW"
 
@@ -21,5 +22,6 @@ class AdamWConfig(BaseModel):
 
     def __call__(self, params) -> torch.optim.Optimizer:
         return torch.optim.AdamW(params, lr=self.learning_rate, weight_decay=self.weight_decay)
+
 
 Optimizer = Annotated[AdamConfig | AdamWConfig, Field(discriminator="name")]

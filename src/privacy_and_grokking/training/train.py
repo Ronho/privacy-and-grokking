@@ -139,9 +139,11 @@ def load_model(
         if torch.cuda.is_available() and states["torch-cuda"]:
             torch.cuda.set_rng_state_all(states["torch-cuda"])
 
+
 class RestartConfig(BaseModel):
     run_id: str
     checkpoint: int
+
 
 def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> None:
     logger = Logger.get()
@@ -210,7 +212,11 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
     if restart:
         load_model(model, optimizer, cfg.run_id, cfg.checkpoint, device)
 
-    scheduler = config.scheduler(optimizer=optimizer, optimization_steps=optimization_steps, checkpoint=cfg.checkpoint if restart else -1)
+    scheduler = config.scheduler(
+        optimizer=optimizer,
+        optimization_steps=optimization_steps,
+        checkpoint=cfg.checkpoint if restart else -1,
+    )
 
     logger.info("Starting training loop.")
     step = cfg.checkpoint if restart else 0
