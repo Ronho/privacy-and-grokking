@@ -1,6 +1,5 @@
 import random
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 
 import mlflow
@@ -10,7 +9,9 @@ import torch.nn as nn
 from pydantic import BaseModel
 from tqdm import tqdm
 
-from privacy_and_grokking.config import Loss, Optimizer, TrainConfig
+from privacy_and_grokking.config import (
+    TrainConfig,
+)
 from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import (
@@ -23,50 +24,6 @@ from privacy_and_grokking.utils import (
 )
 
 LOG_FREQUENCY = 500
-
-
-def get_optimizer(cfg: Optimizer, params) -> torch.optim.Optimizer:
-    match cfg.name.lower():
-        case "adamw":
-            return torch.optim.AdamW(params, lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
-        case _:
-            raise ValueError(f"Unknown optimizer: {cfg.name}")
-
-
-def get_loss_fn(
-    cfg: Loss, num_classes: int
-) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
-    match cfg.name.lower():
-        case "mse":
-            one_hot = torch.eye(num_classes, num_classes)
-            fn = nn.MSELoss()
-
-            def loss(logits, labels: torch.Tensor) -> torch.Tensor:
-                return fn(logits, one_hot.to(labels.device)[labels])
-
-            return loss
-        case "cross_entropy":
-            return nn.CrossEntropyLoss()
-        case _:
-            raise ValueError(f"Unknown loss function: {cfg.name}")
-
-
-def get_loss_fn_eval(
-    cfg: Loss, num_classes: int
-) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
-    match cfg.name.lower():
-        case "mse":
-            one_hot = torch.eye(num_classes, num_classes)
-            fn = nn.MSELoss(reduction="none")
-
-            def loss(logits, labels: torch.Tensor) -> torch.Tensor:
-                return fn(logits, one_hot.to(labels.device)[labels]).mean(dim=1)
-
-            return loss
-        case "cross_entropy":
-            return nn.CrossEntropyLoss(reduction="none")
-        case _:
-            raise ValueError(f"Unknown loss function: {cfg.name}")
 
 
 def _eval(model: nn.Module, loss_fn, loader) -> tuple[torch.Tensor, float]:
@@ -182,11 +139,9 @@ def load_model(
         if torch.cuda.is_available() and states["torch-cuda"]:
             torch.cuda.set_rng_state_all(states["torch-cuda"])
 
-
 class RestartConfig(BaseModel):
     run_id: str
     checkpoint: int
-
 
 def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> None:
     logger = Logger.get()
@@ -244,9 +199,9 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
     model.to(device)
 
     logger.info("Preparing optimizer and loss function.")
-    loss_fn = get_loss_fn(config.loss, train.num_classes)
-    loss_fn_eval = get_loss_fn_eval(config.loss, train.num_classes)
-    optimizer = get_optimizer(config.optimizer, model.parameters())
+    loss_fn = config.loss(num_classes=train.num_classes)
+    loss_fn_eval = config.loss(reduction="none")
+    optimizer = config.optimizer(params=model.parameters())
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -254,6 +209,8 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
 
     if restart:
         load_model(model, optimizer, cfg.run_id, cfg.checkpoint, device)
+
+    scheduler = config.scheduler(optimizer=optimizer, optimization_steps=optimization_steps, checkpoint=cfg.checkpoint if restart else -1)
 
     logger.info("Starting training loop.")
     step = cfg.checkpoint if restart else 0
@@ -288,6 +245,7 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
                 loss = loss_fn(logits, y)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
                 step += 1
                 pbar.update(1)

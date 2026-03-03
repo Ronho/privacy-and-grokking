@@ -1,30 +1,10 @@
-from typing import Literal
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from privacy_and_grokking.config.loss import Loss
+from privacy_and_grokking.config.optimizer import Optimizer
+from privacy_and_grokking.config.scheduler import Scheduler
 from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
 from privacy_and_grokking.models import Model
-
-
-class MSELoss(BaseModel):
-    name: Literal["mse"] = "mse"
-
-
-class CrossEntropyLoss(BaseModel):
-    name: Literal["cross_entropy"] = "cross_entropy"
-
-
-type Loss = MSELoss | CrossEntropyLoss
-
-
-class AdamW(BaseModel):
-    name: Literal["AdamW"] = "AdamW"
-
-    learning_rate: float
-    weight_decay: float
-
-
-type Optimizer = AdamW
 
 
 class TrainConfig(BaseModel):
@@ -34,8 +14,9 @@ class TrainConfig(BaseModel):
     seed: int
     batch_size: int
     initialization_scale: float | None
-    loss: Loss = Field(discriminator="name")
-    optimizer: Optimizer = Field(discriminator="name")
+    loss: Loss
+    optimizer: Optimizer
+    scheduler: Scheduler
     dataset: DatasetConfig
     dataset_mask: MaskingConfig
     dataset_mask_idx: int = 0

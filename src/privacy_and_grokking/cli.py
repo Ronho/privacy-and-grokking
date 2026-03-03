@@ -1,22 +1,26 @@
 import os
 from multiprocessing import Pool
+from pathlib import Path
 
 from typer import Typer
 
-from privacy_and_grokking.config import TrainingRegistry
+from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
 from privacy_and_grokking.utils import Logger
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
+CONFIG_DIR = Path(__file__).parent.parent.parent / "configs"
+
 
 @app.command()
-def list_models():
+def list_models(verbose: bool = False):
     with Logger() as logger:
-        TrainingRegistry.load_defaults()
-        model_list = TrainingRegistry.list()
-        logger.info(f"Available models ({len(model_list)}): {', '.join(model_list)}")
+        for model in CONFIG_DIR.iterdir():
+            cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
+            extra = {"config": cfg.model_dump()} if verbose else {}
+            logger.info(model.name, **extra)
 
 
 @app.command()
@@ -28,11 +32,7 @@ def train(
     seed: int | None = None,
     run_name: str | None = None,
 ):
-    TrainingRegistry.load_defaults()
-    model_list = TrainingRegistry.list()
-    if model not in model_list:
-        raise ValueError(f"Unknown model '{model}' specified.")
-    cfg = TrainingRegistry.get(model)
+    cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
     if mask_index is not None:
