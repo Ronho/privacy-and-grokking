@@ -26,6 +26,7 @@ class MetricHistory:
 @dataclass
 class RunData:
     run_id: str
+    run_name: str
     config: TrainConfig
     metrics: dict[str, MetricHistory]
     train_activations: torch.Tensor | None = None
@@ -155,6 +156,10 @@ def load_run_config(run_id: str) -> TrainConfig:
 def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData:
     config = load_run_config(run_id)
 
+    client = MlflowClient()
+    run_info = client.get_run(run_id)
+    run_name: str = run_info.info.run_name or run_id
+
     wn_keys = _discover_weight_norm_keys(run_id)
     all_keys = TRAINING_METRICS + wn_keys + MIA_AUC_KEYS + MIA_TPR_KEYS
     metrics = fetch_metric_history(run_id, all_keys)
@@ -174,6 +179,7 @@ def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData
 
     return RunData(
         run_id=run_id,
+        run_name=run_name,
         config=config,
         metrics=metrics,
         train_activations=train_acts,

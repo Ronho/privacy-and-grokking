@@ -59,14 +59,14 @@ def _generate_per_run_plots(rd: RunData, *, tsne_video: bool = False) -> None:
 
     if tsne_video and rd.all_step_activations and len(rd.all_step_activations) > 1:
         with tempfile.TemporaryDirectory() as tmpdir:
-            gif_path = Path(tmpdir) / "tsne_evolution.gif"
+            mp4_path = Path(tmpdir) / "tsne_evolution.mp4"
             make_tsne_video(
                 rd.all_step_activations,
-                gif_path,
+                mp4_path,
                 title_prefix=f"t-SNE – {rd.config.full_name}",
             )
             with mlflow.start_run(run_id=rd.run_id):
-                mlflow.log_artifact(str(gif_path), artifact_path="visualizations")
+                mlflow.log_artifact(str(mp4_path), artifact_path="visualizations")
 
 
 def _generate_superplot(runs: list[RunData]) -> None:

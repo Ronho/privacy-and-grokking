@@ -1,4 +1,3 @@
-import io
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -97,39 +96,56 @@ def make_tsne_video(
     figsize: tuple[float, float] = (8, 6),
     title_prefix: str = "t-SNE",
 ) -> None:
-    from PIL import Image
+    import av
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
 
     steps = sorted(step_activations.keys())
     if not steps:
         return
 
-    frames: list[Image.Image] = []
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig = plt.figure(figsize=figsize, dpi=120)
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
+    canvas.draw()
+    w, h = canvas.get_width_height()
+    # h264 requires even dimensions
+    w = w if w % 2 == 0 else w - 1
+    h = h if h % 2 == 0 else h - 1
+
+    container = av.open(str(out_path), mode="w")
+    stream = container.add_stream("h264", rate=fps)
+    stream.width = w
+    stream.height = h
+    stream.pix_fmt = "yuv420p"
+
     for step in steps:
         data = step_activations[step]
-        fig = plot_tsne(
+        ax.clear()
+        plot_tsne_classes_on_ax(
+            ax,
             data["train_activations"],
             data["test_activations"],
+            data["train_labels"],
+            data["test_labels"],
             title=f"{title_prefix} – Step {step}",
             perplexity=perplexity,
             random_state=random_state,
             max_samples=max_samples,
-            figsize=figsize,
         )
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        buf.seek(0)
-        frames.append(Image.open(buf).copy())
+        canvas.draw()
+        rgba = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)
+        rgb = np.ascontiguousarray(rgba[:h, :w, :3])  # crop to even dims, drop alpha
+        frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
+        for packet in stream.encode(frame):
+            container.mux(packet)
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    frames[0].save(
-        out_path,
-        save_all=True,
-        append_images=frames[1:],
-        loop=0,
-        duration=int(1000 / fps),
-        optimize=False,
-    )
+    # flush encoder
+    for packet in stream.encode():
+        container.mux(packet)
+
+    container.close()
+    plt.close(fig)
 
 
 def plot_tsne_on_ax(
@@ -203,6 +219,115 @@ def plot_tsne_on_ax(
     ax.set_xlabel("t-SNE 1", fontsize=8)
     ax.set_ylabel("t-SNE 2", fontsize=8)
     ax.legend(loc="best", fontsize=7)
+    ax.grid(True, alpha=0.2)
+
+
+def plot_tsne_classes_on_ax(
+    ax: plt.Axes,
+    train_activations: torch.Tensor,
+    test_activations: torch.Tensor,
+    train_labels: torch.Tensor,
+    test_labels: torch.Tensor,
+    *,
+    title: str = "t-SNE (Classes)",
+    perplexity: float = 30.0,
+    random_state: int = 42,
+    max_samples: int = 5000,
+) -> None:
+    train_np = train_activations.numpy()
+    test_np = test_activations.numpy()
+    train_lbl = train_labels.numpy()
+    test_lbl = test_labels.numpy()
+
+    n_train, n_test = len(train_np), len(test_np)
+    total = n_train + n_test
+
+    if total > max_samples:
+        ratio = max_samples / total
+        idx_tr = np.random.default_rng(random_state).choice(
+            n_train,
+            size=max(1, int(n_train * ratio)),
+            replace=False,
+        )
+        idx_te = np.random.default_rng(random_state + 1).choice(
+            n_test,
+            size=max(1, int(n_test * ratio)),
+            replace=False,
+        )
+        train_np, train_lbl = train_np[idx_tr], train_lbl[idx_tr]
+        test_np, test_lbl = test_np[idx_te], test_lbl[idx_te]
+
+    combined = np.concatenate([train_np, test_np], axis=0)
+    all_labels = np.concatenate([train_lbl, test_lbl], axis=0)
+    is_member = np.array([True] * len(train_np) + [False] * len(test_np))
+
+    tsne = TSNE(
+        n_components=2,
+        perplexity=min(perplexity, max(1.0, len(combined) - 1)),
+        random_state=random_state,
+        init="pca",
+        learning_rate="auto",
+    )
+    embedded = tsne.fit_transform(combined)
+
+    classes = np.unique(all_labels)
+    cmap = plt.get_cmap("tab10") if len(classes) <= 10 else plt.get_cmap("tab20")
+
+    for cls in classes:
+        cls_mask = all_labels == cls
+        color = cmap(int(cls) % cmap.N)
+
+        member_cls = cls_mask & is_member
+        nonmember_cls = cls_mask & ~is_member
+
+        if member_cls.any():
+            ax.scatter(
+                embedded[member_cls, 0],
+                embedded[member_cls, 1],
+                s=12,
+                alpha=0.6,
+                color=color,
+                marker="o",
+                edgecolors="none",
+            )
+        if nonmember_cls.any():
+            ax.scatter(
+                embedded[nonmember_cls, 0],
+                embedded[nonmember_cls, 1],
+                s=14,
+                alpha=0.45,
+                color=color,
+                marker="^",
+                edgecolors="none",
+            )
+
+    class_handles = [
+        Line2D(
+            [0], [0],
+            marker="o",
+            color="w",
+            markerfacecolor=cmap(int(c) % cmap.N),
+            markersize=7,
+            label=f"Class {c}",
+        )
+        for c in classes
+    ]
+    membership_handles = [
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markersize=7, label="Members (train)"),
+        Line2D([0], [0], marker="^", color="w", markerfacecolor="gray", markersize=7, label="Non-members (test)"),
+    ]
+    n_cols = max(1, (len(classes) + 1) // 2)
+    ax.legend(
+        handles=class_handles + membership_handles,
+        loc="best",
+        fontsize=7,
+        ncol=n_cols,
+    )
+
+    if title:
+        ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.set_xlabel("t-SNE 1", fontsize=8)
+    ax.set_ylabel("t-SNE 2", fontsize=8)
     ax.grid(True, alpha=0.2)
 
 

@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from privacy_and_grokking.visualize.mlflow_data import MIA_AUC_KEYS, RunData
-from privacy_and_grokking.visualize.tsne import plot_tsne_on_ax
+from privacy_and_grokking.visualize.tsne import plot_tsne_classes_on_ax, plot_tsne_on_ax
 
 _NICE_NAMES: dict[str, str] = {
     "mia_prob/auc": "Prob",
@@ -26,7 +26,7 @@ def _get(rd: RunData, key: str) -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def _label(rd: RunData) -> str:
-    return rd.config.full_name
+    return rd.run_name
 
 
 def plot_per_run_roc_auc(rd: RunData) -> Figure:
@@ -203,15 +203,22 @@ def plot_superplot(
         ax.set_ylim(0, 1.05)
         ax.set_xscale("log")
 
-        # t-SNE (optional)
+        # t-SNE classes (optional)
         if has_activations:
             ax = axes[4, col]
-            if rd.train_activations is not None and rd.test_activations is not None:
-                plot_tsne_on_ax(
+            if (
+                rd.train_activations is not None
+                and rd.test_activations is not None
+                and rd.train_labels is not None
+                and rd.test_labels is not None
+            ):
+                plot_tsne_classes_on_ax(
                     ax,
                     rd.train_activations,
                     rd.test_activations,
-                    title="Activations t-SNE",
+                    rd.train_labels,
+                    rd.test_labels,
+                    title="t-SNE (Classes)",
                 )
             else:
                 ax.text(
