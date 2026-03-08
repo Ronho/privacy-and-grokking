@@ -26,6 +26,19 @@ from privacy_and_grokking.utils import (
 LOG_FREQUENCY = 500
 
 
+def _compute_gradient_norms(model: nn.Module) -> dict[str, float]:
+    """Compute per-parameter and total L2 gradient norms."""
+    norms: dict[str, float] = {}
+    all_grads: list[torch.Tensor] = []
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            g = param.grad.detach().float().flatten()
+            norms[f"grad_norm/{name}"] = torch.linalg.norm(g).item()
+            all_grads.append(g)
+    norms["grad_norm/total"] = torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
+    return norms
+
+
 def _eval(model: nn.Module, loss_fn, loader) -> tuple[torch.Tensor, float]:
     device = get_device()
     all_losses = []
@@ -60,6 +73,8 @@ def evaluate(
         test_loss_mean = test_losses.mean().item()
         test_loss_std = test_losses.std().item()
 
+        gradient_norms = _compute_gradient_norms(model)
+
         mlflow.log_metrics(
             {
                 "validation.train.loss": train_loss_mean,
@@ -68,6 +83,7 @@ def evaluate(
                 "validation.test.loss": test_loss_mean,
                 "validation.test.loss_std": test_loss_std,
                 "validation.test.accuracy": test_accuracy,
+                **gradient_norms,
             },
             step=step,
         )
@@ -250,6 +266,7 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
                 logits = model(x)
                 loss = loss_fn(logits, y)
                 loss.backward()
+
                 optimizer.step()
                 scheduler.step()
 

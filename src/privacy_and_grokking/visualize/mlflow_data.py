@@ -45,6 +45,14 @@ TRAINING_METRICS = [
     "validation.test.loss",
 ]
 
+EXTRACTION_LOSS_METRICS = [
+    "extraction.train.loss.mean",
+    "extraction.train.loss.std",
+    "extraction.test.loss.mean",
+    "extraction.test.loss.std",
+    "extraction.loss.overlap",
+]
+
 WEIGHT_NORM_KEYS = [
     "weight_norm/total",
 ]
@@ -76,6 +84,12 @@ def _discover_weight_norm_keys(run_id: str) -> list[str]:
     client = MlflowClient()
     run = client.get_run(run_id)
     return [k for k in run.data.metrics if k.startswith("weight_norm/")]
+
+
+def _discover_gradient_norm_keys(run_id: str) -> list[str]:
+    client = MlflowClient()
+    run = client.get_run(run_id)
+    return [k for k in run.data.metrics if k.startswith("grad_norm/")]
 
 
 def fetch_metric_history(
@@ -161,7 +175,10 @@ def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData
     run_name: str = run_info.info.run_name or run_id
 
     wn_keys = _discover_weight_norm_keys(run_id)
-    all_keys = TRAINING_METRICS + wn_keys + MIA_AUC_KEYS + MIA_TPR_KEYS
+    gn_keys = _discover_gradient_norm_keys(run_id)
+    all_keys = (
+        TRAINING_METRICS + EXTRACTION_LOSS_METRICS + wn_keys + gn_keys + MIA_AUC_KEYS + MIA_TPR_KEYS
+    )
     metrics = fetch_metric_history(run_id, all_keys)
     last_step = max((hist.steps[-1] for hist in metrics.values() if hist.steps), default=0)
 

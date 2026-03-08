@@ -41,6 +41,40 @@ def _list_checkpoint_steps(run_id: str) -> list[int]:
     return sorted(steps)
 
 
+def _compute_loss_distribution_overlap(
+    train_losses: torch.Tensor,
+    test_losses: torch.Tensor,
+    n_bins: int = 100,
+) -> float:
+    """Compute the histogram-intersection overlap of two loss distributions.
+
+    Returns a value in ``[0, 1]`` where ``1.0`` means identical distributions
+    and ``0.0`` means completely disjoint.  Both tensors are expected to be
+    1-D and values must be finite; any NaN/Inf are silently dropped.
+    """
+    train_losses = train_losses.flatten().float()
+    test_losses = test_losses.flatten().float()
+    train_losses = train_losses[torch.isfinite(train_losses)]
+    test_losses = test_losses[torch.isfinite(test_losses)]
+    if train_losses.numel() == 0 or test_losses.numel() == 0:
+        return 0.0
+
+    all_losses = torch.cat([train_losses, test_losses])
+    lo = float(all_losses.min().item())
+    hi = float(all_losses.max().item())
+    if hi <= lo:
+        return 1.0
+
+    train_hist = torch.histc(train_losses, bins=n_bins, min=lo, max=hi)
+    test_hist = torch.histc(test_losses, bins=n_bins, min=lo, max=hi)
+
+    # Normalise to probability mass functions
+    train_hist = train_hist / train_hist.sum().clamp(min=1e-12)
+    test_hist = test_hist / test_hist.sum().clamp(min=1e-12)
+
+    return float(torch.minimum(train_hist, test_hist).sum().item())
+
+
 def _compute_weight_norms(
     state_dict: dict[str, torch.Tensor],
 ) -> dict[str, float]:
@@ -168,6 +202,18 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
                 roc_metrics[f"{prefix}/{key}"] = value
 
         mlflow.log_metrics(roc_metrics, step=step)
+
+        # Loss distribution statistics and overlap (CE loss)
+        t_ce_flat = t_ce.squeeze().float()
+        e_ce_flat = e_ce.squeeze().float()
+        loss_dist_metrics: dict[str, float] = {
+            "extraction.train.loss.mean": float(t_ce_flat.mean().item()),
+            "extraction.train.loss.std": float(t_ce_flat.std().item()),
+            "extraction.test.loss.mean": float(e_ce_flat.mean().item()),
+            "extraction.test.loss.std": float(e_ce_flat.std().item()),
+            "extraction.loss.overlap": _compute_loss_distribution_overlap(t_ce_flat, e_ce_flat),
+        }
+        mlflow.log_metrics(loss_dist_metrics, step=step)
 
         # Activations for penultimate layer
         if save_all_activations or step == steps[-1]:

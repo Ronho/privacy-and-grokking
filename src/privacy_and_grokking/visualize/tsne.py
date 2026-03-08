@@ -303,7 +303,8 @@ def plot_tsne_classes_on_ax(
 
     class_handles = [
         Line2D(
-            [0], [0],
+            [0],
+            [0],
             marker="o",
             color="w",
             markerfacecolor=cmap(int(c) % cmap.N),
@@ -313,8 +314,24 @@ def plot_tsne_classes_on_ax(
         for c in classes
     ]
     membership_handles = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markersize=7, label="Members (train)"),
-        Line2D([0], [0], marker="^", color="w", markerfacecolor="gray", markersize=7, label="Non-members (test)"),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="gray",
+            markersize=7,
+            label="Members (train)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="^",
+            color="w",
+            markerfacecolor="gray",
+            markersize=7,
+            label="Non-members (test)",
+        ),
     ]
     n_cols = max(1, (len(classes) + 1) // 2)
     ax.legend(

@@ -70,13 +70,13 @@ def _generate_per_run_plots(rd: RunData, *, tsne_video: bool = False) -> None:
 
 
 def _generate_superplot(runs: list[RunData]) -> None:
-    """Generate the multi-run superplot and log it to every participating run."""
-    for log_scale in (True, False):
-        suffix = "log" if log_scale else "linear"
-        fig = plot_superplot(runs, log_scale=log_scale)
-        filename = f"superplot_{suffix}.png"
-
-        # Log the same figure to every run so it's visible from each
+    variants = [
+        ("superplot_log.png", dict(log_scale=True, x_log_scale=True)),
+        ("superplot_linear.png", dict(log_scale=False, x_log_scale=True)),
+        ("superplot_log_y_linear_x.png", dict(log_scale=True, x_log_scale=False)),
+    ]
+    for filename, kwargs in variants:
+        fig = plot_superplot(runs, **kwargs)
         for rd in runs:
             with tempfile.TemporaryDirectory() as tmpdir:
                 path = Path(tmpdir) / filename
