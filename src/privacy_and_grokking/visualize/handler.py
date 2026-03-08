@@ -86,7 +86,12 @@ def _generate_superplot(runs: list[RunData]) -> None:
         plt.close(fig)
 
 
-def visualization_handler(exp_name: str, run_ids: list[str], *, tsne_video: bool = False) -> None:
+def visualization_handler(
+    exp_name: str,
+    run_ids: list[str],
+    *,
+    tsne_video: bool = False,
+) -> None:
     import os
 
     os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
@@ -102,7 +107,10 @@ def visualization_handler(exp_name: str, run_ids: list[str], *, tsne_video: bool
         runs: list[RunData] = []
         for run_id in run_ids:
             logger.info("Loading run data.", run_id=run_id)
-            rd = load_run_data(run_id, load_all_activations=tsne_video)
+            rd = load_run_data(
+                run_id,
+                load_all_activations=tsne_video,
+            )
             runs.append(rd)
 
         for rd in runs:

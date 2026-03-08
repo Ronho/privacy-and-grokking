@@ -36,6 +36,8 @@ class RunData:
     # All activation snapshots keyed by checkpoint step; populated only when
     # load_run_data is called with load_all_activations=True.
     all_step_activations: dict[int, dict[str, torch.Tensor]] | None = None
+    # Flattened weight vectors keyed by checkpoint step; always populated by load_run_data.
+    weight_trajectory: dict[int, np.ndarray] = field(default_factory=dict)
 
 
 TRAINING_METRICS = [
@@ -145,6 +147,48 @@ def list_activation_steps(run_id: str) -> list[int]:
         return []
 
 
+def list_checkpoint_steps(run_id: str) -> list[int]:
+    """Return sorted list of checkpoint steps available for *run_id*."""
+    client = MlflowClient()
+    try:
+        artifacts = client.list_artifacts(run_id, path="checkpoints")
+    except Exception:
+        return []
+    steps = []
+    for artifact in artifacts:
+        name = artifact.path.split("/")[-1]
+        if name.isdigit():
+            steps.append(int(name))
+    return sorted(steps)
+
+
+def fetch_weight_trajectory(run_id: str) -> dict[int, np.ndarray]:
+    """Download all checkpoint weight vectors and flatten them for PCA.
+
+    Returns a mapping of ``{step: flattened_weight_vector}``.
+    Steps with corrupt or missing files are silently skipped.
+    """
+    steps = list_checkpoint_steps(run_id)
+    result: dict[int, np.ndarray] = {}
+    for step in steps:
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                mlflow.artifacts.download_artifacts(
+                    artifact_uri=f"runs:/{run_id}/checkpoints/{step}/model.pth",
+                    dst_path=tmpdir,
+                )
+                state_dict = torch.load(
+                    Path(tmpdir) / "model.pth",
+                    map_location="cpu",
+                    weights_only=True,
+                )
+                vec = torch.cat([p.float().flatten() for p in state_dict.values()]).numpy()
+                result[step] = vec
+        except Exception:
+            continue
+    return result
+
+
 def fetch_all_step_activations(
     run_id: str,
 ) -> dict[int, dict[str, torch.Tensor]]:
@@ -167,7 +211,11 @@ def load_run_config(run_id: str) -> TrainConfig:
     return TrainConfig.model_validate(raw)
 
 
-def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData:
+def load_run_data(
+    run_id: str,
+    *,
+    load_all_activations: bool = False,
+) -> RunData:
     config = load_run_config(run_id)
 
     client = MlflowClient()
@@ -194,6 +242,9 @@ def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData
     if load_all_activations:
         all_step_activations = fetch_all_step_activations(run_id)
 
+    # Weight trajectory (always loaded)
+    weight_trajectory = fetch_weight_trajectory(run_id)
+
     return RunData(
         run_id=run_id,
         run_name=run_name,
@@ -204,4 +255,5 @@ def load_run_data(run_id: str, *, load_all_activations: bool = False) -> RunData
         train_labels=train_labels,
         test_labels=test_labels,
         all_step_activations=all_step_activations,
+        weight_trajectory=weight_trajectory,
     )

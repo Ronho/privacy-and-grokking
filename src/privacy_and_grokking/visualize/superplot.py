@@ -146,6 +146,135 @@ def _plot_loss_panel(
         ax2.legend(loc="upper left", fontsize=7)
 
 
+def _plot_pca_trajectory_panel(
+    ax: matplotlib.axes.Axes,
+    rd: RunData,
+) -> None:
+    """Project the model's weight trajectory onto its top-2 PCA directions.
+
+    Each saved checkpoint is one point; the points are connected in
+    chronological order so you can see whether optimisation zig-zags or
+    converges smoothly.
+    """
+    traj = rd.weight_trajectory
+    if len(traj) < 3:
+        ax.text(
+            0.5,
+            0.5,
+            "No weight trajectory",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=11,
+            alpha=0.4,
+        )
+        ax.set_axis_off()
+        return
+
+    sorted_steps = sorted(traj.keys())
+    weight_matrix = np.stack([traj[s] for s in sorted_steps], axis=0)  # (T, D)
+
+    # Centre the trajectory
+    w_mean = weight_matrix.mean(axis=0, keepdims=True)
+    w_centred = weight_matrix - w_mean
+
+    # Guard: if every checkpoint is identical the SVD is degenerate
+    if np.allclose(w_centred, 0, atol=1e-9):
+        ax.text(
+            0.5,
+            0.5,
+            "All weights identical",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=11,
+            alpha=0.4,
+        )
+        ax.set_axis_off()
+        return
+
+    # PCA via (thin) SVD: w_centred = u @ diag(sv) @ vt
+    # Coordinates in PC-space: u * sv  (shape T x min(T,D))
+    u_matrix, singular_values, _ = np.linalg.svd(w_centred, full_matrices=False)
+    coords = u_matrix[:, :2] * singular_values[:2]  # (T, 2)
+
+    steps_arr = np.array(sorted_steps, dtype=float)
+    norm_steps = (steps_arr - steps_arr.min()) / max(steps_arr.max() - steps_arr.min(), 1.0)
+
+    # Connecting line (drawn first so scatter sits on top)
+    ax.plot(
+        coords[:, 0],
+        coords[:, 1],
+        color="#94a3b8",
+        linewidth=1.2,
+        alpha=0.55,
+        zorder=1,
+    )
+
+    # Arrowheads to show direction of travel
+    for i in range(len(coords) - 1):
+        dx = coords[i + 1, 0] - coords[i, 0]
+        dy = coords[i + 1, 1] - coords[i, 1]
+        if dx * dx + dy * dy < 1e-18:
+            continue
+        ax.annotate(
+            "",
+            xy=(coords[i + 1, 0], coords[i + 1, 1]),
+            xytext=(coords[i, 0], coords[i, 1]),
+            arrowprops=dict(
+                arrowstyle="->",
+                color="#94a3b8",
+                lw=0.8,
+                alpha=0.40,
+            ),
+            zorder=2,
+        )
+
+    # Scatter points coloured by training progress
+    sc = ax.scatter(
+        coords[:, 0],
+        coords[:, 1],
+        c=norm_steps,
+        cmap="viridis",
+        s=25,
+        zorder=3,
+        edgecolors="none",
+    )
+
+    # First and last checkpoints
+    ax.scatter(
+        [coords[0, 0]],
+        [coords[0, 1]],
+        color="#22c55e",
+        s=90,
+        zorder=4,
+        marker="o",
+        label=f"Start (step {sorted_steps[0]})",
+    )
+    ax.scatter(
+        [coords[-1, 0]],
+        [coords[-1, 1]],
+        color="#ef4444",
+        s=90,
+        zorder=4,
+        marker="*",
+        label=f"End (step {sorted_steps[-1]})",
+    )
+
+    # Variance explained on axis labels
+    var_total = float((singular_values**2).sum())
+    var1 = float(singular_values[0] ** 2) / var_total * 100
+    var2 = float(singular_values[1] ** 2) / var_total * 100
+    ax.set_xlabel(f"PC1  ({var1:.1f} % var)", fontsize=9)
+    ax.set_ylabel(f"PC2  ({var2:.1f} % var)", fontsize=9)
+    ax.legend(loc="best", fontsize=7)
+    ax.grid(True, alpha=0.3)
+
+    cbar = plt.colorbar(sc, ax=ax, pad=0.02, fraction=0.046)
+    cbar.set_label("Training progress", fontsize=7)
+    cbar.ax.tick_params(labelsize=6)
+
+
 def plot_per_run_roc_auc(rd: RunData) -> Figure:
     fig, ax = plt.subplots(figsize=(10, 6))
     for key in MIA_AUC_KEYS:
@@ -206,10 +335,12 @@ def plot_superplot(
     log_scale: bool = True,
     x_log_scale: bool = True,
 ) -> Figure:
-    # Row layout: Accuracy | Weight Norm | Gradient Norm | Loss | ROC AUC | t-SNE(opt)
+    # Row layout: Accuracy | Weight Norm | Gradient Norm | Loss | ROC AUC
+    #             + t-SNE (optional) + PCA Trajectory (optional)
     n_runs = len(runs)
     has_activations = any(rd.train_activations is not None for rd in runs)
-    n_rows = 6 if has_activations else 5
+    has_pca = any(len(rd.weight_trajectory) >= 3 for rd in runs)
+    n_rows = 5 + (1 if has_activations else 0) + (1 if has_pca else 0)
 
     fig, axes = plt.subplots(
         n_rows,
@@ -314,6 +445,14 @@ def plot_superplot(
                     alpha=0.4,
                 )
                 ax.set_axis_off()
+
+        # ── Row 5 or 6: PCA Weight Trajectory (optional) ─────────────────────
+        if has_pca:
+            pca_row = 5 + (1 if has_activations else 0)
+            ax = axes[pca_row, col]
+            _plot_pca_trajectory_panel(ax, rd)
+            if col == 0:
+                ax.set_ylabel("PCA Trajectory", fontsize=11)
 
     y_label = "Log" if log_scale else "Linear"
     x_label = "Log" if x_log_scale else "Linear"
