@@ -1,13 +1,17 @@
 import os
 from multiprocessing import Pool
 from pathlib import Path
+from typing import Annotated
 
+import typer
 from typer import Typer
 
 from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
 from privacy_and_grokking.utils import Logger
+
+VALID_PIPELINE_STEPS = frozenset({"train", "extract", "visualize"})
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
@@ -61,17 +65,135 @@ def extract(
 
 
 @app.command()
-def visualize(
+def visualize_single(
     exp_name: str,
-    run_ids: list[str],
-    tsne_video: bool = False,
+    run_id: str,
+    include: Annotated[
+        list[str] | None,
+        typer.Option("--include", help="Visualization names to include (default: all)."),
+    ] = None,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option("--exclude", help="Visualization names to exclude."),
+    ] = None,
 ):
-    from privacy_and_grokking.visualize import visualization_handler
+    from privacy_and_grokking.visualize import visualization_single_handler
 
     with Logger() as logger:
-        logger.info("Starting visualization handler.", extra={"run_ids": run_ids})
-        visualization_handler(exp_name, run_ids, tsne_video=tsne_video)
-        logger.info("Visualization handler completed.")
+        logger.info("Starting single-run visualization handler.", extra={"run_id": run_id})
+        visualization_single_handler(exp_name, run_id, include=include, exclude=exclude)
+        logger.info("Single-run visualization handler completed.")
+
+
+@app.command()
+def visualize_multi(
+    exp_name: str,
+    run_ids: list[str],
+    include: Annotated[
+        list[str] | None,
+        typer.Option("--include", help="Visualization names to include (default: all)."),
+    ] = None,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option("--exclude", help="Visualization names to exclude."),
+    ] = None,
+):
+    from privacy_and_grokking.visualize import visualization_multi_handler
+
+    with Logger() as logger:
+        logger.info("Starting multi-run visualization handler.", extra={"run_ids": run_ids})
+        visualization_multi_handler(exp_name, run_ids, include=include, exclude=exclude)
+        logger.info("Multi-run visualization handler completed.")
+
+
+@app.command()
+def pipeline(
+    exp_name: str,
+    model: str,
+    total_steps: int,
+    mask_index: int,
+    seed: int | None = None,
+    run_name: str | None = None,
+    all_activations: bool = False,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Existing run ID (required when train is excluded or restarted).",
+        ),
+    ] = None,
+    checkpoint: Annotated[
+        int | None,
+        typer.Option("--checkpoint", help="Checkpoint step to restart from (requires --run-id)."),
+    ] = None,
+    include_steps: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--include-steps",
+            help="Steps to include: train, extract, visualize (default: all).",
+        ),
+    ] = None,
+    exclude_steps: Annotated[
+        list[str] | None,
+        typer.Option("--exclude-steps", help="Steps to exclude."),
+    ] = None,
+):
+    active_steps: set[str] = set(include_steps) if include_steps else set(VALID_PIPELINE_STEPS)
+    if exclude_steps:
+        active_steps -= set(exclude_steps)
+    invalid = active_steps - VALID_PIPELINE_STEPS
+    if invalid:
+        raise typer.BadParameter(
+            f"Unknown steps: {sorted(invalid)!r}. Valid: {sorted(VALID_PIPELINE_STEPS)!r}"
+        )
+    if checkpoint is not None and run_id is None:
+        raise typer.BadParameter("--run-id is required when --checkpoint is provided.")
+
+    with Logger() as logger:
+        logger.info("Starting pipeline.", extra={"active_steps": sorted(active_steps)})
+
+        current_run_id = run_id
+
+        if "train" in active_steps:
+            if checkpoint is not None:
+                assert run_id is not None  # enforced above
+                cfg: TrainConfig | RestartConfig = RestartConfig(
+                    run_id=run_id, checkpoint=checkpoint
+                )
+                logger.info(
+                    "Running train step (restart).",
+                    extra={"run_id": run_id, "checkpoint": checkpoint},
+                )
+            else:
+                cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
+                if seed is not None:
+                    cfg.seed = seed
+                cfg.dataset_mask_idx = mask_index
+                logger.info("Running train step.")
+            current_run_id = training(
+                exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name
+            )
+            logger.info("Train step complete.", extra={"run_id": current_run_id})
+        elif current_run_id is None:
+            raise typer.BadParameter(
+                "--run-id is required when the train step is excluded from the pipeline."
+            )
+
+        if "extract" in active_steps:
+            from privacy_and_grokking.extraction import extraction_handler
+
+            logger.info("Running extract step.", extra={"run_id": current_run_id})
+            extraction_handler(exp_name, current_run_id, save_all_activations=all_activations)
+            logger.info("Extract step complete.")
+
+        if "visualize" in active_steps:
+            from privacy_and_grokking.visualize import visualization_single_handler
+
+            logger.info("Running visualize step.", extra={"run_id": current_run_id})
+            visualization_single_handler(exp_name, current_run_id)
+            logger.info("Visualize step complete.")
+
+        logger.info("Pipeline complete.", extra={"run_id": current_run_id})
 
 
 def _handle(line):

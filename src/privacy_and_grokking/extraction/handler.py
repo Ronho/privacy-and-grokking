@@ -233,9 +233,6 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
 
 
 def extraction_handler(exp_name: str, run_id: str, *, save_all_activations: bool = False) -> None:
-    import os
-
-    os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
     setup_mlflow(exp_name)
     with (
         Logger() as logger,

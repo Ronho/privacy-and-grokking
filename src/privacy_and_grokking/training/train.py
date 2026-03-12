@@ -283,7 +283,7 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
 
 def train(
     exp_name: str, total_steps: int, cfg: TrainConfig | RestartConfig, run_name: str | None = None
-) -> None:
+) -> str:
     run_name = run_name or (cfg.full_name if isinstance(cfg, TrainConfig) else cfg.run_id)
 
     setup_mlflow(exp_name)
@@ -294,8 +294,9 @@ def train(
         log_handler as logger,
         mlflow.start_run(run_id=run_id, run_name=run_name, log_system_metrics=True) as mlflow_run,
     ):
+        returned_run_id = mlflow_run.info.run_id
         try:
-            logger.bind(run_id=mlflow_run.info.run_id)
+            logger.bind(run_id=returned_run_id)
             train_handle(cfg, total_steps)
         except Exception as e:
             logger.error(f"Training failed with error: {e}", exc_info=True)
@@ -303,3 +304,4 @@ def train(
             if log_handler.log_file_path and mlflow.active_run() is not None:
                 mlflow.log_artifact(str(log_handler.log_file_path), "training_logs")
             logger.info("Training done")
+    return returned_run_id

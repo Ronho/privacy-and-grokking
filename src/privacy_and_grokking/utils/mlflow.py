@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
 
 import mlflow
 
 
 def setup_mlflow(exp_name: str = "default"):
+    os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
     root = Path(__file__).parent.parent.parent.parent.resolve()
     tracking_dir = root / "data"
     mlflow.set_tracking_uri(f"sqlite:///{tracking_dir / 'mlflow.db'}")
