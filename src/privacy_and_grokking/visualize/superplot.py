@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from privacy_and_grokking.visualize.mlflow_data import MIA_AUC_KEYS, RunData
-from privacy_and_grokking.visualize.tsne import plot_tsne_classes_on_ax
+from privacy_and_grokking.visualize.tsne import plot_tsne_layer_on_ax
 
 _NICE_NAMES: dict[str, str] = {
     "mia_prob/auc": "Prob",
@@ -336,11 +336,19 @@ def plot_superplot(
     x_log_scale: bool = True,
 ) -> Figure:
     # Row layout: Accuracy | Weight Norm | Gradient Norm | Loss | ROC AUC
-    #             + t-SNE (optional) + PCA Trajectory (optional)
+    #             + one row per t-SNE layer (optional) + PCA Trajectory (optional)
     n_runs = len(runs)
-    has_activations = any(rd.train_activations is not None for rd in runs)
+
+    # Collect ordered layer names from the first run with per-layer activations.
+    tsne_layer_names: list[str] = []
+    for rd in runs:
+        if rd.train_layer_activations:
+            tsne_layer_names = list(rd.train_layer_activations.keys())
+            break
+
+    n_tsne_rows = len(tsne_layer_names)
     has_pca = any(len(rd.weight_trajectory) >= 3 for rd in runs)
-    n_rows = 5 + (1 if has_activations else 0) + (1 if has_pca else 0)
+    n_rows = 5 + n_tsne_rows + (1 if has_pca else 0)
 
     fig, axes = plt.subplots(
         n_rows,
@@ -416,19 +424,22 @@ def plot_superplot(
         ax.set_ylim(0, 1.05)
         ax.set_xscale(x_scale)
 
-        # ── Row 5: t-SNE (optional) ───────────────────────────────────────────
-        if has_activations:
-            ax = axes[5, col]
-            if (
-                rd.train_activations is not None
-                and rd.test_activations is not None
+        # ── Rows 5 … 5+N-1: t-SNE per layer (optional) ───────────────────────
+        for layer_row, layer_name in enumerate(tsne_layer_names):
+            ax = axes[5 + layer_row, col]
+            has_layer = (
+                rd.train_layer_activations is not None
+                and layer_name in rd.train_layer_activations
+                and rd.test_layer_activations is not None
+                and layer_name in rd.test_layer_activations
                 and rd.train_labels is not None
                 and rd.test_labels is not None
-            ):
-                plot_tsne_classes_on_ax(
+            )
+            if has_layer:
+                plot_tsne_layer_on_ax(
                     ax,
-                    rd.train_activations,
-                    rd.test_activations,
+                    rd.train_layer_activations[layer_name],
+                    rd.test_layer_activations[layer_name],
                     rd.train_labels,
                     rd.test_labels,
                     title="",
@@ -445,10 +456,12 @@ def plot_superplot(
                     alpha=0.4,
                 )
                 ax.set_axis_off()
+            if col == 0:
+                ax.set_ylabel(f"t-SNE\n{layer_name}", fontsize=11)
 
-        # ── Row 5 or 6: PCA Weight Trajectory (optional) ─────────────────────
+        # ── Row 5+N (or 5): PCA Weight Trajectory (optional) ─────────────────
         if has_pca:
-            pca_row = 5 + (1 if has_activations else 0)
+            pca_row = 5 + n_tsne_rows
             ax = axes[pca_row, col]
             _plot_pca_trajectory_panel(ax, rd)
             if col == 0:

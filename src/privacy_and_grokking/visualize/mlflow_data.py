@@ -33,6 +33,10 @@ class RunData:
     test_activations: torch.Tensor | None = None
     train_labels: torch.Tensor | None = None
     test_labels: torch.Tensor | None = None
+    # Per-layer activations: {layer_name: tensor} for every nn.Linear in the model.
+    # Populated from the same .pt checkpoint file as train_activations.
+    train_layer_activations: dict[str, torch.Tensor] | None = None
+    test_layer_activations: dict[str, torch.Tensor] | None = None
     # All activation snapshots keyed by checkpoint step; populated only when
     # load_run_data is called with load_all_activations=True.
     all_step_activations: dict[int, dict[str, torch.Tensor]] | None = None
@@ -236,6 +240,12 @@ def load_run_data(
     test_acts = act_data["test_activations"] if act_data else None
     train_labels = act_data["train_labels"] if act_data else None
     test_labels = act_data["test_labels"] if act_data else None
+    train_layer_acts: dict[str, torch.Tensor] | None = (
+        act_data.get("train_layer_activations") if act_data else None
+    )
+    test_layer_acts: dict[str, torch.Tensor] | None = (
+        act_data.get("test_layer_activations") if act_data else None
+    )
 
     # All-steps activations (only when requested)
     all_step_activations: dict[int, dict[str, torch.Tensor]] | None = None
@@ -254,6 +264,8 @@ def load_run_data(
         test_activations=test_acts,
         train_labels=train_labels,
         test_labels=test_labels,
+        train_layer_activations=train_layer_acts,
+        test_layer_activations=test_layer_acts,
         all_step_activations=all_step_activations,
         weight_trajectory=weight_trajectory,
     )

@@ -14,6 +14,7 @@ from privacy_and_grokking.datasets import (
     mask_dataset,
 )
 from privacy_and_grokking.extraction.activations import (
+    extract_all_layer_activations,
     extract_penultimate_activations,
 )
 from privacy_and_grokking.extraction.mia_merlin_morgan import (
@@ -215,15 +216,19 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
         }
         mlflow.log_metrics(loss_dist_metrics, step=step)
 
-        # Activations for penultimate layer
+        # Activations for penultimate layer and all layers
         if save_all_activations or step == steps[-1]:
             train_acts, train_labels = extract_penultimate_activations(model, train_subset)
             test_acts, test_labels = extract_penultimate_activations(model, test_ds)
+            train_layer_acts, _ = extract_all_layer_activations(model, train_subset)
+            test_layer_acts, _ = extract_all_layer_activations(model, test_ds)
             payload = {
                 "train_activations": train_acts,
                 "test_activations": test_acts,
                 "train_labels": train_labels,
                 "test_labels": test_labels,
+                "train_layer_activations": train_layer_acts,
+                "test_layer_activations": test_layer_acts,
                 "step": step,
             }
             with tempfile.TemporaryDirectory() as tmpdir:

@@ -348,8 +348,7 @@ def plot_tsne_classes_on_ax(
     ax.grid(True, alpha=0.2)
 
 
-def plot_tsne_classes(
-    train_activations: torch.Tensor,
+def plot_tsne_classes(    train_activations: torch.Tensor,
     test_activations: torch.Tensor,
     train_labels: torch.Tensor,
     test_labels: torch.Tensor,
@@ -474,5 +473,75 @@ def plot_tsne_classes(
     ax.set_xlabel("t-SNE 1")
     ax.set_ylabel("t-SNE 2")
     ax.grid(True, alpha=0.2)
+    fig.tight_layout()
+    return fig
+
+
+def plot_tsne_layer_on_ax(
+    ax: plt.Axes,
+    train_activations: torch.Tensor,
+    test_activations: torch.Tensor,
+    train_labels: torch.Tensor,
+    test_labels: torch.Tensor,
+    *,
+    title: str = "",
+    perplexity: float = 30.0,
+    random_state: int = 42,
+    max_samples: int = 5000,
+) -> None:
+    plot_tsne_classes_on_ax(
+        ax,
+        train_activations,
+        test_activations,
+        train_labels,
+        test_labels,
+        title=title,
+        perplexity=perplexity,
+        random_state=random_state,
+        max_samples=max_samples,
+    )
+
+
+def plot_tsne_all_layers(
+    train_layer_activations: dict[str, torch.Tensor],
+    test_layer_activations: dict[str, torch.Tensor],
+    train_labels: torch.Tensor,
+    test_labels: torch.Tensor,
+    *,
+    title_prefix: str = "t-SNE",
+    perplexity: float = 30.0,
+    random_state: int = 42,
+    max_samples: int = 5000,
+    figsize_per_layer: tuple[float, float] = (6, 5),
+) -> Figure:
+    layer_names = list(train_layer_activations.keys())
+    n_layers = len(layer_names)
+    if n_layers == 0:
+        fig, ax = plt.subplots(figsize=figsize_per_layer)
+        ax.text(0.5, 0.5, "No layer activations", transform=ax.transAxes, ha="center", va="center")
+        ax.set_axis_off()
+        return fig
+
+    fig, axes = plt.subplots(
+        1,
+        n_layers,
+        figsize=(figsize_per_layer[0] * n_layers, figsize_per_layer[1]),
+        squeeze=False,
+    )
+
+    for col, layer_name in enumerate(layer_names):
+        ax = axes[0, col]
+        plot_tsne_layer_on_ax(
+            ax,
+            train_layer_activations[layer_name],
+            test_layer_activations[layer_name],
+            train_labels,
+            test_labels,
+            title=f"{title_prefix} – {layer_name}",
+            perplexity=perplexity,
+            random_state=random_state,
+            max_samples=max_samples,
+        )
+
     fig.tight_layout()
     return fig

@@ -12,7 +12,12 @@ from privacy_and_grokking.visualize.superplot import (
     plot_per_run_training,
     plot_superplot,
 )
-from privacy_and_grokking.visualize.tsne import make_tsne_video, plot_tsne, plot_tsne_classes
+from privacy_and_grokking.visualize.tsne import (
+    make_tsne_video,
+    plot_tsne,
+    plot_tsne_all_layers,
+    plot_tsne_classes,
+)
 
 matplotlib.use("Agg")
 
@@ -23,6 +28,7 @@ SINGLE_VIZ_NAMES: frozenset[str] = frozenset(
         "tsne_activations",
         "tsne_classes",
         "tsne_evolution",
+        "tsne_all_layers",
     }
 )
 
@@ -120,6 +126,26 @@ def _generate_per_run_plots(rd: RunData, active: set[str]) -> None:
             )
             with mlflow.start_run(run_id=rd.run_id):
                 mlflow.log_artifact(str(mp4_path), artifact_path="visualizations")
+
+    has_layer_activations = (
+        rd.train_layer_activations is not None
+        and rd.test_layer_activations is not None
+        and rd.train_labels is not None
+        and rd.test_labels is not None
+    )
+    if "tsne_all_layers" in active and has_layer_activations:
+        assert rd.train_layer_activations is not None
+        assert rd.test_layer_activations is not None
+        assert rd.train_labels is not None
+        assert rd.test_labels is not None
+        fig = plot_tsne_all_layers(
+            rd.train_layer_activations,
+            rd.test_layer_activations,
+            rd.train_labels,
+            rd.test_labels,
+            title_prefix=f"t-SNE – {rd.config.full_name}",
+        )
+        _save_figure_to_mlflow(fig, "tsne_all_layers.png", run_id=rd.run_id)
 
 
 def _generate_superplot(runs: list[RunData], active: set[str]) -> None:
