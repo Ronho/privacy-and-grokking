@@ -30,9 +30,7 @@ class DataHandler:
     def load_weight_trajectory(self) -> dict[int, np.ndarray]:
         artifacts = self.mlflow_client.list_artifacts(self.run_id, path="checkpoints")
         steps = sorted(
-            int(a.path.split("/")[-1])
-            for a in artifacts
-            if a.path.split("/")[-1].isdigit()
+            int(a.path.split("/")[-1]) for a in artifacts if a.path.split("/")[-1].isdigit()
         )
         result: dict[int, np.ndarray] = {}
         for step in steps:
@@ -56,11 +54,7 @@ class DataHandler:
 
     def load_activation_data(self) -> dict | None:
         artifacts = self.mlflow_client.list_artifacts(self.run_id, path="activations")
-        steps = sorted(
-            int(Path(a.path).stem)
-            for a in artifacts
-            if Path(a.path).stem.isdigit()
-        )
+        steps = sorted(int(Path(a.path).stem) for a in artifacts if Path(a.path).stem.isdigit())
         if not steps:
             return None
         try:
@@ -77,7 +71,9 @@ class DataHandler:
         except Exception:
             return None
 
+
 STEP_LABEL = "Optimization Step"
+
 
 def _accuracy_over_steps(ax, dh: DataHandler):
     logger = Logger.get()
@@ -93,6 +89,7 @@ def _accuracy_over_steps(ax, dh: DataHandler):
     ax.legend(loc="best")
 
     logger.info("Created accuracy over steps plot.", extra={"run_id": dh.run_id})
+
 
 def _loss_over_steps(ax, dh: DataHandler):
     logger = Logger.get()
@@ -136,7 +133,9 @@ def _loss_over_steps(ax, dh: DataHandler):
 
     ax2 = ax.twinx()
     ax2.set_ylabel("Overlap", color="tab:orange")
-    ax2.plot(overlap["steps"], overlap["values"], label="Overlap", color="tab:orange", linestyle="--")
+    ax2.plot(
+        overlap["steps"], overlap["values"], label="Overlap", color="tab:orange", linestyle="--"
+    )
     ax2.tick_params(axis="y", labelcolor="tab:orange")
 
     lines1, labels1 = ax.get_legend_handles_labels()
@@ -166,18 +165,26 @@ def _plot_norms_over_steps(ax, dh: DataHandler, prefix: str, ylabel: str):
 
     seen: dict[str, int] = {}
     for key in layer_keys:
-        name = key[len(prefix):]
+        name = key[len(prefix) :]
         base = name.removesuffix(".weight").removesuffix(".bias")
         if base not in seen:
             seen[base] = len(seen)
 
     for key in layer_keys:
-        name = key[len(prefix):]
+        name = key[len(prefix) :]
         base = name.removesuffix(".weight").removesuffix(".bias")
         color = _NORM_LAYER_COLORS[seen[base] % len(_NORM_LAYER_COLORS)]
         linestyle = "--" if name.endswith(".bias") else "-"
         data = dh.get_metric_history(key)
-        ax.plot(data["steps"], data["values"], label=name, color=color, linestyle=linestyle, linewidth=1, alpha=0.8)
+        ax.plot(
+            data["steps"],
+            data["values"],
+            label=name,
+            color=color,
+            linestyle=linestyle,
+            linewidth=1,
+            alpha=0.8,
+        )
 
     if total_key in all_keys:
         data = dh.get_metric_history(total_key)
@@ -252,8 +259,17 @@ def _class_distribution(ax, dh: DataHandler):
 
     data = dh.load_activation_data()
     if data is None:
-        ax.text(0.5, 0.5, "No activation data available", ha="center", va="center", transform=ax.transAxes)
-        logger.warning("No activation data found for class distribution.", extra={"run_id": dh.run_id})
+        ax.text(
+            0.5,
+            0.5,
+            "No activation data available",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        logger.warning(
+            "No activation data found for class distribution.", extra={"run_id": dh.run_id}
+        )
         return
 
     train_labels: torch.Tensor = data["train_labels"]
@@ -287,7 +303,14 @@ def _training_trajectory(ax, dh: DataHandler):
     traj = dh.load_weight_trajectory()
 
     if len(traj) < 3:
-        ax.text(0.5, 0.5, "Insufficient checkpoint data", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "Insufficient checkpoint data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
         logger.warning("Not enough checkpoints for trajectory plot.", extra={"run_id": dh.run_id})
         return
 
@@ -330,13 +353,21 @@ def _training_trajectory(ax, dh: DataHandler):
     )
 
     ax.scatter(
-        [coords[0, 0]], [coords[0, 1]],
-        color="#22c55e", s=100, zorder=4, marker="o",
+        [coords[0, 0]],
+        [coords[0, 1]],
+        color="#22c55e",
+        s=100,
+        zorder=4,
+        marker="o",
         label=f"Start (step {sorted_steps[0]})",
     )
     ax.scatter(
-        [coords[-1, 0]], [coords[-1, 1]],
-        color="#ef4444", s=100, zorder=4, marker="*",
+        [coords[-1, 0]],
+        [coords[-1, 1]],
+        color="#ef4444",
+        s=100,
+        zorder=4,
+        marker="*",
         label=f"End (step {sorted_steps[-1]})",
     )
 
@@ -398,7 +429,7 @@ def _class_layer_activation_grid(dh: DataHandler) -> plt.Figure | None:
 
     for row, layer in enumerate(layers):
         tr_layer: torch.Tensor = train_acts[layer].float()  # (N_train, D)
-        te_layer: torch.Tensor = test_acts[layer].float()   # (N_test, D)
+        te_layer: torch.Tensor = test_acts[layer].float()  # (N_test, D)
         n_neurons = tr_layer.shape[1]
         neuron_idx = np.arange(n_neurons)
 
@@ -415,13 +446,17 @@ def _class_layer_activation_grid(dh: DataHandler) -> plt.Figure | None:
                 tr_mean = tr_cls.mean(dim=0).numpy()
                 tr_std = tr_cls.std(dim=0).numpy()
                 ax.plot(neuron_idx, tr_mean, color="tab:blue", linewidth=0.9, label="Train")
-                ax.fill_between(neuron_idx, tr_mean - tr_std, tr_mean + tr_std, color="tab:blue", alpha=0.15)
+                ax.fill_between(
+                    neuron_idx, tr_mean - tr_std, tr_mean + tr_std, color="tab:blue", alpha=0.15
+                )
 
             if te_cls.shape[0] > 0:
                 te_mean = te_cls.mean(dim=0).numpy()
                 te_std = te_cls.std(dim=0).numpy()
                 ax.plot(neuron_idx, te_mean, color="tab:red", linewidth=0.9, label="Test")
-                ax.fill_between(neuron_idx, te_mean - te_std, te_mean + te_std, color="tab:red", alpha=0.15)
+                ax.fill_between(
+                    neuron_idx, te_mean - te_std, te_mean + te_std, color="tab:red", alpha=0.15
+                )
 
             ax.set_xticks([])
             ax.set_yticks([])
@@ -434,7 +469,14 @@ def _class_layer_activation_grid(dh: DataHandler) -> plt.Figure | None:
                 ax.set_ylabel(layer, fontsize=6, rotation=0, ha="right", va="center", labelpad=4)
             if row == n_layers - 1 and col == n_classes - 1:
                 handles, labels = ax.get_legend_handles_labels()
-                fig.legend(handles, labels, loc="lower right", fontsize=7, ncol=2, bbox_to_anchor=(1.0, 0.0))
+                fig.legend(
+                    handles,
+                    labels,
+                    loc="lower right",
+                    fontsize=7,
+                    ncol=2,
+                    bbox_to_anchor=(1.0, 0.0),
+                )
 
     fig.tight_layout()
     logger.info("Created class-layer activation grid.", extra={"run_id": dh.run_id})
@@ -490,8 +532,12 @@ def _rdm_per_layer(dh: DataHandler) -> plt.Figure | None:
     te_order = np.concatenate(te_idx_per_class)
 
     # Class label for every row in the ordered array (for tick annotation)
-    tr_class_labels = np.concatenate([[c] * len(tr_idx_per_class[i]) for i, c in enumerate(classes)])
-    te_class_labels = np.concatenate([[c] * len(te_idx_per_class[i]) for i, c in enumerate(classes)])
+    tr_class_labels = np.concatenate(
+        [[c] * len(tr_idx_per_class[i]) for i, c in enumerate(classes)]
+    )
+    te_class_labels = np.concatenate(
+        [[c] * len(te_idx_per_class[i]) for i, c in enumerate(classes)]
+    )
     all_class_labels = np.concatenate([tr_class_labels, te_class_labels])
     n_total = len(all_class_labels)
 
@@ -552,7 +598,7 @@ def _rdm_per_layer(dh: DataHandler) -> plt.Figure | None:
 
     for col, layer in enumerate(layers, start=1):
         tr_layer = train_acts[layer].float().numpy()  # (N_train, D)
-        te_layer = test_acts[layer].float().numpy()   # (N_test, D)
+        te_layer = test_acts[layer].float().numpy()  # (N_test, D)
 
         acts = np.concatenate([tr_layer[tr_order], te_layer[te_order]], axis=0)
         rdm = _correlation_rdm(acts)
@@ -608,23 +654,50 @@ def _tsne_on_ax(
         tr_mask = cls_mask & is_train
         te_mask = cls_mask & ~is_train
         if tr_mask.any():
-            ax.scatter(embedded[tr_mask, 0], embedded[tr_mask, 1],
-                       s=12, alpha=0.65, color=color, marker="o", edgecolors="none")
+            ax.scatter(
+                embedded[tr_mask, 0],
+                embedded[tr_mask, 1],
+                s=12,
+                alpha=0.65,
+                color=color,
+                marker="o",
+                edgecolors="none",
+            )
         if te_mask.any():
-            ax.scatter(embedded[te_mask, 0], embedded[te_mask, 1],
-                       s=14, alpha=0.45, color=color, marker="^", edgecolors="none")
+            ax.scatter(
+                embedded[te_mask, 0],
+                embedded[te_mask, 1],
+                s=14,
+                alpha=0.45,
+                color=color,
+                marker="^",
+                edgecolors="none",
+            )
 
     class_handles = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=cmap(int(c) % cmap.N),
-               markersize=6, label=f"Class {int(c)}")
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=cmap(int(c) % cmap.N),
+            markersize=6,
+            label=f"Class {int(c)}",
+        )
         for c in classes
     ]
     membership_handles = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markersize=6, label="Train"),
+        Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor="gray", markersize=6, label="Train"
+        ),
         Line2D([0], [0], marker="^", color="w", markerfacecolor="gray", markersize=6, label="Test"),
     ]
-    ax.legend(handles=class_handles + membership_handles, loc="best", fontsize=6,
-              ncol=max(1, (len(classes) + 1) // 2))
+    ax.legend(
+        handles=class_handles + membership_handles,
+        loc="best",
+        fontsize=6,
+        ncol=max(1, (len(classes) + 1) // 2),
+    )
     if title:
         ax.set_title(title, fontsize=8)
     ax.set_xlabel("t-SNE 1", fontsize=7)
@@ -718,6 +791,7 @@ def _single_image_handler(dh: DataHandler, plot_func, filename: str):
     plt.close(fig)
     logger.info(f"Created {filename} plot.", extra={"run_id": dh.run_id, "filename": filename})
 
+
 def visualization_single_handler(
     exp_name: str,
     run_id: str,
@@ -792,11 +866,14 @@ def visualization_multi_handler(
                     plot_func(ax, dh)
                 except Exception as exc:
                     ax.text(
-                        0.5, 0.5,
+                        0.5,
+                        0.5,
                         f"Error:\n{exc}",
-                        ha="center", va="center",
+                        ha="center",
+                        va="center",
                         transform=ax.transAxes,
-                        fontsize=7, color="tab:red",
+                        fontsize=7,
+                        color="tab:red",
                         wrap=True,
                     )
                 ax.set_yscale("linear")
@@ -812,7 +889,8 @@ def visualization_multi_handler(
                         loc="center",
                     )
                     ax.text(
-                        0.5, 1.02,
+                        0.5,
+                        1.02,
                         run_ids[col],
                         transform=ax.transAxes,
                         fontsize=6,
