@@ -11,8 +11,6 @@ from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
 from privacy_and_grokking.utils import Logger
 
-VALID_PIPELINE_STEPS = frozenset({"train", "extract", "visualize"})
-
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
 CONFIG_DIR = Path(__file__).parent.parent.parent / "configs"
@@ -39,8 +37,7 @@ def train(
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
-    if mask_index is not None:
-        cfg.dataset_mask_idx = mask_index
+    cfg.dataset_mask_idx = mask_index
     training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name)
 
 
@@ -54,13 +51,12 @@ def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
 def extract(
     exp_name: str,
     run_id: str,
-    all_activations: bool = False,
 ):
     from privacy_and_grokking.extraction import extraction_handler
 
     with Logger() as logger:
         logger.info("Starting extraction handler.", extra={"run_id": run_id})
-        extraction_handler(exp_name, run_id, save_all_activations=all_activations)
+        extraction_handler(exp_name, run_id)
         logger.info("Extraction handler completed.")
 
 
@@ -106,6 +102,9 @@ def visualize_multi(
         logger.info("Multi-run visualization handler completed.")
 
 
+PipelineSteps = Literal["train", "extract", "visualize"]
+
+
 @app.command()
 def pipeline(
     exp_name: str,
@@ -115,32 +114,14 @@ def pipeline(
     seed: int | None = None,
     run_name: str | None = None,
     all_activations: bool = False,
-    run_id: Annotated[
-        str | None,
-        typer.Option(
-            "--run-id",
-            help="Existing run ID (required when train is excluded or restarted).",
-        ),
-    ] = None,
-    checkpoint: Annotated[
-        int | None,
-        typer.Option("--checkpoint", help="Checkpoint step to restart from (requires --run-id)."),
-    ] = None,
-    include_steps: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--include-steps",
-            help="Steps to include: train, extract, visualize (default: all).",
-        ),
-    ] = None,
-    exclude_steps: Annotated[
-        list[str] | None,
-        typer.Option("--exclude-steps", help="Steps to exclude."),
-    ] = None,
+    run_id: str | None = None,
+    checkpoint: int | None = None,
+    include: list[PipelineSteps] | None = None,
+    exclude: list[PipelineSteps] | None = None,
 ):
-    active_steps: set[str] = set(include_steps) if include_steps else set(VALID_PIPELINE_STEPS)
-    if exclude_steps:
-        active_steps -= set(exclude_steps)
+    active_steps: set[str] = set(include) if include else set(VALID_PIPELINE_STEPS)
+    if exclude:
+        active_steps -= set(exclude)
     invalid = active_steps - VALID_PIPELINE_STEPS
     if invalid:
         raise typer.BadParameter(
@@ -156,7 +137,6 @@ def pipeline(
 
         if "train" in active_steps:
             if checkpoint is not None:
-                assert run_id is not None  # enforced above
                 cfg: TrainConfig | RestartConfig = RestartConfig(
                     run_id=run_id, checkpoint=checkpoint
                 )

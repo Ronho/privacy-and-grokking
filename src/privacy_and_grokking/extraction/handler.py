@@ -1,37 +1,29 @@
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
 import mlflow
 import torch
+import torch.nn.functional as F
 from mlflow.tracking import MlflowClient
+from torch import nn
 from torch.utils.data import Subset
 from tqdm import tqdm
 
 from privacy_and_grokking.config import TrainConfig
-from privacy_and_grokking.datasets import (
-    create_masking,
-    generate_datasets,
-    mask_dataset,
-)
-from privacy_and_grokking.extraction.activations import (
-    extract_all_layer_activations,
-    extract_penultimate_activations,
-)
-from privacy_and_grokking.extraction.mia_merlin_morgan import (
-    compute_merlin_morgan_signals,
-)
-from privacy_and_grokking.extraction.mia_simple import (
-    compute_mia_signals,
-)
+from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.extraction.distribution_overlap import compute_distribution_overlap
 from privacy_and_grokking.extraction.roc import (
     compute_roc_metrics_single_step,
 )
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
+MERLIN_MORGAN_NOISY_SAMPLES = 100
+MERLIN_MORGAN_NOISE_SCALE = 0.01
+
 
 def _list_checkpoint_steps(run_id: str) -> list[int]:
-    """Discover all checkpoint steps available for a run."""
     client = MlflowClient()
     artifacts = client.list_artifacts(run_id, path="checkpoints")
     steps = []
@@ -42,44 +34,163 @@ def _list_checkpoint_steps(run_id: str) -> list[int]:
     return sorted(steps)
 
 
-def _compute_loss_distribution_overlap(
-    train_losses: torch.Tensor,
-    test_losses: torch.Tensor,
-    n_bins: int = 100,
-) -> float:
-    """Compute the histogram-intersection overlap of two loss distributions.
+def _stratified_indices(dataset, n: int) -> list[int]:
+    class_indices: dict[int, list[int]] = defaultdict(list)
+    for idx in range(len(dataset)):
+        _, label = dataset[idx]
+        class_indices[int(label)].append(idx)
 
-    Returns a value in ``[0, 1]`` where ``1.0`` means identical distributions
-    and ``0.0`` means completely disjoint.  Both tensors are expected to be
-    1-D and values must be finite; any NaN/Inf are silently dropped.
-    """
-    train_losses = train_losses.flatten().float()
-    test_losses = test_losses.flatten().float()
-    train_losses = train_losses[torch.isfinite(train_losses)]
-    test_losses = test_losses[torch.isfinite(test_losses)]
-    if train_losses.numel() == 0 or test_losses.numel() == 0:
-        return 0.0
+    num_classes = len(class_indices)
+    per_class = n // num_classes
 
-    all_losses = torch.cat([train_losses, test_losses])
-    lo = float(all_losses.min().item())
-    hi = float(all_losses.max().item())
-    if hi <= lo:
-        return 1.0
+    generator = torch.Generator().manual_seed(4711)
+    selected: list[int] = []
+    # Note: this may select fewer than n samples if some classes have fewer than per_class samples.
+    for indices in class_indices.values():
+        t = torch.tensor(indices)
+        perm = torch.randperm(len(t), generator=generator)
+        chosen = t[perm[: min(per_class, len(t))]]
+        selected.extend(chosen.tolist())
 
-    train_hist = torch.histc(train_losses, bins=n_bins, min=lo, max=hi)
-    test_hist = torch.histc(test_losses, bins=n_bins, min=lo, max=hi)
-
-    # Normalise to probability mass functions
-    train_hist = train_hist / train_hist.sum().clamp(min=1e-12)
-    test_hist = test_hist / test_hist.sum().clamp(min=1e-12)
-
-    return float(torch.minimum(train_hist, test_hist).sum().item())
+    return selected
 
 
-def _compute_weight_norms(
-    state_dict: dict[str, torch.Tensor],
-) -> dict[str, float]:
-    """Compute L2 (Frobenius) norm per named parameter and total."""
+def _get_datasets(cfg: TrainConfig) -> tuple[CanarySubset, CanarySubset]:
+    train, test = generate_datasets(cfg.dataset)
+    masking = create_masking(
+        config=cfg.dataset_mask,
+        num_samples=len(train),
+        num_classes=train.num_classes,
+    )
+    train_subset = mask_dataset(
+        masking,
+        train,
+        cfg.dataset_mask_idx,
+    )
+    subsample_size = min(len(train_subset), len(test))
+    train_sub = Subset(
+        train_subset,
+        _stratified_indices(train_subset, subsample_size),
+    )
+    test_sub = Subset(
+        test,
+        _stratified_indices(test, subsample_size),
+    )
+
+    return train_sub, test_sub
+
+
+def _iterate_dataloader(dataloader, device, model, last_step: bool):
+    correct_probs: list[torch.Tensor] = []
+    correct_logits: list[torch.Tensor] = []
+    ce_losses: list[torch.Tensor] = []
+    mse_losses: list[torch.Tensor] = []
+    correctness_list: list[torch.Tensor] = []
+    mm_ce_votes: list[float] = []
+    mm_mse_votes: list[float] = []
+
+    ce_criterion = nn.CrossEntropyLoss(reduction="none")
+    mse_criterion = nn.MSELoss(reduction="none")
+
+    buffers: dict[str, list[torch.Tensor]] = {}
+    label_list: list[torch.Tensor] = []
+    handles: list = []
+    if last_step:
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear):
+                key = name
+                buffers[key] = []
+
+                def _make_hook(k: str):
+                    def _hook(_module: nn.Module, _inp: tuple, output: torch.Tensor) -> None:
+                        buffers[k].append(output.detach().cpu())
+
+                    return _hook
+
+                handles.append(module.register_forward_hook(_make_hook(key)))
+    try:
+        with torch.no_grad():
+            for x, y in dataloader:
+                if last_step:
+                    label_list.append(y.cpu())
+                x, y = x.to(device), y.to(device)
+                _logits = model(x)
+                _probs = F.softmax(_logits, dim=1)
+                _correct_probs = _probs.gather(1, y.view(-1, 1))
+                _correct_logits = _logits.gather(1, y.view(-1, 1))
+                _ce_losses = ce_criterion(_logits, y)
+                _mse_losses = mse_criterion(
+                    _logits,
+                    F.one_hot(
+                        y,
+                        num_classes=_logits.size(1),
+                    ).float(),
+                ).gather(1, y.view(-1, 1))
+                _correctly_classified = (_logits.argmax(dim=1) == y).float()
+
+                for i in range(x.size(0)):
+                    img = x[i]
+                    label = y[i]
+                    ce_loss = _ce_losses[i]
+                    mse_loss = _mse_losses[i]
+                    label_oh = F.one_hot(label, num_classes=_logits.size(1)).float()
+
+                    noise = (
+                        torch.randn(
+                            (MERLIN_MORGAN_NOISY_SAMPLES, *img.shape),
+                            device=device,
+                        )
+                        * MERLIN_MORGAN_NOISE_SCALE
+                    )
+                    noisy_imgs = img.unsqueeze(0) + noise
+                    noisy_output = model(noisy_imgs)
+
+                    noisy_ce = ce_criterion(
+                        noisy_output,
+                        label.repeat(MERLIN_MORGAN_NOISY_SAMPLES),
+                    )
+                    noisy_mse = mse_criterion(
+                        noisy_output,
+                        label_oh.repeat(MERLIN_MORGAN_NOISY_SAMPLES, 1),
+                    ).sum(dim=1)
+
+                    mm_ce_votes.append((noisy_ce > ce_loss).float().mean())
+                    mm_mse_votes.append((noisy_mse > mse_loss).float().mean())
+
+                correct_logits.append(_correct_logits)
+                correct_probs.append(_correct_probs)
+                ce_losses.append(_ce_losses)
+                mse_losses.append(_mse_losses)
+                correctness_list.append(_correctly_classified)
+    finally:
+        if last_step:
+            for h in handles:
+                h.remove()
+            buffers = {k: torch.cat(v, dim=0) for k, v in buffers.items()}
+            label_list = torch.cat(label_list, dim=0)
+
+    cat_correct_probs = torch.cat(correct_probs, dim=0).squeeze()
+    cat_correct_logits = torch.cat(correct_logits, dim=0).squeeze()
+    cat_ce_losses = torch.cat(ce_losses, dim=0).squeeze()
+    cat_mse_losses = torch.cat(mse_losses, dim=0).squeeze()
+    cat_correctness_list = torch.cat(correctness_list, dim=0).squeeze()
+    cat_mm_ce_votes = torch.tensor(mm_ce_votes)
+    cat_mm_mse_votes = torch.tensor(mm_mse_votes)
+
+    return (
+        cat_correct_probs,
+        cat_correct_logits,
+        cat_ce_losses,
+        cat_mse_losses,
+        cat_correctness_list,
+        cat_mm_ce_votes,
+        cat_mm_mse_votes,
+        buffers,
+        label_list,
+    )
+
+
+def _extract_weight_norm(state_dict, step: int):
     norms: dict[str, float] = {}
     all_params = []
 
@@ -91,11 +202,10 @@ def _compute_weight_norms(
         norms["weight_norm/total"] = torch.linalg.norm(torch.cat(all_params)).item()
     else:
         norms["weight_norm/total"] = 0.0
+    mlflow.log_metrics(norms, step=step)
 
-    return norms
 
-
-def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
+def _step_wise(run_id: str) -> None:
     logger = Logger.get()
     device = get_device()
 
@@ -104,33 +214,11 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
         logger.warning("No checkpoints found for run.", run_id=run_id)
         return
 
-    # Dataset
     cfg = TrainConfig.model_validate(
         mlflow.artifacts.load_dict(f"runs:/{run_id}/training_config.json")
     )
-    train_ds, test_ds = generate_datasets(cfg.dataset)
-    num_classes = train_ds.num_classes
-    masking = create_masking(
-        config=cfg.dataset_mask,
-        num_samples=len(train_ds),
-        num_classes=num_classes,
-    )
-    train_subset = mask_dataset(
-        masking,
-        train_ds,
-        cfg.dataset_mask_idx,
-    )
 
-    # Subsamples for Merlin Morgan
-    subsample_size = min(len(train_subset), len(test_ds))
-    mm_train = Subset(
-        train_subset,
-        list(range(subsample_size)),
-    )
-    mm_test = Subset(
-        test_ds,
-        list(range(subsample_size)),
-    )
+    train, test = _get_datasets(cfg)
 
     for step in tqdm(steps, desc="Extracting Data", unit="ckpt"):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -145,55 +233,34 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
                 map_location=device,
                 weights_only=True,
             )
-
-        # Weight Norms
-        norms = _compute_weight_norms(state_dict)
-        mlflow.log_metrics(norms, step=step)
-
-        # Build model
         model = create_model(
             name=cfg.model,
-            input_dim=train_ds.input_shape,
-            num_classes=num_classes,
-            initialization_scale=cfg.initialization_scale,
+            input_dim=train.input_shape,
+            num_classes=train.num_classes,
+            initialization_scale=None,
         )
         model.to(device)
         model.load_state_dict(state_dict)
         model.eval()
 
-        # Simple MIA signals
-        t_pr, t_lo, t_ce, t_mse, t_cor = compute_mia_signals(
-            model,
-            train_subset,
+        _extract_weight_norm(state_dict, step)
+
+        last_step = step == steps[-1]
+        tr_cp, tr_cl, tr_ce, tr_mse, tr_corr, tr_mm_ce, tr_mm_mse, tr_acts, tr_labels = (
+            _iterate_dataloader(train, device, model, last_step)
         )
-        e_pr, e_lo, e_ce, e_mse, e_cor = compute_mia_signals(
-            model,
-            test_ds,
+        te_cp, te_cl, te_ce, te_mse, te_corr, te_mm_ce, te_mm_mse, te_acts, te_labels = (
+            _iterate_dataloader(test, device, model, last_step)
         )
 
-        # Merlin/Morgan signals
-        t_ce_v, t_mse_v = compute_merlin_morgan_signals(
-            model,
-            mm_train,
-            num_classes,
-        )
-        e_ce_v, e_mse_v = compute_merlin_morgan_signals(
-            model,
-            mm_test,
-            num_classes,
-        )
-
-        # Compute & log ROC metrics
-        # Each entry: (metric_prefix, train_signal, test_signal)
-        # Loss-based signals are negated so that higher = more likely member.
-        attacks: list[tuple[str, torch.Tensor, torch.Tensor]] = [
-            ("mia_prob", t_pr.squeeze(), e_pr.squeeze()),
-            ("mia_logit", t_lo.squeeze(), e_lo.squeeze()),
-            ("mia_ce_loss", -t_ce.squeeze(), -e_ce.squeeze()),
-            ("mia_mse_loss", -t_mse.squeeze(), -e_mse.squeeze()),
-            ("mia_correctness", t_cor.squeeze(), e_cor.squeeze()),
-            ("mia_merlin_morgan_ce", t_ce_v, e_ce_v),
-            ("mia_merlin_morgan_mse", t_mse_v, e_mse_v),
+        attacks = [
+            ("mia_prob", tr_cp, te_cp),
+            ("mia_logit", tr_cl, te_cl),
+            ("mia_ce_loss", -tr_ce, -te_ce),
+            ("mia_mse_loss", -tr_mse, -te_mse),
+            ("mia_correctness", tr_corr, te_corr),
+            ("mia_merlin_morgan_ce", tr_mm_ce, te_mm_ce),
+            ("mia_merlin_morgan_mse", tr_mm_mse, te_mm_mse),
         ]
 
         roc_metrics: dict[str, float] = {}
@@ -204,31 +271,23 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
 
         mlflow.log_metrics(roc_metrics, step=step)
 
-        # Loss distribution statistics and overlap (CE loss)
-        t_ce_flat = t_ce.squeeze().float()
-        e_ce_flat = e_ce.squeeze().float()
+        tr_ce_flat = tr_ce.squeeze().float()
+        te_ce_flat = te_ce.squeeze().float()
         loss_dist_metrics: dict[str, float] = {
-            "extraction.train.loss.mean": float(t_ce_flat.mean().item()),
-            "extraction.train.loss.std": float(t_ce_flat.std().item()),
-            "extraction.test.loss.mean": float(e_ce_flat.mean().item()),
-            "extraction.test.loss.std": float(e_ce_flat.std().item()),
-            "extraction.loss.overlap": _compute_loss_distribution_overlap(t_ce_flat, e_ce_flat),
+            "extraction.train.loss.mean": float(tr_ce_flat.mean().item()),
+            "extraction.train.loss.std": float(tr_ce_flat.std().item()),
+            "extraction.test.loss.mean": float(te_ce_flat.mean().item()),
+            "extraction.test.loss.std": float(te_ce_flat.std().item()),
+            "extraction.loss.overlap": compute_distribution_overlap(tr_ce_flat, te_ce_flat),
         }
         mlflow.log_metrics(loss_dist_metrics, step=step)
 
-        # Activations for penultimate layer and all layers
-        if save_all_activations or step == steps[-1]:
-            train_acts, train_labels = extract_penultimate_activations(model, train_subset)
-            test_acts, test_labels = extract_penultimate_activations(model, test_ds)
-            train_layer_acts, _ = extract_all_layer_activations(model, train_subset)
-            test_layer_acts, _ = extract_all_layer_activations(model, test_ds)
+        if last_step:
             payload = {
-                "train_activations": train_acts,
-                "test_activations": test_acts,
-                "train_labels": train_labels,
-                "test_labels": test_labels,
-                "train_layer_activations": train_layer_acts,
-                "test_layer_activations": test_layer_acts,
+                "train_activations": tr_acts,
+                "test_activations": te_acts,
+                "train_labels": tr_labels,
+                "test_labels": te_labels,
                 "step": step,
             }
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -237,18 +296,14 @@ def _step_wise(run_id: str, *, save_all_activations: bool = False) -> None:
                 mlflow.log_artifact(str(path), artifact_path="activations")
 
 
-def extraction_handler(exp_name: str, run_id: str, *, save_all_activations: bool = False) -> None:
+def extraction_handler(exp_name: str, run_id: str) -> None:
     setup_mlflow(exp_name)
     with (
         Logger() as logger,
         mlflow.start_run(run_id=run_id),
     ):
-        logger.info(
-            "Starting data extraction for run.",
-            run_id=run_id,
-            save_all_activations=save_all_activations,
-        )
-        _step_wise(run_id, save_all_activations=save_all_activations)
+        logger.info("Starting data extraction for run.", run_id=run_id)
+        _step_wise(run_id)
         logger.info(
             "Completed data extraction for run.",
             run_id=run_id,

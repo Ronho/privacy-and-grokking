@@ -348,7 +348,8 @@ def plot_tsne_classes_on_ax(
     ax.grid(True, alpha=0.2)
 
 
-def plot_tsne_classes(    train_activations: torch.Tensor,
+def plot_tsne_classes(
+    train_activations: torch.Tensor,
     test_activations: torch.Tensor,
     train_labels: torch.Tensor,
     test_labels: torch.Tensor,
