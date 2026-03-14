@@ -754,10 +754,89 @@ def _tsne_per_layer(dh: DataHandler) -> plt.Figure | None:
     return fig
 
 
+_OPTIMIZER_STAT_COLORS = {
+    "norm": "tab:blue",
+    "mean": "tab:orange",
+    "abs_mean": "tab:green",
+}
+
+_OPTIMIZER_STAT_LABELS = {
+    "norm": "L2 Norm",
+    "mean": "Mean",
+    "abs_mean": "Abs Mean",
+}
+
+
+def _optimizer_internals_over_steps(dh: DataHandler) -> plt.Figure | None:
+    logger = Logger.get()
+    logger.info("Creating optimizer internals plot.", extra={"run_id": dh.run_id})
+
+    all_keys = dh.discover_keys("optimizer/")
+    if not all_keys:
+        logger.warning("No optimizer internal metrics found.", extra={"run_id": dh.run_id})
+        return None
+
+    # Group by state key: "optimizer/<state_key>/<stat>" → {state_key: [stat, ...]}
+    state_keys: dict[str, list[str]] = {}
+    for key in all_keys:
+        parts = key.split("/")  # ["optimizer", "<state_key>", "<stat>"]
+        if len(parts) != 3:
+            continue
+        state_key, stat = parts[1], parts[2]
+        state_keys.setdefault(state_key, []).append(stat)
+
+    if not state_keys:
+        return None
+
+    stats_ordered = ["norm", "mean", "abs_mean"]
+    n_rows = len(state_keys)
+    n_cols = len(stats_ordered)
+
+    run = mlflow.get_run(dh.run_id)
+    run_name = run.data.tags.get("mlflow.runName", dh.run_id)
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(5.5 * n_cols, 3.5 * n_rows),
+        squeeze=False,
+    )
+
+    for row, state_key in enumerate(sorted(state_keys)):
+        for col, stat in enumerate(stats_ordered):
+            ax = axes[row][col]
+            metric_key = f"optimizer/{state_key}/{stat}"
+            data = dh.get_metric_history(metric_key)
+            if data["steps"]:
+                ax.plot(
+                    data["steps"],
+                    data["values"],
+                    color=_OPTIMIZER_STAT_COLORS.get(stat, "tab:blue"),
+                    linewidth=1.5,
+                )
+            ax.set_xlabel(STEP_LABEL)
+            ax.set_ylabel(_OPTIMIZER_STAT_LABELS.get(stat, stat))
+            ax.grid(True, alpha=0.3)
+            if row == 0:
+                ax.set_title(_OPTIMIZER_STAT_LABELS.get(stat, stat), fontsize=10, fontweight="bold")
+            if col == 0:
+                ax.set_ylabel(
+                    f"{state_key}\n{_OPTIMIZER_STAT_LABELS.get(stat, stat)}",
+                    fontsize=9,
+                )
+
+    fig.suptitle(f"Optimizer Internals – {run_name}", fontsize=12)
+    fig.tight_layout()
+
+    logger.info("Created optimizer internals plot.", extra={"run_id": dh.run_id})
+    return fig
+
+
 FIGURE_VISUALIZATIONS: dict[str, object] = {
     "class_layer_activation_grid": _class_layer_activation_grid,
     "rdm_per_layer": _rdm_per_layer,
     "tsne_per_layer": _tsne_per_layer,
+    "optimizer_internals_over_steps": _optimizer_internals_over_steps,
 }
 
 SINGLE_VIZ_NAMES: list[str] = list(VISUALIZATIONS) + list(FIGURE_VISUALIZATIONS)

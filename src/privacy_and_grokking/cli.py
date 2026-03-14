@@ -38,8 +38,7 @@ def list_runs(exp_name: str, output: Path | None = None):
         raise typer.BadParameter(f"Experiment '{exp_name}' not found.")
     runs = client.search_runs(experiment_ids=[experiment.experiment_id])
     lines = [
-        f"{run.info.run_id} {run.data.tags.get('mlflow.runName', '<no name>')}"
-        for run in runs
+        f"{run.info.run_id} {run.data.tags.get('mlflow.runName', '<no name>')}" for run in runs
     ]
     for line in lines:
         typer.echo(line)

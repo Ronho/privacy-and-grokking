@@ -11,7 +11,12 @@ from torch.utils.data import Subset
 from tqdm import tqdm
 
 from privacy_and_grokking.config import TrainConfig
-from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset, CanarySubset
+from privacy_and_grokking.datasets import (
+    CanarySubset,
+    create_masking,
+    generate_datasets,
+    mask_dataset,
+)
 from privacy_and_grokking.extraction.distribution_overlap import compute_distribution_overlap
 from privacy_and_grokking.extraction.roc import (
     compute_roc_metrics_single_step,

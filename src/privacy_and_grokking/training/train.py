@@ -1,5 +1,6 @@
 import random
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
 import mlflow
@@ -37,6 +38,39 @@ def _compute_gradient_norms(model: nn.Module) -> dict[str, float]:
             all_grads.append(g)
     norms["grad_norm/total"] = torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
     return norms
+
+
+# State keys that are step counters, not moment/buffer tensors.
+_OPTIMIZER_STEP_KEYS = {"step"}
+
+
+def _log_optimizer_internals(optimizer: torch.optim.Optimizer, step: int) -> None:
+    """Log aggregated optimizer state tensors (moments, buffers) as mlflow metrics.
+
+    For each tracked state key (e.g. exp_avg, exp_avg_sq, square_avg,
+    momentum_buffer, grad_avg) the L2 norm, mean, and mean-absolute-value
+    across *all* parameters are logged under ``optimizer/<key>/{norm,mean,abs_mean}``.
+    """
+    param_states = optimizer.state_dict()["state"]
+    if not param_states:
+        return
+
+    key_tensors: dict[str, list[torch.Tensor]] = defaultdict(list)
+    for param_state in param_states.values():
+        for key, val in param_state.items():
+            if key in _OPTIMIZER_STEP_KEYS:
+                continue
+            if isinstance(val, torch.Tensor) and val.is_floating_point():
+                key_tensors[key].append(val.detach().float().flatten())
+
+    metrics: dict[str, float] = {}
+    for key, tensors in key_tensors.items():
+        cat = torch.cat(tensors)
+        metrics[f"optimizer/{key}/norm"] = torch.linalg.norm(cat).item()
+        metrics[f"optimizer/{key}/mean"] = cat.mean().item()
+        metrics[f"optimizer/{key}/abs_mean"] = cat.abs().mean().item()
+
+    mlflow.log_metrics(metrics, step=step)
 
 
 def _eval(model: nn.Module, loss_fn, loader) -> tuple[torch.Tensor, float]:
@@ -256,6 +290,7 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
                     train_loss_mean, test_loss_mean, train_accuracy, test_accuracy = evaluate(
                         step, model, loss_fn_eval, eval_train_loader, eval_test_loader
                     )
+                    _log_optimizer_internals(optimizer, step)
                     save_model(model, optimizer, step)
                     pbar.set_description(
                         f"L: {train_loss_mean:1.1e}|{test_loss_mean:1.1e}. A: {train_accuracy * 100:2.1f}%|{test_accuracy * 100:2.1f}%"
