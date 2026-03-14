@@ -26,6 +26,29 @@ def list_models(verbose: bool = False):
 
 
 @app.command()
+def list_runs(exp_name: str, output: Path | None = None):
+    import mlflow
+
+    from privacy_and_grokking.utils import setup_mlflow
+
+    setup_mlflow(exp_name)
+    client = mlflow.MlflowClient()
+    experiment = client.get_experiment_by_name(exp_name)
+    if experiment is None:
+        raise typer.BadParameter(f"Experiment '{exp_name}' not found.")
+    runs = client.search_runs(experiment_ids=[experiment.experiment_id])
+    lines = [
+        f"{run.info.run_id} {run.data.tags.get('mlflow.runName', '<no name>')}"
+        for run in runs
+    ]
+    for line in lines:
+        typer.echo(line)
+    if output is not None:
+        output.write_text("\n".join(lines) + "\n")
+        typer.echo(f"Written to {output}")
+
+
+@app.command()
 def train(
     exp_name: str,
     model: str,
