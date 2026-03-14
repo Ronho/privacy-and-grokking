@@ -219,9 +219,22 @@ def _curvature_over_steps(ax, dh: DataHandler):
     ax2 = ax.twinx()
 
     if trace["steps"]:
-        ax.plot(trace["steps"], trace["values"], color="tab:blue", linewidth=1.5, label="tr(H) (Hutchinson)")
+        ax.plot(
+            trace["steps"],
+            trace["values"],
+            color="tab:blue",
+            linewidth=1.5,
+            label="tr(H) (Hutchinson)",
+        )
     if top_eig["steps"]:
-        ax2.plot(top_eig["steps"], top_eig["values"], color="tab:orange", linewidth=1.5, linestyle="--", label="λ_max(H) (power iter.)")
+        ax2.plot(
+            top_eig["steps"],
+            top_eig["values"],
+            color="tab:orange",
+            linewidth=1.5,
+            linestyle="--",
+            label="λ_max(H) (power iter.)",
+        )
 
     ax.set_xlabel(STEP_LABEL)
     ax.set_ylabel("Hessian Trace  tr(H)", color="tab:blue")
