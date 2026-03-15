@@ -60,7 +60,7 @@ def _stratified_indices(dataset, n: int) -> list[int]:
     return selected
 
 
-def _get_datasets(cfg: TrainConfig) -> tuple[CanarySubset, CanarySubset]:
+def _get_datasets(cfg: TrainConfig):
     train, test = generate_datasets(cfg.dataset)
     masking = create_masking(
         config=cfg.dataset_mask,
@@ -81,8 +81,10 @@ def _get_datasets(cfg: TrainConfig) -> tuple[CanarySubset, CanarySubset]:
         test,
         _stratified_indices(test, subsample_size),
     )
+    train_loader = torch.utils.data.DataLoader(train_sub, batch_size=cfg.batch_size, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_sub, batch_size=cfg.batch_size, shuffle=False)
 
-    return train_sub, test_sub
+    return train_loader, test_loader, train.input_shape, train.num_classes
 
 
 def _iterate_dataloader(dataloader, device, model, last_step: bool):
@@ -223,7 +225,7 @@ def _step_wise(run_id: str) -> None:
         mlflow.artifacts.load_dict(f"runs:/{run_id}/training_config.json")
     )
 
-    train, test = _get_datasets(cfg)
+    train, test, input_shape, num_classes = _get_datasets(cfg)
 
     for step in tqdm(steps, desc="Extracting Data", unit="ckpt"):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -240,8 +242,8 @@ def _step_wise(run_id: str) -> None:
             )
         model = create_model(
             name=cfg.model,
-            input_dim=train.input_shape,
-            num_classes=train.num_classes,
+            input_dim=input_shape,
+            num_classes=num_classes,
             initialization_scale=None,
         )
         model.to(device)
