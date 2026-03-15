@@ -471,6 +471,14 @@ def _class_layer_activation_grid(dh: DataHandler) -> plt.Figure | None:
     for row, layer in enumerate(layers):
         tr_layer: torch.Tensor = train_acts[layer].float()  # (N_train, D)
         te_layer: torch.Tensor = test_acts[layer].float()  # (N_test, D)
+
+        # Guard against activation/label size mismatch (e.g. activations saved
+        # for more samples than labels captured).
+        if tr_layer.shape[0] != len(train_labels):
+            tr_layer = tr_layer[: len(train_labels)]
+        if te_layer.shape[0] != len(test_labels):
+            te_layer = te_layer[: len(test_labels)]
+
         n_neurons = tr_layer.shape[1]
         neuron_idx = np.arange(n_neurons)
 
@@ -641,6 +649,12 @@ def _rdm_per_layer(dh: DataHandler) -> plt.Figure | None:
         tr_layer = train_acts[layer].float().numpy()  # (N_train, D)
         te_layer = test_acts[layer].float().numpy()  # (N_test, D)
 
+        # Guard against activation/label size mismatch.
+        if tr_layer.shape[0] != len(train_labels):
+            tr_layer = tr_layer[: len(train_labels)]
+        if te_layer.shape[0] != len(test_labels):
+            te_layer = te_layer[: len(test_labels)]
+
         acts = np.concatenate([tr_layer[tr_order], te_layer[te_order]], axis=0)
         rdm = _correlation_rdm(acts)
         _annotate_rdm(axes[0][col], rdm, layer)
@@ -767,8 +781,13 @@ def _tsne_per_layer(dh: DataHandler) -> plt.Figure | None:
         if train_acts is None:
             logger.warning("No layer activations found.", extra={"run_id": dh.run_id})
             return None
-        train_layer_acts = {"activations": train_acts}
-        test_layer_acts = {"activations": test_acts}
+        if isinstance(train_acts, dict):
+            # train_activations is already a {layer_name: tensor} mapping
+            train_layer_acts = train_acts
+            test_layer_acts = test_acts if isinstance(test_acts, dict) else {}
+        else:
+            train_layer_acts = {"activations": train_acts}
+            test_layer_acts = {"activations": test_acts}
 
     run = mlflow.get_run(dh.run_id)
     run_name = run.data.tags.get("mlflow.runName", dh.run_id)
@@ -781,10 +800,19 @@ def _tsne_per_layer(dh: DataHandler) -> plt.Figure | None:
     test_lbl_np = test_labels.numpy()
 
     for col, layer in enumerate(layers):
+        tr_acts_layer = train_layer_acts[layer].float().numpy()
+        te_acts_layer = test_layer_acts[layer].float().numpy()
+
+        # Guard against activation/label size mismatch.
+        if tr_acts_layer.shape[0] != len(train_lbl_np):
+            tr_acts_layer = tr_acts_layer[: len(train_lbl_np)]
+        if te_acts_layer.shape[0] != len(test_lbl_np):
+            te_acts_layer = te_acts_layer[: len(test_lbl_np)]
+
         _tsne_on_ax(
             axes[0][col],
-            train_layer_acts[layer].float().numpy(),
-            test_layer_acts[layer].float().numpy(),
+            tr_acts_layer,
+            te_acts_layer,
             train_lbl_np,
             test_lbl_np,
             title=f"{run_name} – {layer}",
