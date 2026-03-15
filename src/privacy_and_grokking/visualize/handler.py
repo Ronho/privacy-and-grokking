@@ -432,8 +432,8 @@ VISUALIZATIONS = {
     "gradient_norms_over_steps": _gradient_norms_over_steps,
     "curvature_over_steps": _curvature_over_steps,
     "mia_auc_over_steps": _mia_auc_over_steps,
-    "class_distribution": _class_distribution,
     "training_trajectory": _training_trajectory,
+    "class_distribution": _class_distribution,
 }
 
 
@@ -898,17 +898,25 @@ def _single_image_handler(dh: DataHandler, plot_func, filename: str):
     run = mlflow.get_run(dh.run_id)
     run_name = run.data.tags.get("mlflow.runName")
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    plot_func(ax, dh)
-    ax.set_yscale("linear")
-    ax.set_xscale("linear")
-    ax.grid(True, alpha=0.3, which="major", axis="both")
-    fig.suptitle(run_name)
-    fig.tight_layout()
+    try:
+        fig, ax = plt.subplots(figsize=(6, 5))
+        plot_func(ax, dh)
+        ax.set_yscale("linear")
+        ax.set_xscale("linear")
+        ax.grid(True, alpha=0.3, which="major", axis="both")
+        fig.suptitle(run_name)
+        fig.tight_layout()
 
-    _save_figure_to_mlflow(fig, filename, run_id=dh.run_id)
+        _save_figure_to_mlflow(fig, filename, run_id=dh.run_id)
+    except Exception as exc:
+        logger.warning(
+            f"Failed to create {filename} plot: {exc}",
+            extra={"run_id": dh.run_id, "filename": filename},
+            exc_info=True,
+        )
+    finally:
+        plt.close("all")
 
-    plt.close(fig)
     logger.info(f"Created {filename} plot.", extra={"run_id": dh.run_id, "filename": filename})
 
 
@@ -934,10 +942,18 @@ def visualization_single_handler(
                 _single_image_handler(dh, VISUALIZATIONS[viz_name], viz_name)
             elif viz_name in FIGURE_VISUALIZATIONS:
                 fig_func = FIGURE_VISUALIZATIONS[viz_name]
-                fig = fig_func(dh)
-                if fig is not None:
-                    _save_figure_to_mlflow(fig, viz_name, run_id=run_id)
-                    plt.close(fig)
+                try:
+                    fig = fig_func(dh)
+                    if fig is not None:
+                        _save_figure_to_mlflow(fig, viz_name, run_id=run_id)
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to create {viz_name} figure: {exc}",
+                        extra={"run_id": run_id, "viz_name": viz_name},
+                        exc_info=True,
+                    )
+                finally:
+                    plt.close("all")
         logger.info("Visualization complete.", run_id=run_id)
 
 

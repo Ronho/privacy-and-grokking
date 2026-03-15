@@ -12,7 +12,6 @@ from tqdm import tqdm
 
 from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.datasets import (
-    CanarySubset,
     create_masking,
     generate_datasets,
     mask_dataset,
