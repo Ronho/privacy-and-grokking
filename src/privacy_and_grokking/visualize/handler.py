@@ -910,6 +910,7 @@ FIGURE_VISUALIZATIONS: dict[str, object] = {
 
 SINGLE_VIZ_NAMES: list[str] = list(VISUALIZATIONS) + list(FIGURE_VISUALIZATIONS)
 MULTI_VIZ_NAMES: list[str] = list(VISUALIZATIONS)
+MULTI_IMAGE_VIZ_NAMES: list[str] = SINGLE_VIZ_NAMES
 
 
 def _save_figure_to_mlflow(fig, filename: str, run_id: str, filetype: str = "png"):
@@ -1080,3 +1081,134 @@ def visualization_multi_handler(
 
         plt.close(fig)
         logger.info("Multi-run visualization complete.", run_ids=run_ids)
+
+
+def visualization_multi_from_images_handler(
+    exp_name: str,
+    run_ids: list[str],
+    include: list[str] | None = None,
+    output_filename: str = "multi_run_comparison_images",
+):
+    setup_mlflow(exp_name)
+
+    viz_names = [k for k in MULTI_IMAGE_VIZ_NAMES if include is None or k in include]
+    if not viz_names or not run_ids:
+        return
+
+    n_rows = len(viz_names)
+    n_cols = len(run_ids)
+
+    with Logger() as logger:
+        logger.info(
+            "Starting image-based multi-run visualization.",
+            run_ids=run_ids,
+            visualizations=sorted(viz_names),
+        )
+
+        run_names: list[str] = []
+        for rid in run_ids:
+            run = mlflow.get_run(rid)
+            run_names.append(run.data.tags.get("mlflow.runName", rid))
+
+        images: dict[tuple[str, str], np.ndarray | None] = {}
+
+        for rid in run_ids:
+            for viz_name in viz_names:
+                artifact_path = f"visualizations/{viz_name}.png"
+                img_array: np.ndarray | None = None
+                try:
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        mlflow.artifacts.download_artifacts(
+                            artifact_uri=f"runs:/{rid}/{artifact_path}",
+                            dst_path=tmpdir,
+                        )
+                        local_path = Path(tmpdir) / "visualizations" / f"{viz_name}.png"
+                        if not local_path.exists():
+                            # Fallback: artifact might have been stored flat
+                            local_path = Path(tmpdir) / f"{viz_name}.png"
+                        img_array = plt.imread(str(local_path))
+                except Exception as exc:
+                    logger.warning(
+                        f"Could not load image '{viz_name}' for run {rid}: {exc}",
+                        extra={"run_id": rid, "viz_name": viz_name},
+                    )
+                images[(rid, viz_name)] = img_array
+
+        # Build the assembled figure
+        col_w, row_h = 7.0, 5.5
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(col_w * n_cols, row_h * n_rows),
+            squeeze=False,
+        )
+
+        for row, viz_name in enumerate(viz_names):
+            for col, rid in enumerate(run_ids):
+                ax = axes[row][col]
+                img = images.get((rid, viz_name))
+
+                if img is not None:
+                    ax.imshow(img, aspect="auto", interpolation="lanczos")
+                else:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        f"Image not available\n({viz_name})",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                        fontsize=8,
+                        color="tab:red",
+                    )
+
+                ax.axis("off")
+
+                # Column header on the top row: bold run name + faded run ID
+                if row == 0:
+                    ax.set_title(
+                        run_names[col],
+                        fontsize=9,
+                        fontweight="bold",
+                        loc="center",
+                        pad=4,
+                    )
+                    ax.text(
+                        0.5,
+                        1.02,
+                        rid,
+                        transform=ax.transAxes,
+                        fontsize=6,
+                        color="#888888",
+                        ha="center",
+                        va="bottom",
+                    )
+
+                # Row label on the left column
+                if col == 0:
+                    ax.set_ylabel(
+                        viz_name,
+                        fontsize=8,
+                        rotation=90,
+                        va="center",
+                        ha="right",
+                        labelpad=4,
+                    )
+                    ax.yaxis.set_label_position("left")
+                    ax.axis("on")
+                    ax.set_yticks([])
+                    ax.set_xticks([])
+                    for spine in ax.spines.values():
+                        spine.set_visible(False)
+
+        fig.suptitle("Multi-Run Comparison (pre-rendered images)", fontsize=12, y=1.01)
+        fig.tight_layout()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / f"{output_filename}.png"
+            fig.savefig(str(path), dpi=150, bbox_inches="tight")
+            for rid in run_ids:
+                mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
+
+        plt.close(fig)
+        logger.info("Image-based multi-run visualization complete.", run_ids=run_ids)

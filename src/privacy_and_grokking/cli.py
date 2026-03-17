@@ -135,6 +135,43 @@ def visualize_multi(
 
 
 @app.command()
+def visualize_multi_from_images(
+    exp_name: str,
+    run_ids: list[str],
+    include: Annotated[
+        list[str] | None,
+        typer.Option("--include", help="Visualization names to include (default: all)."),
+    ] = None,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option("--exclude", help="Visualization names to exclude."),
+    ] = None,
+    output_filename: Annotated[
+        str,
+        typer.Option("--output-filename", help="Base filename for the assembled figure."),
+    ] = "multi_run_comparison_images",
+):
+    from privacy_and_grokking.visualize import (
+        MULTI_IMAGE_VIZ_NAMES,
+        visualization_multi_from_images_handler,
+    )
+
+    effective_include: list[str] | None = include
+    if exclude:
+        all_names = include if include is not None else list(MULTI_IMAGE_VIZ_NAMES)
+        effective_include = [n for n in all_names if n not in exclude]
+
+    with Logger() as logger:
+        logger.info(
+            "Starting image-based multi-run visualization handler.", extra={"run_ids": run_ids}
+        )
+        visualization_multi_from_images_handler(
+            exp_name, run_ids, include=effective_include, output_filename=output_filename
+        )
+        logger.info("Image-based multi-run visualization handler completed.")
+
+
+@app.command()
 def pipeline(
     exp_name: str,
     model: str,
