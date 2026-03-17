@@ -913,10 +913,10 @@ MULTI_VIZ_NAMES: list[str] = list(VISUALIZATIONS)
 MULTI_IMAGE_VIZ_NAMES: list[str] = SINGLE_VIZ_NAMES
 
 
-def _save_figure_to_mlflow(fig, filename: str, run_id: str, filetype: str = "png"):
+def _save_figure_to_mlflow(fig, filename: str, run_id: str, filetype: str = "pdf"):
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / f"{filename}.{filetype}"
-        fig.savefig(str(path), dpi=150, bbox_inches="tight")
+        fig.savefig(str(path), bbox_inches="tight")
         mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=run_id)
 
 
@@ -1074,8 +1074,8 @@ def visualization_multi_handler(
         fig.tight_layout()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "multi_run_comparison.png"
-            fig.savefig(str(path), dpi=150, bbox_inches="tight")
+            path = Path(tmpdir) / "multi_run_comparison.pdf"
+            fig.savefig(str(path), bbox_inches="tight")
             for rid in run_ids:
                 mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
 
@@ -1114,7 +1114,7 @@ def visualization_multi_from_images_handler(
 
         for rid in run_ids:
             for viz_name in viz_names:
-                artifact_path = f"visualizations/{viz_name}.png"
+                artifact_path = f"visualizations/{viz_name}.pdf"
                 img_array: np.ndarray | None = None
                 try:
                     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1122,10 +1122,10 @@ def visualization_multi_from_images_handler(
                             artifact_uri=f"runs:/{rid}/{artifact_path}",
                             dst_path=tmpdir,
                         )
-                        local_path = Path(tmpdir) / "visualizations" / f"{viz_name}.png"
+                        local_path = Path(tmpdir) / "visualizations" / f"{viz_name}.pdf"
                         if not local_path.exists():
                             # Fallback: artifact might have been stored flat
-                            local_path = Path(tmpdir) / f"{viz_name}.png"
+                            local_path = Path(tmpdir) / f"{viz_name}.pdf"
                         img_array = plt.imread(str(local_path))
                 except Exception as exc:
                     logger.warning(
@@ -1205,8 +1205,8 @@ def visualization_multi_from_images_handler(
         fig.tight_layout()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / f"{output_filename}.png"
-            fig.savefig(str(path), dpi=150, bbox_inches="tight")
+            path = Path(tmpdir) / f"{output_filename}.pdf"
+            fig.savefig(str(path), bbox_inches="tight")
             for rid in run_ids:
                 mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
 
