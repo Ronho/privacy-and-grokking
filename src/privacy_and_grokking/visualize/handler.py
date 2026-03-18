@@ -1,4 +1,5 @@
 import tempfile
+from functools import partial
 from pathlib import Path
 
 import mlflow
@@ -901,6 +902,206 @@ def _optimizer_internals_over_steps(dh: DataHandler) -> plt.Figure | None:
     return fig
 
 
+# ---------------------------------------------------------------------------
+# Axes-based helpers for figure visualizations (used in visualization_multi_handler)
+# ---------------------------------------------------------------------------
+
+
+def _class_activation_ax(ax, dh: DataHandler, *, layer_name: str) -> None:
+    """Plot per-class mean±std activation profiles for one layer on ax."""
+    data = dh.load_activation_data()
+    if data is None:
+        ax.text(0.5, 0.5, "No activation data", ha="center", va="center", transform=ax.transAxes)
+        return
+
+    train_acts: dict[str, torch.Tensor] = data.get("train_activations", {})
+    test_acts: dict[str, torch.Tensor] = data.get("test_activations", {})
+    train_labels: torch.Tensor = data["train_labels"]
+    test_labels: torch.Tensor = data["test_labels"]
+
+    if layer_name not in train_acts:
+        ax.text(
+            0.5, 0.5, f"Layer '{layer_name}' not found",
+            ha="center", va="center", transform=ax.transAxes,
+        )
+        return
+
+    tr_layer = train_acts[layer_name].float()
+    te_layer = test_acts[layer_name].float()
+    if tr_layer.shape[0] != len(train_labels):
+        tr_layer = tr_layer[: len(train_labels)]
+    if te_layer.shape[0] != len(test_labels):
+        te_layer = te_layer[: len(test_labels)]
+
+    classes = sorted(torch.cat([train_labels, test_labels]).unique().tolist())
+    neuron_idx = np.arange(tr_layer.shape[1])
+    cmap = plt.get_cmap("tab10") if len(classes) <= 10 else plt.get_cmap("tab20")
+
+    for cls in classes:
+        color = cmap(int(cls) % cmap.N)
+        tr_cls = tr_layer[train_labels == cls]
+        te_cls = te_layer[test_labels == cls]
+        if tr_cls.shape[0] > 0:
+            tr_mean = tr_cls.mean(dim=0).numpy()
+            tr_std = tr_cls.std(dim=0).numpy()
+            ax.plot(neuron_idx, tr_mean, color=color, linewidth=0.9, linestyle="-", label=f"Tr {int(cls)}")
+            ax.fill_between(neuron_idx, tr_mean - tr_std, tr_mean + tr_std, color=color, alpha=0.1)
+        if te_cls.shape[0] > 0:
+            te_mean = te_cls.mean(dim=0).numpy()
+            te_std = te_cls.std(dim=0).numpy()
+            ax.plot(neuron_idx, te_mean, color=color, linewidth=0.9, linestyle="--", label=f"Te {int(cls)}")
+            ax.fill_between(neuron_idx, te_mean - te_std, te_mean + te_std, color=color, alpha=0.05)
+
+    ax.set_xlabel("Neuron index", fontsize=7)
+    ax.set_ylabel("Activation", fontsize=7)
+    ax.tick_params(labelsize=5)
+    ax.grid(True, alpha=0.2)
+    ax.legend(loc="best", fontsize=5, ncol=max(1, len(classes) // 2))
+
+
+def _rdm_ax(ax, dh: DataHandler, *, layer_name: str) -> None:
+    """Render correlation-distance RDM for a single layer on ax."""
+    data = dh.load_activation_data()
+    if data is None:
+        ax.text(0.5, 0.5, "No activation data", ha="center", va="center", transform=ax.transAxes)
+        return
+
+    train_acts: dict[str, torch.Tensor] = data.get("train_activations", {})
+    test_acts: dict[str, torch.Tensor] = data.get("test_activations", {})
+    train_labels: torch.Tensor = data["train_labels"]
+    test_labels: torch.Tensor = data["test_labels"]
+
+    if layer_name not in train_acts:
+        ax.text(
+            0.5, 0.5, f"Layer '{layer_name}' not found",
+            ha="center", va="center", transform=ax.transAxes,
+        )
+        return
+
+    n_per_class = 5
+    classes = sorted(torch.cat([train_labels, test_labels]).unique().tolist())
+    rng = np.random.default_rng(seed=0)
+
+    def _sample_idx(labels: torch.Tensor, cls: int, n: int) -> np.ndarray:
+        idx = (labels == cls).nonzero(as_tuple=False).squeeze(1).numpy()
+        return rng.choice(idx, size=n, replace=False) if len(idx) >= n else idx
+
+    tr_idx_per_class = [_sample_idx(train_labels, c, n_per_class) for c in classes]
+    te_idx_per_class = [_sample_idx(test_labels, c, n_per_class) for c in classes]
+    tr_order = np.concatenate(tr_idx_per_class)
+    te_order = np.concatenate(te_idx_per_class)
+    n_train_total = len(tr_order)
+
+    tr_class_labels = np.concatenate([[c] * len(tr_idx_per_class[i]) for i, c in enumerate(classes)])
+    te_class_labels = np.concatenate([[c] * len(te_idx_per_class[i]) for i, c in enumerate(classes)])
+    all_class_labels = np.concatenate([tr_class_labels, te_class_labels])
+
+    tr_layer = train_acts[layer_name].float().numpy()
+    te_layer = test_acts[layer_name].float().numpy()
+    if tr_layer.shape[0] != len(train_labels):
+        tr_layer = tr_layer[: len(train_labels)]
+    if te_layer.shape[0] != len(test_labels):
+        te_layer = te_layer[: len(test_labels)]
+
+    acts = np.concatenate([tr_layer[tr_order], te_layer[te_order]], axis=0)
+    rdm = _correlation_rdm(acts)
+    im = ax.imshow(rdm, aspect="auto", cmap="RdBu_r", vmin=0.0, vmax=1.0, interpolation="none")
+
+    tick_positions: list[float] = []
+    tick_names: list[str] = []
+    cursor = 0
+    for i, c in enumerate(classes):
+        n_tr = len(tr_idx_per_class[i])
+        tick_positions.append(cursor + n_tr / 2 - 0.5)
+        tick_names.append(f"tr{int(c)}")
+        cursor += n_tr
+    for i, c in enumerate(classes):
+        n_te = len(te_idx_per_class[i])
+        tick_positions.append(cursor + n_te / 2 - 0.5)
+        tick_names.append(f"te{int(c)}")
+        cursor += n_te
+
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_names, rotation=90, fontsize=5)
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_names, fontsize=5)
+
+    cursor = 0
+    for idx_list in tr_idx_per_class + te_idx_per_class:
+        cursor += len(idx_list)
+        pos = cursor - 0.5
+        ax.axhline(pos, color="white", linewidth=0.4, alpha=0.7)
+        ax.axvline(pos, color="white", linewidth=0.4, alpha=0.7)
+    ax.axhline(n_train_total - 0.5, color="black", linewidth=1.2)
+    ax.axvline(n_train_total - 0.5, color="black", linewidth=1.2)
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04).ax.tick_params(labelsize=5)
+
+
+def _tsne_ax(ax, dh: DataHandler, *, layer_name: str) -> None:
+    """Run t-SNE on one layer's activations and plot on ax."""
+    data = dh.load_activation_data()
+    if data is None:
+        ax.text(0.5, 0.5, "No activation data", ha="center", va="center", transform=ax.transAxes)
+        return
+
+    train_layer_acts: dict[str, torch.Tensor] | None = data.get("train_layer_activations")
+    test_layer_acts: dict[str, torch.Tensor] | None = data.get("test_layer_activations")
+    train_labels: torch.Tensor = data["train_labels"]
+    test_labels: torch.Tensor = data["test_labels"]
+
+    if not train_layer_acts:
+        train_acts = data.get("train_activations")
+        test_acts_raw = data.get("test_activations")
+        if train_acts is None:
+            ax.text(0.5, 0.5, "No layer activations", ha="center", va="center", transform=ax.transAxes)
+            return
+        if isinstance(train_acts, dict):
+            train_layer_acts = train_acts
+            test_layer_acts = test_acts_raw if isinstance(test_acts_raw, dict) else {}
+        else:
+            train_layer_acts = {"activations": train_acts}
+            test_layer_acts = {"activations": test_acts_raw}
+
+    if layer_name not in train_layer_acts:
+        ax.text(
+            0.5, 0.5, f"Layer '{layer_name}' not found",
+            ha="center", va="center", transform=ax.transAxes,
+        )
+        return
+
+    tr_acts = train_layer_acts[layer_name].float().numpy()
+    te_acts = test_layer_acts[layer_name].float().numpy()
+    train_lbl_np = train_labels.numpy()
+    test_lbl_np = test_labels.numpy()
+    if tr_acts.shape[0] != len(train_lbl_np):
+        tr_acts = tr_acts[: len(train_lbl_np)]
+    if te_acts.shape[0] != len(test_lbl_np):
+        te_acts = te_acts[: len(test_lbl_np)]
+
+    _tsne_on_ax(ax, tr_acts, te_acts, train_lbl_np, test_lbl_np)
+
+
+def _optimizer_state_ax(ax, dh: DataHandler, *, state_key: str) -> None:
+    """Plot norm, mean, abs_mean for one optimizer state key on a single ax."""
+    stats_ordered = ["norm", "mean", "abs_mean"]
+    for stat in stats_ordered:
+        data = dh.get_metric_history(f"optimizer/{state_key}/{stat}")
+        if data["steps"]:
+            ax.plot(
+                data["steps"],
+                data["values"],
+                color=_OPTIMIZER_STAT_COLORS.get(stat, "tab:blue"),
+                linewidth=1.5,
+                label=_OPTIMIZER_STAT_LABELS.get(stat, stat),
+            )
+    ax.set_xlabel(STEP_LABEL)
+    ax.set_ylabel("Value")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize=7)
+
+
+# ---------------------------------------------------------------------------
+
 FIGURE_VISUALIZATIONS: dict[str, object] = {
     "class_layer_activation_grid": _class_layer_activation_grid,
     "rdm_per_layer": _rdm_per_layer,
@@ -909,8 +1110,61 @@ FIGURE_VISUALIZATIONS: dict[str, object] = {
 }
 
 SINGLE_VIZ_NAMES: list[str] = list(VISUALIZATIONS) + list(FIGURE_VISUALIZATIONS)
-MULTI_VIZ_NAMES: list[str] = list(VISUALIZATIONS)
-MULTI_IMAGE_VIZ_NAMES: list[str] = SINGLE_VIZ_NAMES
+MULTI_VIZ_NAMES: list[str] = list(VISUALIZATIONS) + list(FIGURE_VISUALIZATIONS)
+
+
+def _discover_dynamic_rows(
+    dh: DataHandler, viz_names: list[str]
+) -> list[tuple[str, object]]:
+    """Expand viz_names into (row_label, ax_fn) pairs.
+
+    Figure visualizations that depend on layers are expanded to one row per
+    layer (probed from *dh*).  Regular VISUALIZATIONS entries pass through
+    unchanged.
+    """
+    rows: list[tuple[str, object]] = []
+
+    # Load activation data lazily once for all activation-based vizzes.
+    activation_layers: list[str] | None = None
+    activation_loaded = False
+
+    def _get_layers() -> list[str]:
+        nonlocal activation_layers, activation_loaded
+        if not activation_loaded:
+            activation_loaded = True
+            data = dh.load_activation_data()
+            if data is not None:
+                acts = data.get("train_activations", {})
+                if acts:
+                    activation_layers = sorted(acts.keys())
+                else:
+                    layer_acts = data.get("train_layer_activations")
+                    if layer_acts:
+                        activation_layers = list(layer_acts.keys())
+        return activation_layers or []
+
+    for viz_name in viz_names:
+        if viz_name in VISUALIZATIONS:
+            rows.append((viz_name, VISUALIZATIONS[viz_name]))
+        elif viz_name == "class_layer_activation_grid":
+            for layer in _get_layers():
+                rows.append((f"class_act/{layer}", partial(_class_activation_ax, layer_name=layer)))
+        elif viz_name == "rdm_per_layer":
+            for layer in _get_layers():
+                rows.append((f"rdm/{layer}", partial(_rdm_ax, layer_name=layer)))
+        elif viz_name == "tsne_per_layer":
+            for layer in _get_layers():
+                rows.append((f"tsne/{layer}", partial(_tsne_ax, layer_name=layer)))
+        elif viz_name == "optimizer_internals_over_steps":
+            all_keys = dh.discover_keys("optimizer/")
+            seen_state_keys: list[str] = []
+            for key in all_keys:
+                parts = key.split("/")
+                if len(parts) == 3 and parts[1] not in seen_state_keys:
+                    seen_state_keys.append(parts[1])
+            for sk in sorted(seen_state_keys):
+                rows.append((f"optimizer/{sk}", partial(_optimizer_state_ax, state_key=sk)))
+    return rows
 
 
 def _save_figure_to_mlflow(fig, filename: str, run_id: str, filetype: str = "pdf"):
@@ -993,20 +1247,10 @@ def visualization_multi_handler(
 ):
     setup_mlflow(exp_name)
 
-    viz_names = [k for k in VISUALIZATIONS if include is None or k in include]
+    all_viz_names = list(VISUALIZATIONS) + list(FIGURE_VISUALIZATIONS)
+    viz_names = [k for k in all_viz_names if include is None or k in include]
     if not viz_names or not run_ids:
         return
-
-    n_rows = len(viz_names)
-    n_cols = len(run_ids)
-
-    col_w, row_h = 6.0, 5.0
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=(col_w * n_cols, row_h * n_rows),
-        squeeze=False,
-    )
 
     with Logger() as logger:
         logger.info(
@@ -1023,8 +1267,24 @@ def visualization_multi_handler(
 
         data_handlers = [DataHandler(rid) for rid in run_ids]
 
-        for row, viz_name in enumerate(viz_names):
-            plot_func = VISUALIZATIONS[viz_name]
+        # Expand figure visualizations into per-layer/per-state-key rows,
+        # probing the first run to discover layer names / optimizer state keys.
+        row_specs = _discover_dynamic_rows(data_handlers[0], viz_names)
+        if not row_specs:
+            logger.warning("No visualization rows resolved.", extra={"run_ids": run_ids})
+            return
+
+        n_rows = len(row_specs)
+        n_cols = len(run_ids)
+        col_w, row_h = 6.0, 5.0
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(col_w * n_cols, row_h * n_rows),
+            squeeze=False,
+        )
+
+        for row, (row_label, plot_func) in enumerate(row_specs):
             for col, dh in enumerate(data_handlers):
                 ax = axes[row][col]
                 try:
@@ -1067,7 +1327,7 @@ def visualization_multi_handler(
                 # Row label on the left column
                 if col == 0:
                     ax.set_ylabel(
-                        f"{viz_name}\n{ax.get_ylabel()}",
+                        f"{row_label}\n{ax.get_ylabel()}",
                         fontsize=7,
                     )
 
@@ -1083,132 +1343,4 @@ def visualization_multi_handler(
         logger.info("Multi-run visualization complete.", run_ids=run_ids)
 
 
-def visualization_multi_from_images_handler(
-    exp_name: str,
-    run_ids: list[str],
-    include: list[str] | None = None,
-    output_filename: str = "multi_run_comparison_images",
-):
-    setup_mlflow(exp_name)
 
-    viz_names = [k for k in MULTI_IMAGE_VIZ_NAMES if include is None or k in include]
-    if not viz_names or not run_ids:
-        return
-
-    n_rows = len(viz_names)
-    n_cols = len(run_ids)
-
-    with Logger() as logger:
-        logger.info(
-            "Starting image-based multi-run visualization.",
-            run_ids=run_ids,
-            visualizations=sorted(viz_names),
-        )
-
-        run_names: list[str] = []
-        for rid in run_ids:
-            run = mlflow.get_run(rid)
-            run_names.append(run.data.tags.get("mlflow.runName", rid))
-
-        images: dict[tuple[str, str], np.ndarray | None] = {}
-
-        for rid in run_ids:
-            for viz_name in viz_names:
-                artifact_path = f"visualizations/{viz_name}.pdf"
-                img_array: np.ndarray | None = None
-                try:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        mlflow.artifacts.download_artifacts(
-                            artifact_uri=f"runs:/{rid}/{artifact_path}",
-                            dst_path=tmpdir,
-                        )
-                        local_path = Path(tmpdir) / "visualizations" / f"{viz_name}.pdf"
-                        if not local_path.exists():
-                            # Fallback: artifact might have been stored flat
-                            local_path = Path(tmpdir) / f"{viz_name}.pdf"
-                        img_array = plt.imread(str(local_path))
-                except Exception as exc:
-                    logger.warning(
-                        f"Could not load image '{viz_name}' for run {rid}: {exc}",
-                        extra={"run_id": rid, "viz_name": viz_name},
-                    )
-                images[(rid, viz_name)] = img_array
-
-        # Build the assembled figure
-        col_w, row_h = 7.0, 5.5
-        fig, axes = plt.subplots(
-            n_rows,
-            n_cols,
-            figsize=(col_w * n_cols, row_h * n_rows),
-            squeeze=False,
-        )
-
-        for row, viz_name in enumerate(viz_names):
-            for col, rid in enumerate(run_ids):
-                ax = axes[row][col]
-                img = images.get((rid, viz_name))
-
-                if img is not None:
-                    ax.imshow(img, aspect="auto", interpolation="lanczos")
-                else:
-                    ax.text(
-                        0.5,
-                        0.5,
-                        f"Image not available\n({viz_name})",
-                        ha="center",
-                        va="center",
-                        transform=ax.transAxes,
-                        fontsize=8,
-                        color="tab:red",
-                    )
-
-                ax.axis("off")
-
-                # Column header on the top row: bold run name + faded run ID
-                if row == 0:
-                    ax.set_title(
-                        run_names[col],
-                        fontsize=9,
-                        fontweight="bold",
-                        loc="center",
-                        pad=4,
-                    )
-                    ax.text(
-                        0.5,
-                        1.02,
-                        rid,
-                        transform=ax.transAxes,
-                        fontsize=6,
-                        color="#888888",
-                        ha="center",
-                        va="bottom",
-                    )
-
-                # Row label on the left column
-                if col == 0:
-                    ax.set_ylabel(
-                        viz_name,
-                        fontsize=8,
-                        rotation=90,
-                        va="center",
-                        ha="right",
-                        labelpad=4,
-                    )
-                    ax.yaxis.set_label_position("left")
-                    ax.axis("on")
-                    ax.set_yticks([])
-                    ax.set_xticks([])
-                    for spine in ax.spines.values():
-                        spine.set_visible(False)
-
-        fig.suptitle("Multi-Run Comparison (pre-rendered images)", fontsize=12, y=1.01)
-        fig.tight_layout()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / f"{output_filename}.pdf"
-            fig.savefig(str(path), bbox_inches="tight")
-            for rid in run_ids:
-                mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
-
-        plt.close(fig)
-        logger.info("Image-based multi-run visualization complete.", run_ids=run_ids)
