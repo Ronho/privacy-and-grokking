@@ -9,6 +9,7 @@ from typer import Typer
 from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
+from privacy_and_grokking.training.train import LOG_FREQUENCY
 from privacy_and_grokking.utils import Logger
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
@@ -55,18 +56,37 @@ def train(
     mask_index: int,
     seed: int | None = None,
     run_name: str | None = None,
+    checkpoint_frequency: int = LOG_FREQUENCY,
 ):
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
     cfg.dataset_mask_idx = mask_index
-    training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name)
+    training(
+        exp_name=exp_name,
+        total_steps=total_steps,
+        cfg=cfg,
+        run_name=run_name,
+        checkpoint_frequency=checkpoint_frequency,
+    )
 
 
 @app.command()
-def restart(exp_name: str, run_id: str, checkpoint: int, total_steps: int):
+def restart(
+    exp_name: str,
+    run_id: str,
+    checkpoint: int,
+    total_steps: int,
+    checkpoint_frequency: int = LOG_FREQUENCY,
+):
     cfg = RestartConfig(run_id=run_id, checkpoint=checkpoint)
-    training(exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name="")
+    training(
+        exp_name=exp_name,
+        total_steps=total_steps,
+        cfg=cfg,
+        run_name="",
+        checkpoint_frequency=checkpoint_frequency,
+    )
 
 
 @app.command()
@@ -144,6 +164,7 @@ def pipeline(
     run_name: str | None = None,
     run_id: str | None = None,
     checkpoint: int | None = None,
+    checkpoint_frequency: int = LOG_FREQUENCY,
 ):
     if checkpoint is not None and run_id is None:
         raise typer.BadParameter("--run-id is required when --checkpoint is provided.")
@@ -166,7 +187,11 @@ def pipeline(
             cfg.dataset_mask_idx = mask_index
             logger.info("Running train step.")
         current_run_id = training(
-            exp_name=exp_name, total_steps=total_steps, cfg=cfg, run_name=run_name
+            exp_name=exp_name,
+            total_steps=total_steps,
+            cfg=cfg,
+            run_name=run_name,
+            checkpoint_frequency=checkpoint_frequency,
         )
         logger.info("Train step complete.", extra={"run_id": current_run_id})
 

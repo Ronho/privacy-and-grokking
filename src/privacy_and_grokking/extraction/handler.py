@@ -1,10 +1,12 @@
+import os
+import random
 import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 import mlflow
+import numpy as np
 import torch
-import torch.nn.functional as F
 from mlflow.tracking import MlflowClient
 from torch import nn
 from torch.utils.data import Subset
@@ -17,9 +19,6 @@ from privacy_and_grokking.datasets import (
     mask_dataset,
 )
 from privacy_and_grokking.extraction.distribution_overlap import compute_distribution_overlap
-from privacy_and_grokking.extraction.roc import (
-    compute_roc_metrics_single_step,
-)
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
@@ -27,15 +26,24 @@ MERLIN_MORGAN_NOISY_SAMPLES = 100
 MERLIN_MORGAN_NOISE_SCALE = 0.01
 
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def _list_checkpoint_steps(run_id: str) -> list[int]:
     client = MlflowClient()
     artifacts = client.list_artifacts(run_id, path="checkpoints")
     steps = []
     for artifact in artifacts:
-        name = artifact.path.split("/")[-1]
-        if name.isdigit():
-            steps.append(int(name))
-    return sorted(steps)
+        parts = artifact.path.split("/")
+        # Expected patterns: "checkpoints/123" or "checkpoints/123/model.pth"
+        if len(parts) >= 2 and parts[0] == "checkpoints":
+            candidate = parts[1]
+            if candidate.isdigit():
+                steps.append(int(candidate))
+    return sorted(set(steps))
 
 
 def _stratified_indices(dataset, n: int) -> list[int]:
@@ -71,7 +79,7 @@ def _get_datasets(cfg: TrainConfig):
         train,
         cfg.dataset_mask_idx,
     )
-    subsample_size = min(len(train_subset), len(test))
+    subsample_size = min(len(train_subset), len(test))  # type: ignore
     train_sub = Subset(
         train_subset,
         _stratified_indices(train_subset, subsample_size),
@@ -80,108 +88,91 @@ def _get_datasets(cfg: TrainConfig):
         test,
         _stratified_indices(test, subsample_size),
     )
-    train_loader = torch.utils.data.DataLoader(train_sub, batch_size=cfg.batch_size, shuffle=False)
-    test_loader = torch.utils.data.DataLoader(test_sub, batch_size=cfg.batch_size, shuffle=False)
+    num_workers = min(4, os.cpu_count() or 1) if torch.cuda.is_available() else 0
+    pin_memory = torch.cuda.is_available()
+    persistent_workers = num_workers > 0
+
+    train_loader = torch.utils.data.DataLoader(
+        train_sub,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        worker_init_fn=seed_worker if num_workers > 0 else None,
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_sub,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        worker_init_fn=seed_worker if num_workers > 0 else None,
+    )
 
     return train_loader, test_loader, train.input_shape, train.num_classes
 
 
 def _iterate_dataloader(dataloader, device, model, last_step: bool):
-    correct_probs: list[torch.Tensor] = []
-    correct_logits: list[torch.Tensor] = []
-    ce_losses: list[torch.Tensor] = []
-    mse_losses: list[torch.Tensor] = []
-    correctness_list: list[torch.Tensor] = []
-    mm_ce_votes: list[float] = []
-    mm_mse_votes: list[float] = []
+    from privacy_and_grokking.metrics import MetricComputer
 
-    ce_criterion = nn.CrossEntropyLoss(reduction="none")
-    mse_criterion = nn.MSELoss(reduction="none")
-
-    buffers: dict[str, list[torch.Tensor]] = {}
-    label_list: list[torch.Tensor] = []
+    buffers_accum: dict[str, list[torch.Tensor]] = {}
+    label_list_accum: list[torch.Tensor] = []
     handles: list = []
     if last_step:
         for name, module in model.named_modules():
             if isinstance(module, nn.Linear):
                 key = name
-                buffers[key] = []
+                buffers_accum[key] = []
 
                 def _make_hook(k: str):
                     def _hook(_module: nn.Module, _inp: tuple, output: torch.Tensor) -> None:
-                        buffers[k].append(output.detach().cpu())
+                        buffers_accum[k].append(output.detach().cpu())
 
                     return _hook
 
                 handles.append(module.register_forward_hook(_make_hook(key)))
+
     try:
+        prob_list = []
+        logit_list = []
+        ce_list = []
+        mse_list = []
+        correctness_list = []
+        mm_ce_list = []
+        mm_mse_list = []
+
         with torch.no_grad():
             for x, y in dataloader:
                 if last_step:
-                    label_list.append(y.cpu())
-                x, y = x.to(device), y.to(device)
-                _logits = model(x)
-                _probs = F.softmax(_logits, dim=1)
-                _correct_probs = _probs.gather(1, y.view(-1, 1))
-                _correct_logits = _logits.gather(1, y.view(-1, 1))
-                _ce_losses = ce_criterion(_logits, y)
-                _mse_losses = mse_criterion(
-                    _logits,
-                    F.one_hot(
-                        y,
-                        num_classes=_logits.size(1),
-                    ).float(),
-                ).gather(1, y.view(-1, 1))
-                _correctly_classified = (_logits.argmax(dim=1) == y).float()
-
-                for i in range(x.size(0)):
-                    img = x[i]
-                    label = y[i]
-                    ce_loss = _ce_losses[i]
-                    mse_loss = _mse_losses[i]
-                    label_oh = F.one_hot(label, num_classes=_logits.size(1)).float()
-
-                    noise = (
-                        torch.randn(
-                            (MERLIN_MORGAN_NOISY_SAMPLES, *img.shape),
-                            device=device,
-                        )
-                        * MERLIN_MORGAN_NOISE_SCALE
-                    )
-                    noisy_imgs = img.unsqueeze(0) + noise
-                    noisy_output = model(noisy_imgs)
-
-                    noisy_ce = ce_criterion(
-                        noisy_output,
-                        label.repeat(MERLIN_MORGAN_NOISY_SAMPLES),
-                    )
-                    noisy_mse = mse_criterion(
-                        noisy_output,
-                        label_oh.repeat(MERLIN_MORGAN_NOISY_SAMPLES, 1),
-                    ).sum(dim=1)
-
-                    mm_ce_votes.append((noisy_ce > ce_loss).float().mean())
-                    mm_mse_votes.append((noisy_mse > mse_loss).float().mean())
-
-                correct_logits.append(_correct_logits)
-                correct_probs.append(_correct_probs)
-                ce_losses.append(_ce_losses)
-                mse_losses.append(_mse_losses)
-                correctness_list.append(_correctly_classified)
+                    label_list_accum.append(y)
+                batch_result = MetricComputer._process_batch(model, x, y, device, compute_mm=True)
+                prob_list.append(batch_result["prob"])
+                logit_list.append(batch_result["logit"])
+                ce_list.append(batch_result["ce_loss"])
+                mse_list.append(batch_result["mse_loss"])
+                correctness_list.append(batch_result["correctness"])
+                mm_ce_list.append(batch_result["mm_ce"])
+                mm_mse_list.append(batch_result["mm_mse"])
     finally:
         if last_step:
             for h in handles:
                 h.remove()
-            buffers = {k: torch.cat(v, dim=0) for k, v in buffers.items()}
-            label_list = torch.cat(label_list, dim=0)
+            # Convert list of tensors to single tensor per layer
+            buffers = {k: torch.cat(v, dim=0) for k, v in buffers_accum.items()}
+            label_list = torch.cat(label_list_accum, dim=0)
+        else:
+            buffers = {}
+            label_list = torch.tensor([])
 
-    cat_correct_probs = torch.cat(correct_probs, dim=0).squeeze()
-    cat_correct_logits = torch.cat(correct_logits, dim=0).squeeze()
-    cat_ce_losses = torch.cat(ce_losses, dim=0).squeeze()
-    cat_mse_losses = torch.cat(mse_losses, dim=0).squeeze()
+    cat_correct_probs = torch.cat(prob_list, dim=0).squeeze()
+    cat_correct_logits = torch.cat(logit_list, dim=0).squeeze()
+    cat_ce_losses = torch.cat(ce_list, dim=0).squeeze()
+    cat_mse_losses = torch.cat(mse_list, dim=0).squeeze()
     cat_correctness_list = torch.cat(correctness_list, dim=0).squeeze()
-    cat_mm_ce_votes = torch.tensor(mm_ce_votes)
-    cat_mm_mse_votes = torch.tensor(mm_mse_votes)
+    cat_mm_ce_votes = torch.cat(mm_ce_list, dim=0).squeeze()
+    cat_mm_mse_votes = torch.cat(mm_mse_list, dim=0).squeeze()
 
     return (
         cat_correct_probs,
@@ -196,22 +187,16 @@ def _iterate_dataloader(dataloader, device, model, last_step: bool):
     )
 
 
-def _extract_weight_norm(state_dict, step: int):
-    norms: dict[str, float] = {}
-    all_params = []
+def _extract_weight_norm(model, step: int):
+    from privacy_and_grokking.metrics import MetricComputer
 
-    for name, param in state_dict.items():
-        norms[f"weight_norm/{name}"] = torch.linalg.norm(param.float()).item()
-        all_params.append(param.float().flatten())
-
-    if all_params:
-        norms["weight_norm/total"] = torch.linalg.norm(torch.cat(all_params)).item()
-    else:
-        norms["weight_norm/total"] = 0.0
+    norms = MetricComputer.compute_weight_norms(model)
     mlflow.log_metrics(norms, step=step)
 
 
 def _step_wise(run_id: str) -> None:
+    from privacy_and_grokking.metrics import MetricComputer
+
     logger = Logger.get()
     device = get_device()
 
@@ -249,7 +234,7 @@ def _step_wise(run_id: str) -> None:
         model.load_state_dict(state_dict)
         model.eval()
 
-        _extract_weight_norm(state_dict, step)
+        _extract_weight_norm(model, step)
 
         last_step = step == steps[-1]
         tr_cp, tr_cl, tr_ce, tr_mse, tr_corr, tr_mm_ce, tr_mm_mse, tr_acts, tr_labels = (
@@ -259,23 +244,53 @@ def _step_wise(run_id: str) -> None:
             _iterate_dataloader(test, device, model, last_step)
         )
 
-        attacks = [
-            ("mia_prob", tr_cp, te_cp),
-            ("mia_logit", tr_cl, te_cl),
-            ("mia_ce_loss", -tr_ce, -te_ce),
-            ("mia_mse_loss", -tr_mse, -te_mse),
-            ("mia_correctness", tr_corr, te_corr),
-            ("mia_merlin_morgan_ce", tr_mm_ce, te_mm_ce),
-            ("mia_merlin_morgan_mse", tr_mm_mse, te_mm_mse),
-        ]
+        train_signals = {
+            "prob": tr_cp,
+            "logit": tr_cl,
+            "ce_loss": tr_ce,
+            "mse_loss": tr_mse,
+            "correctness": tr_corr,
+            "mm_ce": tr_mm_ce,
+            "mm_mse": tr_mm_mse,
+        }
+        test_signals = {
+            "prob": te_cp,
+            "logit": te_cl,
+            "ce_loss": te_ce,
+            "mse_loss": te_mse,
+            "correctness": te_corr,
+            "mm_ce": te_mm_ce,
+            "mm_mse": te_mm_mse,
+        }
 
-        roc_metrics: dict[str, float] = {}
-        for prefix, tr_sig, te_sig in attacks:
-            m = compute_roc_metrics_single_step(tr_sig, te_sig)
-            for key, value in m.items():
-                roc_metrics[f"{prefix}/{key}"] = value
+        roc_metrics = MetricComputer.compute_attack_auc_metrics(
+            train_signals, test_signals, include_mm=True
+        )
 
-        mlflow.log_metrics(roc_metrics, step=step)
+        signal_to_prefix = {
+            "prob": "mia_prob",
+            "logit": "mia_logit",
+            "ce_loss": "mia_ce_loss",
+            "mse_loss": "mia_mse_loss",
+            "correctness": "mia_correctness",
+            "mm_ce": "mia_merlin_morgan_ce",
+            "mm_mse": "mia_merlin_morgan_mse",
+        }
+        renamed_metrics = {}
+        for key, value in roc_metrics.items():
+            # key format: attack/{signal}/{metric}
+            parts = key.split("/")
+            if len(parts) == 3 and parts[0] == "attack":
+                signal = parts[1]
+                metric = parts[2]
+                if signal in signal_to_prefix:
+                    new_prefix = signal_to_prefix[signal]
+                    renamed_metrics[f"{new_prefix}/{metric}"] = value
+                else:
+                    renamed_metrics[key] = value
+            else:
+                renamed_metrics[key] = value
+        mlflow.log_metrics(renamed_metrics, step=step)
 
         tr_ce_flat = tr_ce.squeeze().float()
         te_ce_flat = te_ce.squeeze().float()

@@ -1,3 +1,4 @@
+import os
 import random
 import tempfile
 from collections import defaultdict
@@ -7,6 +8,8 @@ import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.profiler
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -14,6 +17,8 @@ from privacy_and_grokking.config import (
     TrainConfig,
 )
 from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.extraction.roc import compute_roc_metrics_single_step
+from privacy_and_grokking.metrics import MetricComputer
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import (
     Logger,
@@ -25,19 +30,6 @@ from privacy_and_grokking.utils import (
 )
 
 LOG_FREQUENCY = 500
-
-
-def _compute_gradient_norms(model: nn.Module) -> dict[str, float]:
-    """Compute per-parameter and total L2 gradient norms."""
-    norms: dict[str, float] = {}
-    all_grads: list[torch.Tensor] = []
-    for name, param in model.named_parameters():
-        if param.grad is not None:
-            g = param.grad.detach().float().flatten()
-            norms[f"grad_norm/{name}"] = torch.linalg.norm(g).item()
-            all_grads.append(g)
-    norms["grad_norm/total"] = torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
-    return norms
 
 
 # State keys that are step counters, not moment/buffer tensors.
@@ -105,10 +97,11 @@ def _log_curvature(
     """Estimate loss-landscape curvature and log to mlflow.
 
     Metrics logged:
-      - ``curvature/hessian_trace``  – Hutchinson estimator of tr(H), averaged
+      - ``hessian/trace``  – Hutchinson estimator of tr(H), averaged
         over ``_CURVATURE_HUTCHINSON_SAMPLES`` Rademacher probes.
-      - ``curvature/top_eigenvalue`` – power-iteration estimate of λ_max(H)
+      - ``hessian/top_eigenvalue`` – power-iteration estimate of λ_max(H)
         using ``_CURVATURE_POWER_ITER`` steps.
+      - ``curvature/hessian_trace``, ``curvature/top_eigenvalue`` – legacy names (deprecated).
 
     Both are computed on a single mini-batch sampled from *loader* with the
     model temporarily set to train mode.
@@ -147,6 +140,8 @@ def _log_curvature(
 
         mlflow.log_metrics(
             {
+                "hessian/trace": hessian_trace,
+                "hessian/top_eigenvalue": top_eigenvalue,
                 "curvature/hessian_trace": hessian_trace,
                 "curvature/top_eigenvalue": top_eigenvalue,
             },
@@ -158,56 +153,60 @@ def _log_curvature(
         model.train(was_training)
 
 
-def _eval(model: nn.Module, loss_fn, loader) -> tuple[torch.Tensor, float]:
-    device = get_device()
-    all_losses = []
-    correct = 0
-    number = 0
-    for x, y in loader:
-        x, y = x.to(device), y.to(device)
-        logits = model(x)
-        losses = loss_fn(logits, y)
-        all_losses.append(losses.detach().cpu())
-
-        labels = torch.argmax(logits, dim=1)
-        correct += torch.sum(labels == y).item()
-        number += x.size(0)
-    all_losses_tensor = torch.cat(all_losses)
-    return all_losses_tensor, correct / number
-
-
 def evaluate(
     step: int,
     model: nn.Module,
     loss_fn,
     eval_train_loader,
     eval_test_loader,
+    compute_mm: bool = False,
 ) -> tuple[float, float, float, float]:
+    """Compute and log all metrics for current model state.
+
+    Returns: (train_loss_mean, test_loss_mean, train_accuracy, test_accuracy)
+    """
     with eval_mode(model):
-        train_losses, train_accuracy = _eval(model, loss_fn, eval_train_loader)
-        test_losses, test_accuracy = _eval(model, loss_fn, eval_test_loader)
+        device = get_device()
 
-        train_loss_mean = train_losses.mean().item()
-        train_loss_std = train_losses.std().item()
-        test_loss_mean = test_losses.mean().item()
-        test_loss_std = test_losses.std().item()
-
-        gradient_norms = _compute_gradient_norms(model)
-
-        mlflow.log_metrics(
-            {
-                "validation.train.loss": train_loss_mean,
-                "validation.train.loss_std": train_loss_std,
-                "validation.train.accuracy": train_accuracy,
-                "validation.test.loss": test_loss_mean,
-                "validation.test.loss_std": test_loss_std,
-                "validation.test.accuracy": test_accuracy,
-                **gradient_norms,
-            },
-            step=step,
+        # Compute basic loss and accuracy metrics
+        basic_metrics, train_losses, test_losses = MetricComputer.compute_basic_metrics(
+            model, loss_fn, eval_train_loader, eval_test_loader, device
         )
 
-        return train_loss_mean, test_loss_mean, train_accuracy, test_accuracy
+        # Compute weight and gradient norms
+        weight_norms = MetricComputer.compute_weight_norms(model)
+        gradient_norms = MetricComputer.compute_gradient_norms(model)
+
+        # Compute attack signals (with Merlin-Morgan optionally)
+        train_signals = MetricComputer.compute_attack_signals(
+            model, loss_fn, eval_train_loader, device, compute_mm=compute_mm
+        )
+        test_signals = MetricComputer.compute_attack_signals(
+            model, loss_fn, eval_test_loader, device, compute_mm=compute_mm
+        )
+        attack_metrics = MetricComputer.compute_attack_auc_metrics(
+            train_signals, test_signals, include_mm=compute_mm
+        )
+
+        # Combine all metrics with consistent naming
+        all_metrics = {}
+        # Basic metrics already have keys like "train/loss_mean" - add validation prefix
+        for key, value in basic_metrics.items():
+            all_metrics[f"validation.{key}"] = value
+        # Norms keep their original names (weight_norm/..., grad_norm/...)
+        all_metrics.update(weight_norms)
+        all_metrics.update(gradient_norms)
+        # Attack metrics already have "attack/" prefix
+        all_metrics.update(attack_metrics)
+
+        mlflow.log_metrics(all_metrics, step=step)
+
+        return (
+            basic_metrics["train/loss_mean"],
+            basic_metrics["test/loss_mean"],
+            basic_metrics["train/accuracy"],
+            basic_metrics["test/accuracy"],
+        )
 
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
@@ -280,7 +279,17 @@ class RestartConfig(BaseModel):
     checkpoint: int
 
 
-def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> None:
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def train_handle(
+    cfg: TrainConfig | RestartConfig,
+    optimization_steps: int,
+    checkpoint_frequency: int = LOG_FREQUENCY,
+) -> None:
     logger = Logger.get()
     if isinstance(cfg, RestartConfig):
         logger.info("Restarting training", checkpoint=cfg.checkpoint)
@@ -303,6 +312,10 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
     device = torch.device(device_name)
     logger.info(f"Using device {device_name}", device=device_name)
 
+    num_workers = min(4, os.cpu_count() or 1) if torch.cuda.is_available() else 0
+    pin_memory = torch.cuda.is_available()
+    persistent_workers = num_workers > 0
+
     logger.info("Preparing dataset.")
     train, test = generate_datasets(config=config.dataset)
     masking = create_masking(
@@ -317,12 +330,28 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        worker_init_fn=seed_worker if num_workers > 0 else None,
     )
     eval_train_loader = torch.utils.data.DataLoader(
-        train_subset, batch_size=config.batch_size, shuffle=False
+        train_subset,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        worker_init_fn=seed_worker if num_workers > 0 else None,
     )
     eval_test_loader = torch.utils.data.DataLoader(
-        test, batch_size=config.batch_size, shuffle=False
+        test,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        worker_init_fn=seed_worker if num_workers > 0 else None,
     )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
@@ -354,9 +383,21 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
     )
 
     logger.info("Starting training loop.")
+    enable_profiler = os.environ.get("PAG_PROFILE", "").lower() in ("1", "true", "yes")
     step = cfg.checkpoint if restart else 0
     with tqdm(total=optimization_steps) as pbar:
         pbar.update(step)
+        prof = None
+        if enable_profiler:
+            prof = torch.profiler.profile(
+                schedule=torch.profiler.schedule(wait=100, warmup=50, active=50, repeat=1),
+                on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler"),
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+            )
+            prof.start()
+        eval_count = 0
         while step < optimization_steps:
             for x, y in train_loader:
                 # Skip batches we've already processed in this epoch
@@ -367,20 +408,32 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
                 if step >= optimization_steps:
                     break
 
+                # Validation frequency conditions
                 if (
                     (step < 50)
                     or (step < LOG_FREQUENCY and step % 50 == 0)
                     or (step % LOG_FREQUENCY == 0)
                 ):
+                    eval_count += 1
+                    heavy_metrics = eval_count % 2 == 0
                     train_loss_mean, test_loss_mean, train_accuracy, test_accuracy = evaluate(
-                        step, model, loss_fn_eval, eval_train_loader, eval_test_loader
+                        step,
+                        model,
+                        loss_fn_eval,
+                        eval_train_loader,
+                        eval_test_loader,
+                        compute_mm=heavy_metrics,
                     )
                     _log_optimizer_internals(optimizer, step)
-                    _log_curvature(model, loss_fn, eval_train_loader, step, device)
-                    save_model(model, optimizer, step)
+                    if heavy_metrics:
+                        _log_curvature(model, loss_fn, eval_train_loader, step, device)
                     pbar.set_description(
                         f"L: {train_loss_mean:1.1e}|{test_loss_mean:1.1e}. A: {train_accuracy * 100:2.1f}%|{test_accuracy * 100:2.1f}%"
                     )
+
+                # Model checkpoint frequency (separate from validation)
+                if step % checkpoint_frequency == 0:
+                    save_model(model, optimizer, step)
 
                 x, y = x.to(device), y.to(device)
                 optimizer.zero_grad()
@@ -392,11 +445,16 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
                 scheduler.step()
 
                 step += 1
+                if prof is not None:
+                    prof.step()
                 pbar.update(1)
-
+        if prof is not None:
+            prof.stop()
+            if os.path.exists("./profiler"):
+                mlflow.log_artifacts("./profiler", artifact_path="profiler")
     logger.info("Saving results.")
     x, _ = next(iter(train_loader))
-    evaluate(step, model, loss_fn_eval, eval_train_loader, eval_test_loader)
+    evaluate(step, model, loss_fn_eval, eval_train_loader, eval_test_loader, compute_mm=True)
     _log_optimizer_internals(optimizer, step)
     _log_curvature(model, loss_fn, eval_train_loader, step, device)
     save_model(model, optimizer, step)
@@ -405,9 +463,15 @@ def train_handle(cfg: TrainConfig | RestartConfig, optimization_steps: int) -> N
 
 
 def train(
-    exp_name: str, total_steps: int, cfg: TrainConfig | RestartConfig, run_name: str | None = None
+    exp_name: str,
+    total_steps: int,
+    cfg: TrainConfig | RestartConfig,
+    run_name: str | None = None,
+    checkpoint_frequency: int | None = None,
 ) -> str:
     run_name = run_name or (cfg.full_name if isinstance(cfg, TrainConfig) else cfg.run_id)
+    if checkpoint_frequency is None:
+        checkpoint_frequency = LOG_FREQUENCY
 
     setup_mlflow(exp_name)
 
@@ -420,7 +484,7 @@ def train(
         returned_run_id = mlflow_run.info.run_id
         try:
             logger.bind(run_id=returned_run_id)
-            train_handle(cfg, total_steps)
+            train_handle(cfg, total_steps, checkpoint_frequency)
         except Exception as e:
             logger.error(f"Training failed with error: {e}", exc_info=True)
         finally:
