@@ -9,6 +9,7 @@ def compute_roc_metrics_single_step(
     test_signals: torch.Tensor,
     fpr_rates: list[float] | None = None,
 ) -> dict[str, float]:
+    """Compute AUC and TPR@FPR metrics for a single attack signal."""
     if fpr_rates is None:
         fpr_rates = FPR_RATES
 
@@ -31,6 +32,6 @@ def compute_roc_metrics_single_step(
     for rate in fpr_rates:
         idx = int(torch.argmin(torch.abs(fpr_t - rate)).item())
         pct = int(rate * 100)
-        metrics[f"tpr-at-{pct}-fpr"] = float(tpr[idx])
+        metrics[f"tpr-at-fpr/{pct}"] = float(tpr[idx])
 
     return metrics

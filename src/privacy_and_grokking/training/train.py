@@ -17,7 +17,7 @@ from privacy_and_grokking.config import (
     TrainConfig,
 )
 from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
-from privacy_and_grokking.extraction.roc import compute_roc_metrics_single_step
+from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
 from privacy_and_grokking.metrics import MetricComputer
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import (
@@ -431,7 +431,7 @@ def train_handle(
                         f"L: {train_loss_mean:1.1e}|{test_loss_mean:1.1e}. A: {train_accuracy * 100:2.1f}%|{test_accuracy * 100:2.1f}%"
                     )
 
-                # Model checkpoint frequency (separate from validation)
+                # Model checkpoint frequency
                 if step % checkpoint_frequency == 0:
                     save_model(model, optimizer, step)
 

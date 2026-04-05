@@ -1,43 +1,54 @@
+from collections import defaultdict
+from privacy_and_grokking.metrics.norms import compute_weight_norms, compute_gradient_norms
+from privacy_and_grokking.utils import eval_mode, get_device
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from privacy_and_grokking.extraction.distribution_overlap import compute_distribution_overlap
-from privacy_and_grokking.extraction.roc import compute_roc_metrics_single_step
+from privacy_and_grokking.metrics.distribution_overlap import compute_distribution_overlap
+from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
 
+
+def evaluate(model: nn.Module, key_prefix: str):
+    metrics = {}
+    with eval_mode(model):
+        metrics.update(compute_weight_norms(model))
+        metrics.update(compute_gradient_norms(model))
+        
+        process_loader()
+
+    for key, value in metrics.items():
+        metrics[f"{key_prefix}/{key}"] = value
+        del metrics[key]
+    return metrics
+
+def process_loader(model: nn.Module, loader: torch.utils.data.DataLoader, compute_mm: bool):
+    device = get_device()
+    ce_criterion = nn.CrossEntropyLoss(reduction="none")
+    mse_criterion = nn.MSELoss(reduction="none")
+
+    result = defaultdict(list)
+
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+        logit = model(x)
+        prob = F.softmax(logit, dim=1)
+        result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)))
+        result["max_logit"].append(logit.max(dim=1, keepdim=True).values)
+        result["min_logit"].append(logit.min(dim=1, keepdim=True).values)
+        result["true_class_prob"].append(prob.gather(1, y.view(-1, 1)))
+        result["max_prob"].append(prob.max(dim=1, keepdim=True).values)
+        result["min_prob"].append(prob.min(dim=1, keepdim=True).values)
+        result["ce_loss"].append(ce_criterion(logit, y))
+        result["mse_loss"].append(mse_criterion(
+            logit,
+            F.one_hot(y, num_classes=logit.size(1)).float(),
+        ).gather(1, y.view(-1, 1)))
+        result["correctness"].append((logit.argmax(dim=1) == y).float())
 
 class MetricComputer:
     MERLIN_MORGAN_NOISY_SAMPLES = 100
     MERLIN_MORGAN_NOISE_SCALE = 0.01
-
-    @staticmethod
-    def compute_weight_norms(model: nn.Module) -> dict[str, float]:
-        """Compute per-parameter and total L2 weight norms."""
-        norms: dict[str, float] = {}
-        all_params: list[torch.Tensor] = []
-        for name, param in model.named_parameters():
-            p = param.detach().float().flatten()
-            norms[f"weight_norm/{name}"] = torch.linalg.norm(p).item()
-            all_params.append(p)
-        norms["weight_norm/total"] = (
-            torch.linalg.norm(torch.cat(all_params)).item() if all_params else 0.0
-        )
-        return norms
-
-    @staticmethod
-    def compute_gradient_norms(model: nn.Module) -> dict[str, float]:
-        """Compute per-parameter and total L2 gradient norms."""
-        norms: dict[str, float] = {}
-        all_grads: list[torch.Tensor] = []
-        for name, param in model.named_parameters():
-            if param.grad is not None:
-                g = param.grad.detach().float().flatten()
-                norms[f"grad_norm/{name}"] = torch.linalg.norm(g).item()
-                all_grads.append(g)
-        norms["grad_norm/total"] = (
-            torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
-        )
-        return norms
 
     @staticmethod
     def _process_batch(

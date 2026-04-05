@@ -8,8 +8,8 @@ def compute_distribution_overlap(
 ) -> float:
     """Compute the histogram-intersection overlap of two distributions.
 
-    Returns a value in ``[0, 1]`` where ``1.0`` means identical distributions
-    and ``0.0`` means completely disjoint.  Both tensors are expected to be
+    Returns a value in [0, 1] where 1.0 means identical distributions
+    and 0.0 means completely disjoint. Both tensors are expected to be
     1-D and values must be finite; any NaN/Inf are silently dropped.
     """
     dist_a = dist_a.flatten().float()
