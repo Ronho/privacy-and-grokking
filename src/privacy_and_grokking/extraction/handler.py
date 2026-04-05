@@ -18,7 +18,7 @@ from privacy_and_grokking.datasets import (
     generate_datasets,
     mask_dataset,
 )
-from privacy_and_grokking.extraction.distribution_overlap import compute_distribution_overlap
+from privacy_and_grokking.metrics.distribution_overlap import compute_distribution_overlap
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
