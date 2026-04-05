@@ -1,3 +1,3 @@
-from privacy_and_grokking.metrics.computer import MetricComputer
+from privacy_and_grokking.metrics.evaluate import evaluate
 
-__all__ = ["MetricComputer"]
+__all__ = ["evaluate"]
