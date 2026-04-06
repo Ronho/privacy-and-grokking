@@ -231,9 +231,11 @@ def command():
     configs = Path("./configs")
     commands = Path("./commands")
     command = commands / "train.txt"
+    num_samples = 5
     lines = []
     for config in configs.iterdir():
-        lines.append(f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 0 --seed 0 --run-name {config.stem} --checkpoint-frequency 25000")
+        for i in range(num_samples):
+            lines.append(f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem} --checkpoint-frequency 25000")
     command.parent.mkdir(parents=True, exist_ok=True)
     command.write_text("\n".join(lines), encoding="utf-8")
 
