@@ -59,7 +59,7 @@ def get_git_changes() -> dict[str, str]:
         ).decode("utf-8")
 
         return {
-            "comnmit": get_git_commit_id(),
+            "commit": get_git_commit_id(),
             "staged": staged if staged else "No staged changes",
             "unstaged": unstaged if unstaged else "No unstaged changes",
         }
