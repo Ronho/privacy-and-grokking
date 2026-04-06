@@ -225,6 +225,18 @@ def process(path: str, num_workers: int):
     with open(path) as f, Pool(num_workers) as pool:
         pool.map(_handle, f)
 
+@app.command()
+def command():
+    from pathlib import Path
+    configs = Path("./configs")
+    commands = Path("./commands")
+    command = commands / "train.txt"
+    lines = []
+    for config in configs.iterdir():
+        lines.append(f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 0 --seed 0 --run-name {config.stem} --checkpoint-frequency 25000")
+    command.parent.mkdir(parents=True, exist_ok=True)
+    command.write_text("\n".join(lines), encoding="utf-8")
+
 
 if __name__ == "__main__":
     app()

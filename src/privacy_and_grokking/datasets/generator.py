@@ -10,6 +10,12 @@ from privacy_and_grokking.datasets.canary_class_assignment import random_derange
 from privacy_and_grokking.datasets.datasets import Datasets, Normalization, get_dataset
 
 
+def _handler(y):
+    if isinstance(y, torch.Tensor):
+        return y.detach().clone().to(dtype=torch.long) 
+    else:
+        return torch.tensor(y, dtype=torch.long)
+
 class CanarySubset(TensorDataset):
     def __init__(
         self,
@@ -25,11 +31,7 @@ class CanarySubset(TensorDataset):
         self.dataset = dataset
         self.subset_indices = subset_indices
         self.transform = transforms.Normalize(norm.mean, norm.std)
-        self.target_transform = transforms.Lambda(
-            lambda y: y.detach().clone().to(dtype=torch.long)
-            if isinstance(y, torch.Tensor)
-            else torch.tensor(y, dtype=torch.long)
-        )
+        self.target_transform = transforms.Lambda(_handler)
 
         if canary_indices is not None:
             if canary_labels is None:
