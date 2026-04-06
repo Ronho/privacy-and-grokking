@@ -1,6 +1,6 @@
+import mlflow
 import torch
 import torch.nn as nn
-from torch.func import functional_call, grad, jvp
 
 from privacy_and_grokking.utils import Logger, get_device
 
@@ -10,65 +10,76 @@ _CURVATURE_HUTCHINSON_SAMPLES = 5
 _CURVATURE_POWER_ITER = 20
 
 
+def _hvp(
+    loss: torch.Tensor,
+    params: list[nn.Parameter],
+    v: list[torch.Tensor],
+) -> list[torch.Tensor]:
+    """Hessian-vector product Hv via double back-propagation."""
+    grads = torch.autograd.grad(loss, params, create_graph=True, retain_graph=True)
+    gv = sum((g * vi).sum() for g, vi in zip(grads, v))
+    return list(torch.autograd.grad(gv, params, retain_graph=True))
+
+
+def _vec_norm(tensors: list[torch.Tensor]) -> torch.Tensor:
+    """L2 norm of a list of tensors treated as a single flat vector."""
+    return torch.sqrt(sum(t.pow(2).sum() for t in tensors))
+
+
 def curvature(
     model: nn.Module,
     loss_fn,
-    loader: torch.utils.data.DataLoader,
+    loader: torch.utils.data.DataLoader
 ) -> dict[str, float]:
-    """Estimate loss-landscape curvature using Hutchinson Approximation"""
+    """Estimate loss-landscape curvature and log to mlflow.
+
+    Metrics logged:
+      - ``curvature/hessian_trace``  – Hutchinson estimator of tr(H), averaged
+        over ``_CURVATURE_HUTCHINSON_SAMPLES`` Rademacher probes.
+      - ``curvature/top_eigenvalue`` – power-iteration estimate of λ_max(H)
+        using ``_CURVATURE_POWER_ITER`` steps.
+
+    Both are computed on a single mini-batch sampled from *loader* with the
+    model temporarily set to train mode.
+    """
     device = get_device()
     was_training = model.training
     model.train()
+    metrics = {}
     try:
         x, y = next(iter(loader))
         x, y = x.to(device), y.to(device)
+        params = [p for p in model.parameters() if p.requires_grad]
 
-        params = dict(model.named_parameters())
-        buffers = dict(model.named_buffers())
-        param_names = params.keys()
-        param_values = tuple(params.values())
+        # Shared forward pass — graph kept for double back-prop.
+        logits = model(x)
+        loss = loss_fn(logits, y)
 
-        def compute_loss(p_values):
-            p_dict = dict(zip(param_names, p_values))
-            logits = functional_call(model, (p_dict, buffers), x)
-            return loss_fn(logits, y)
+        # --- Hutchinson trace: E_v[v^T H v], v ~ Rademacher{±1} ---
+        trace_acc = torch.zeros(1, device=device)
+        for _ in range(_CURVATURE_HUTCHINSON_SAMPLES):
+            v = [torch.randint_like(p.data, 0, 2).float().mul_(2).sub_(1) for p in params]
+            hv = _hvp(loss, params, v)
+            trace_acc += sum((hvi * vi).sum() for hvi, vi in zip(hv, v))
+        hessian_trace = (trace_acc / _CURVATURE_HUTCHINSON_SAMPLES).item()
 
-        def get_trace_sample(v):
-            _, hv = jvp(grad(compute_loss), (param_values,), (v,))
-            return sum((hvi * vi).sum() for hvi, vi in zip(hv, v))
-
-        vs = tuple(
-            torch.randint(0, 2, (_CURVATURE_HUTCHINSON_SAMPLES, *p.shape), device=device).float().mul(2).sub(1)
-            for p in param_values
-        )
-
-        trace_samples = torch.vmap(get_trace_sample)(vs)
-        hessian_trace = trace_samples.mean().item()
-
-        v = tuple(torch.randn_like(p) for p in param_values)
-        v_norm = torch.sqrt(torch.sum(vi.pow(2).sum() for vi in v))
-        v = tuple(vi / v_norm for vi in v)
+        # --- Power iteration for top eigenvalue λ_max(H) ---
+        v = [torch.randn_like(p.data) for p in params]
+        v = [vi / _vec_norm(v) for vi in v]
 
         top_eigenvalue = 0.0
-        # Pre-compile the grad function to avoid overhead
-        grad_fn = grad(compute_loss)
-
         for _ in range(_CURVATURE_POWER_ITER):
-            _, hv = jvp(grad_fn, (param_values,), (v,))
-
+            hv = _hvp(loss, params, v)
             top_eigenvalue = sum((hvi * vi).sum() for hvi, vi in zip(hv, v)).item()
-            hv_norm = torch.sqrt(sum(hvi.pow(2).sum() for hvi in hv))
-
+            hv_norm = _vec_norm(hv)
             if hv_norm < 1e-12:
                 break
-            v = tuple(hvi / hv_norm for hvi in hv)
+            v = [hvi / hv_norm for hvi in hv]
 
-        metrics = {
-            "curvature/hessian_trace": hessian_trace,
-            "curvature/top_eigenvalue": top_eigenvalue,
-        }
+        metrics["curvature/hessian_trace"] = hessian_trace
+        metrics["curvature/top_eigenvalue"] = top_eigenvalue
     except Exception:
-        Logger.get().warning("Curvature estimation failed; skipping.", exc_info=True)
+        Logger.get().warning("Curvature estimation failed - skipping.")
     finally:
         model.train(was_training)
 

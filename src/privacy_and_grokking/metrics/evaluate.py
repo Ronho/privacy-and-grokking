@@ -65,8 +65,8 @@ def _process_loader(model: nn.Module, loader: torch.utils.data.DataLoader, compu
             for i in range(x.size(0)):
                 img = x[i]
                 label = y[i]
-                ce_loss_i = result["ce_loss"][i]
-                mse_loss_i = result["mse_loss"][i]
+                ce_loss_i = result["ce_loss"][-1][i]
+                mse_loss_i = result["mse_loss"][-1][i]
                 label_oh = F.one_hot(label, num_classes=logit.size(1)).float()
 
                 noise = (
@@ -124,7 +124,6 @@ def evaluate(
         metrics.update(compute_weight_norms(model))
         metrics.update(compute_gradient_norms(model))
         metrics.update(get_optimizer_internals(optimizer))
-        metrics.update(curvature(model, loss_fn, train_loader))
 
         train_results, train_activations, train_labels = _process_loader(model, train_loader, compute_mm=compute_heavy_metrics, last_step=last_step)
         test_results, test_activations, test_labels = _process_loader(model, test_loader, compute_heavy_metrics, last_step=last_step)
@@ -141,19 +140,15 @@ def evaluate(
         metrics["loss/mse/overlap"] = compute_distribution_overlap(train_results["mse_loss"], test_results["mse_loss"])
         metrics["loss/ce/overlap"] = compute_distribution_overlap(train_results["ce_loss"], test_results["ce_loss"])
 
-        metrics["train/accuracy"] = train_results["correctness"].sum() / train_results["correctness"].count()
-        metrics["test/accuracy"] = test_results["correctness"].sum() / test_results["correctness"].count()
+        metrics["train/accuracy"] = train_results["correctness"].sum() / len(train_results["correctness"])
+        metrics["test/accuracy"] = test_results["correctness"].sum() / len(test_results["correctness"])
 
         attacks = [
-            ("prob", train_results["prob"], test_results["prob"]),
-            ("logit", train_results["logit"], test_results["logit"]),
+            ("true_class_prob", train_results["true_class_prob"], test_results["true_class_prob"]),
+            ("true_class_logit", train_results["true_class_logit"], test_results["true_class_logit"]),
             ("ce_loss", train_results["ce_loss"], test_results["ce_loss"]),
             ("mse_loss", train_results["mse_loss"], test_results["mse_loss"]),
             ("correctness", train_results["correctness"], test_results["correctness"]),
-            ("logit", train_results["prob"], test_results["prob"]),
-            ("logit", train_results["prob"], test_results["prob"]),
-            ("logit", train_results["prob"], test_results["prob"]),
-            ("logit", train_results["prob"], test_results["prob"]),
         ]
 
         if compute_heavy_metrics:
@@ -166,9 +161,12 @@ def evaluate(
             m = compute_roc_metrics_single_step(train_sig, test_sig)
             for key, value in m.items():
                 metrics[f"attack/{prefix}/{key}"] = value
+    if compute_heavy_metrics:
+        metrics.update(curvature(model, loss_fn, train_loader))
 
-    for key, value in metrics.items():
-        metrics[f"{key_prefix}/{key}"] = value
+    keys = list(metrics.keys())
+    for key in keys:
+        metrics[f"{key_prefix}/{key}"] = metrics[key]
         del metrics[key]
 
     # For safety

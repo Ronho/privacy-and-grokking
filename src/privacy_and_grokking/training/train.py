@@ -229,10 +229,10 @@ def train_handle(
                     )
                     mlflow.log_metrics(metrics, step=step)
 
-                    train_loss_mean = metrics[f"train/loss/{config.loss.name}/mean"]
-                    test_loss_mean = metrics[f"test/loss/{config.loss.name}/mean"]
-                    train_accuracy = metrics["train/accuracy"]
-                    test_accuracy = metrics["test/accuracy"]
+                    train_loss_mean = metrics[f"eval/train/loss/{config.loss.name}/mean"]
+                    test_loss_mean = metrics[f"eval/test/loss/{config.loss.name}/mean"]
+                    train_accuracy = metrics["eval/train/accuracy"]
+                    test_accuracy = metrics["eval/test/accuracy"]
 
                     pbar.set_description(
                         f"L: {train_loss_mean:1.1e}|{test_loss_mean:1.1e}. A: {train_accuracy * 100:2.1f}%|{test_accuracy * 100:2.1f}%"
