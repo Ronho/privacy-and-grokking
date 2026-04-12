@@ -10,6 +10,7 @@ from privacy_and_grokking.training import RestartConfig
 from privacy_and_grokking.training import train as training
 from privacy_and_grokking.training.train import LOG_FREQUENCY
 from privacy_and_grokking.utils import Logger
+from privacy_and_grokking.visualize import visualization_multi_handler, visualization_single_handler
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
 
@@ -108,8 +109,6 @@ def visualize_single(
     include: list[str] | None = None,
     exclude: list[str] | None = None,
 ):
-    from privacy_and_grokking.visualize import visualization_single_handler
-
     with Logger() as logger:
         logger.info("Starting single-run visualization handler.", extra={"run_id": run_id})
         visualization_single_handler(exp_name, run_id, include=include, exclude=exclude)
@@ -119,15 +118,14 @@ def visualize_single(
 @app.command()
 def visualize_multi(
     exp_name: str,
-    run_ids: list[str],
+    tag: str | None = None,
+    run_ids: list[str] | None = None,
     include: list[str] | None = None,
     exclude: list[str] | None = None,
 ):
-    from privacy_and_grokking.visualize import visualization_multi_handler
-
     with Logger() as logger:
         logger.info("Starting multi-run visualization handler.", extra={"run_ids": run_ids})
-        visualization_multi_handler(exp_name, run_ids, include=include, exclude=exclude)
+        visualization_multi_handler(exp_name, run_ids, tag, include=include, exclude=exclude)
         logger.info("Multi-run visualization handler completed.")
 
 

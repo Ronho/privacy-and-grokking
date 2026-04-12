@@ -14,7 +14,7 @@ def mia_auc_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating MIA AUC over steps plot.", extra={"run_id": dh.run_id})
 
-    auc_keys = [k for k in dh.discover_keys("mia_") if k.endswith("/auc")]
+    auc_keys = [k for k in dh.discover_keys("eval/attack/") if k.endswith("/auc")]
 
     if not auc_keys:
         handle_missing_data(ax, dh.run_id, "MIA AUC over steps")

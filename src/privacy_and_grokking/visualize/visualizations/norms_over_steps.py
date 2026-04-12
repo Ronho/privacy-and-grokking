@@ -49,12 +49,12 @@ def _plot_norms_over_steps(ax: plt.Axes, dh: DataHandler, prefix: str, ylabel: s
 def weight_norms_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating weight norms over steps plot.", extra={"run_id": dh.run_id})
-    _plot_norms_over_steps(ax, dh, prefix="weight_norm/", ylabel="Weight Norm")
+    _plot_norms_over_steps(ax, dh, prefix="eval/weight_norm/", ylabel="Weight Norm")
     logger.info("Created weight norms over steps plot.", extra={"run_id": dh.run_id})
 
 
 def gradient_norms_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating gradient norms over steps plot.", extra={"run_id": dh.run_id})
-    _plot_norms_over_steps(ax, dh, prefix="grad_norm/", ylabel="Gradient Norm")
+    _plot_norms_over_steps(ax, dh, prefix="eval/grad_norm/", ylabel="Gradient Norm")
     logger.info("Created gradient norms over steps plot.", extra={"run_id": dh.run_id})

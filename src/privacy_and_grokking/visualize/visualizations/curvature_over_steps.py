@@ -9,10 +9,10 @@ def curvature_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating curvature over steps plot.", extra={"run_id": dh.run_id})
 
-    trace = dh.get_metric_history("curvature/hessian_trace")
-    top_eig = dh.get_metric_history("curvature/top_eigenvalue")
+    trace = dh.get_metric_history("eval/curvature/hessian_trace")
+    top_eig = dh.get_metric_history("eval/curvature/top_eigenvalue")
 
-    if not trace or not top_eig:
+    if not trace["steps"] or not top_eig["steps"]:
         handle_missing_data(ax, dh.run_id, "curvature over steps")
         return
 

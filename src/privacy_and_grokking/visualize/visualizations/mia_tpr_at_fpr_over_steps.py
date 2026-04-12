@@ -18,7 +18,7 @@ def mia_tpr_at_fpr_over_steps(ax: plt.Axes, dh: DataHandler, fpr_pct: int = 5):
     )
 
     suffix = f"/tpr-at-fpr/{fpr_pct}"
-    tpr_keys = [k for k in dh.discover_keys("mia_") if k.endswith(suffix)]
+    tpr_keys = [k for k in dh.discover_keys("eval/attack/") if k.endswith(suffix)]
 
     if not tpr_keys:
         handle_missing_data(ax, dh.run_id, f"MIA TPR@FPR={fpr_pct}% over steps")

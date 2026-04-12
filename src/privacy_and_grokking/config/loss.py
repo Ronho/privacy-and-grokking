@@ -24,7 +24,7 @@ class MSELossConfig(BaseModel):
 
 
 class CrossEntropyLossConfig(BaseModel):
-    name: Literal["cross_entropy"] = "cross_entropy"
+    name: Literal["ce"] = "ce"
 
     def __call__(self, **kwargs) -> LossType:
         return torch.nn.CrossEntropyLoss(reduction=kwargs.get("reduction", "mean"))

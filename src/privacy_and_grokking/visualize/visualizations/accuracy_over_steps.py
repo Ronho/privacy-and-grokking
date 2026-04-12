@@ -9,10 +9,10 @@ def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating accuracy over steps plot.", extra={"run_id": dh.run_id})
 
-    train = dh.get_metric_history("validation.train.accuracy")
-    test = dh.get_metric_history("validation.test.accuracy")
+    train = dh.get_metric_history("eval/train/accuracy")
+    test = dh.get_metric_history("eval/test/accuracy")
 
-    if not train or not test:
+    if not train["steps"] or not test["steps"]:
         handle_missing_data(ax, dh.run_id, "accuracy over steps")
         return
 
