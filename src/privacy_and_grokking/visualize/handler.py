@@ -134,6 +134,7 @@ def _discover_dynamic_rows(dh: DataHandler, viz_names: list[str]) -> list[tuple[
                     rows.append((f"optimizer/{sk}", partial(fn, state_key=sk)))
     return rows
 
+
 def _save_figure_to_mlflow(fig, filename: str, run_id: str, filetype: str = "pdf"):
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / f"{filename}.{filetype}"

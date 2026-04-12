@@ -89,9 +89,7 @@ def _tsne_on_ax(
         Line2D(
             [0], [0], marker="o", color="w", markerfacecolor="gray", markersize=6, label="Train"
         ),
-        Line2D(
-            [0], [0], marker="^", color="w", markerfacecolor="gray", markersize=6, label="Test"
-        ),
+        Line2D([0], [0], marker="^", color="w", markerfacecolor="gray", markersize=6, label="Test"),
     ]
     ax.legend(
         handles=class_handles + membership_handles,

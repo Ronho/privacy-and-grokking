@@ -10,9 +10,7 @@ from privacy_and_grokking.visualize.visualizations.shared import handle_missing_
 def class_activation(ax: plt.Axes, dh: DataHandler, layer: str) -> None:
     """Plot per-class mean±std activation profiles for one layer."""
     logger = Logger.get()
-    logger.info(
-        "Creating class activation plot.", extra={"run_id": dh.run_id, "layer": layer}
-    )
+    logger.info("Creating class activation plot.", extra={"run_id": dh.run_id, "layer": layer})
 
     data = dh.load_activation_data()
     if data is None:
@@ -56,9 +54,7 @@ def class_activation(ax: plt.Axes, dh: DataHandler, layer: str) -> None:
                 linestyle="-",
                 label=f"Tr {int(cls)}",
             )
-            ax.fill_between(
-                neuron_idx, tr_mean - tr_std, tr_mean + tr_std, color=color, alpha=0.1
-            )
+            ax.fill_between(neuron_idx, tr_mean - tr_std, tr_mean + tr_std, color=color, alpha=0.1)
 
         if te_cls.shape[0] > 0:
             te_mean = te_cls.mean(dim=0).numpy()
@@ -71,9 +67,7 @@ def class_activation(ax: plt.Axes, dh: DataHandler, layer: str) -> None:
                 linestyle="--",
                 label=f"Te {int(cls)}",
             )
-            ax.fill_between(
-                neuron_idx, te_mean - te_std, te_mean + te_std, color=color, alpha=0.05
-            )
+            ax.fill_between(neuron_idx, te_mean - te_std, te_mean + te_std, color=color, alpha=0.05)
 
     ax.set_xlabel("Neuron index", fontsize=7)
     ax.set_ylabel("Activation", fontsize=7)
@@ -81,6 +75,4 @@ def class_activation(ax: plt.Axes, dh: DataHandler, layer: str) -> None:
     ax.grid(True, alpha=0.2)
     ax.legend(loc="best", fontsize=5, ncol=max(1, len(classes) // 2))
 
-    logger.info(
-        "Created class activation plot.", extra={"run_id": dh.run_id, "layer": layer}
-    )
+    logger.info("Created class activation plot.", extra={"run_id": dh.run_id, "layer": layer})
