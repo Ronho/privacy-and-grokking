@@ -218,6 +218,7 @@ def visualization_single(
 def visualization_multi(
     run_ids: list[str],
     visualizations: list[str],
+    postfix: str | None = None,
 ):
     logger = Logger.get()
     run_names: list[str] = []
@@ -293,8 +294,12 @@ def visualization_multi(
 
     fig.tight_layout()
 
+    filename = "multi_run_comparison"
+    if postfix:
+        filename = f"{filename}_{postfix}"
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "multi_run_comparison.pdf"
+        path = Path(tmpdir) / f"{filename}.pdf"
         fig.savefig(str(path), bbox_inches="tight")
         for rid in run_ids:
             mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)

@@ -1,5 +1,5 @@
 import os
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import typer
@@ -122,10 +122,14 @@ def visualize_multi(
     run_ids: list[str] | None = None,
     include: list[str] | None = None,
     exclude: list[str] | None = None,
+    group: bool = False,
+    postfix: str | None = None,
 ):
     with Logger() as logger:
         logger.info("Starting multi-run visualization handler.", extra={"run_ids": run_ids})
-        visualization_multi_handler(exp_name, run_ids, tag, include=include, exclude=exclude)
+        visualization_multi_handler(
+            exp_name, run_ids, tag, include=include, exclude=exclude, postfix=postfix, group=group
+        )
         logger.info("Multi-run visualization handler completed.")
 
 
@@ -197,8 +201,8 @@ def _handle(line):
 
 @app.command()
 def process(path: str, num_workers: int):
-    with open(path) as f, Pool(num_workers) as pool:
-        pool.map(_handle, f)
+    with open(path) as f, ThreadPoolExecutor(max_workers=num_workers) as executor:
+        executor.map(_handle, f)
 
 
 @app.command()
