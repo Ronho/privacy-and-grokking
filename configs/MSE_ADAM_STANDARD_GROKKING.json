@@ -1,0 +1,31 @@
+{
+    "model": "mlp",
+    "seed": 0,
+    "batch_size": 200,
+    "initialization_scale": 8.0,
+    "loss": {
+        "name": "mse"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "Adam",
+        "learning_rate": 1e-3,
+        "weight_decay": 0.01
+    },
+    "dataset": {
+        "name": "mnist",
+        "train_size": 1000,
+        "canary_share": 0,
+        "canary_config": null,
+        "seed": 1
+    },
+    "dataset_mask": {
+        "name": "uniform",
+        "num_models": 256,
+        "p": 0.5,
+        "seed": 1
+    },
+    "dataset_mask_idx": 0
+}
