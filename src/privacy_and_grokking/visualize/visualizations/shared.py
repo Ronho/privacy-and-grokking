@@ -17,23 +17,23 @@ LAYER_COLORS = [
 TOTAL_COLOR = "black"
 
 MIA_BASE_NICE_NAMES = {
-    "mia_prob": "Prob",
-    "mia_logit": "Logit",
-    "mia_ce_loss": "CE Loss",
-    "mia_mse_loss": "MSE Loss",
-    "mia_correctness": "Correct",
-    "mia_merlin_morgan_ce": "MM CE",
-    "mia_merlin_morgan_mse": "MM MSE",
+    "true_class_prob": "Prob",
+    "true_class_logit": "Logit",
+    "ce_loss": "CE Loss",
+    "mse_loss": "MSE Loss",
+    "correctness": "Correct",
+    "mm_ce": "MM CE",
+    "mm_mse": "MM MSE",
 }
 
 MIA_COLORS = {
-    "mia_prob": "tab:blue",
-    "mia_logit": "tab:orange",
-    "mia_ce_loss": "tab:green",
-    "mia_mse_loss": "tab:red",
-    "mia_correctness": "tab:purple",
-    "mia_merlin_morgan_ce": "tab:brown",
-    "mia_merlin_morgan_mse": "tab:pink",
+    "true_class_prob": "tab:blue",
+    "true_class_logit": "tab:orange",
+    "ce_loss": "tab:green",
+    "mse_loss": "tab:red",
+    "correctness": "tab:purple",
+    "mm_ce": "tab:brown",
+    "mm_mse": "tab:pink",
 }
 
 

@@ -14,7 +14,9 @@ def mia_auc_over_steps(ax: plt.Axes, dh: DataHandler):
     logger = Logger.get()
     logger.info("Creating MIA AUC over steps plot.", extra={"run_id": dh.run_id})
 
-    auc_keys = [k for k in dh.discover_keys("eval/attack/") if k.endswith("/auc")]
+    prefix = "eval/attack/"
+    suffix = "/auc"
+    auc_keys = [k for k in dh.discover_keys(prefix) if k.endswith(suffix)]
 
     if not auc_keys:
         handle_missing_data(ax, dh.run_id, "MIA AUC over steps")
@@ -24,7 +26,7 @@ def mia_auc_over_steps(ax: plt.Axes, dh: DataHandler):
         data = dh.get_metric_history(key)
         if not data["steps"]:
             continue
-        base = key[: -len("/auc")]
+        base = key[len(prefix): -len(suffix)]
         label = MIA_BASE_NICE_NAMES.get(base, base)
         color = MIA_COLORS.get(base, "tab:gray")
         ax.plot(data["steps"], data["values"], label=label, color=color, linewidth=1.5)

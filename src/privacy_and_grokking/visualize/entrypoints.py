@@ -8,7 +8,7 @@ from privacy_and_grokking.utils import Logger, setup_mlflow
 from privacy_and_grokking.visualize.handler import visualization_multi, visualization_single
 from privacy_and_grokking.visualize.visualizations import MULTI_VIZ_NAMES, SINGLE_VIZ_NAMES
 
-_MAX_CONCURRENT_GROUP_PROCESSES = 10
+_MAX_CONCURRENT_GROUP_PROCESSES = 20
 
 
 def extract_visualizations(
