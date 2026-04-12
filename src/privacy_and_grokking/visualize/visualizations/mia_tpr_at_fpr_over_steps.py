@@ -29,7 +29,7 @@ def mia_tpr_at_fpr_over_steps(ax: plt.Axes, dh: DataHandler, fpr_pct: int = 5):
         data = dh.get_metric_history(key)
         if not data["steps"]:
             continue
-        base = key[len(prefix): -len(suffix)]
+        base = key[len(prefix) : -len(suffix)]
         label = MIA_BASE_NICE_NAMES.get(base, base)
         color = MIA_COLORS.get(base, "tab:gray")
         ax.plot(data["steps"], data["values"], label=label, color=color, linewidth=1.5)

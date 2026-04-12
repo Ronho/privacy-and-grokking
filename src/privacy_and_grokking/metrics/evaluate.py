@@ -168,8 +168,8 @@ def evaluate(
                 train_results["true_class_logit"],
                 test_results["true_class_logit"],
             ),
-            ("ce_loss", train_results["ce_loss"], test_results["ce_loss"]),
-            ("mse_loss", train_results["mse_loss"], test_results["mse_loss"]),
+            ("ce_loss", -train_results["ce_loss"], -test_results["ce_loss"]),
+            ("mse_loss", -train_results["mse_loss"], -test_results["mse_loss"]),
             ("correctness", train_results["correctness"], test_results["correctness"]),
         ]
 
