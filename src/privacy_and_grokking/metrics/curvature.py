@@ -1,4 +1,3 @@
-import mlflow
 import torch
 import torch.nn as nn
 
@@ -26,11 +25,7 @@ def _vec_norm(tensors: list[torch.Tensor]) -> torch.Tensor:
     return torch.sqrt(sum(t.pow(2).sum() for t in tensors))
 
 
-def curvature(
-    model: nn.Module,
-    loss_fn,
-    loader: torch.utils.data.DataLoader
-) -> dict[str, float]:
+def curvature(model: nn.Module, loss_fn, loader: torch.utils.data.DataLoader) -> dict[str, float]:
     """Estimate loss-landscape curvature and log to mlflow.
 
     Metrics logged:

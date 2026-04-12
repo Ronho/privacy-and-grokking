@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 
 from .cnn import CNN
-from .mlp import MLP
+from .mlp import MLP, MLPBatchNorm
 
-type Model = Literal["mlp", "cnn"]
+type Model = Literal["mlp", "mlp_batchnorm", "cnn"]
 
 
 def create_model(
@@ -15,6 +15,8 @@ def create_model(
     match name.lower():
         case "mlp":
             model = MLP(input_dim, num_classes)
+        case "mlp_batchnorm":
+            model = MLPBatchNorm(input_dim, num_classes)
         case "cnn":
             model = CNN(input_dim, num_classes)
         case _:

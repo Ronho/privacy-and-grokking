@@ -9,6 +9,7 @@ from privacy_and_grokking.datasets.generator import (
     DatasetConfig,
     generate_datasets,
 )
+from privacy_and_grokking.datasets.gpu import GpuDataset
 from privacy_and_grokking.datasets.masking import (
     MaskingConfig,
     Maskings,
@@ -22,6 +23,7 @@ __all__ = [
     "UniformNoiseCanaryConfig",
     "Datasets",
     "DatasetConfig",
+    "GpuDataset",
     "generate_datasets",
     "MaskingConfig",
     "Maskings",

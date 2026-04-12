@@ -5,7 +5,7 @@ def get_optimizer_internals(optimizer) -> dict[str, float]:
     stats = {}
 
     for group_idx, group in enumerate(optimizer.param_groups):
-        for p_idx, p in enumerate(group['params']):
+        for p_idx, p in enumerate(group["params"]):
             state = optimizer.state[p]
 
             if not state:

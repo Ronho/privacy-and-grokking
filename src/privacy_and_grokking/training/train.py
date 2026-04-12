@@ -9,13 +9,17 @@ import torch
 import torch.nn as nn
 import torch.profiler
 from pydantic import BaseModel
-from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from privacy_and_grokking.config import (
     TrainConfig,
 )
-from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
+from privacy_and_grokking.datasets import (
+    GpuDataset,
+    create_masking,
+    generate_datasets,
+    mask_dataset,
+)
 from privacy_and_grokking.metrics import evaluate
 from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import (
@@ -28,6 +32,7 @@ from privacy_and_grokking.utils import (
 
 LOG_FREQUENCY = 1000
 HEAVY_METRICS_LOG_FREQUENCY = LOG_FREQUENCY * 10
+
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -98,35 +103,6 @@ class RestartConfig(BaseModel):
     run_id: str
     checkpoint: int
 
-class GpuDataset(Dataset):
-    def __init__(self, images: torch.Tensor, labels: torch.Tensor):
-        self.images = images
-        self.labels = labels
-
-    def __len__(self):
-        return self.images.size(0)
-
-    def __getitem__(self, idx):
-        # No transfers, no transforms, just slicing
-        return self.images[idx], self.labels[idx]
-
-def bake_to_gpu(canary_subset: Dataset, device: str = "cuda") -> GpuDataset:
-    all_imgs = []
-    all_lbls = []
-    
-    # Use a simple loop or a temporary DataLoader to process
-    # We do this on the CPU first to handle the transforms
-    for i in range(len(canary_subset)):
-        img, lbl = canary_subset[i]
-        all_imgs.append(img.unsqueeze(0)) # Add batch dim
-        all_lbls.append(lbl if isinstance(lbl, torch.Tensor) else torch.tensor(lbl))
-
-    # Stack into giant tensors and move to GPU
-    gpu_images = torch.cat(all_imgs, dim=0).to(device)
-    gpu_labels = torch.stack(all_lbls).to(device).long()
-    
-    return GpuDataset(gpu_images, gpu_labels)
-
 
 def train_handle(
     cfg: TrainConfig | RestartConfig,
@@ -155,10 +131,8 @@ def train_handle(
     device = torch.device(device_name)
     logger.info(f"Using device {device_name}", device=device_name)
 
-
     logger.info("Preparing dataset.")
     keep_on_gpu = torch.cuda.is_available()
-    pin_memory = torch.cuda.is_available()
     train, test = generate_datasets(config=config.dataset)
     masking = create_masking(
         config=config.dataset_mask,
@@ -168,7 +142,7 @@ def train_handle(
     train_subset = mask_dataset(masking, train, config.dataset_mask_idx)
 
     train_loader = torch.utils.data.DataLoader(
-        bake_to_gpu(train_subset) if keep_on_gpu else train_subset,
+        GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
@@ -177,14 +151,14 @@ def train_handle(
         # persistent_workers=True
     )
     eval_train_loader = torch.utils.data.DataLoader(
-        bake_to_gpu(train_subset) if keep_on_gpu else train_subset,
+        GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=False,
         # pin_memory=pin_memory,
         # num_workers=0,
     )
     eval_test_loader = torch.utils.data.DataLoader(
-        bake_to_gpu(test) if keep_on_gpu else test,
+        GpuDataset(test, device) if keep_on_gpu else test,
         batch_size=config.batch_size,
         shuffle=False,
         # pin_memory=pin_memory,
@@ -226,7 +200,10 @@ def train_handle(
         prof = None
         if enable_profiler:
             prof = torch.profiler.profile(
-                activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ],
                 schedule=torch.profiler.schedule(wait=100, warmup=10, active=10, repeat=5),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler"),
                 record_shapes=False,
@@ -261,7 +238,7 @@ def train_handle(
                         train_loader=eval_train_loader,
                         test_loader=eval_test_loader,
                         compute_heavy_metrics=heavy_metrics,
-                        last_step=False
+                        last_step=False,
                     )
                     mlflow.log_metrics(metrics, step=step)
 
@@ -306,7 +283,7 @@ def train_handle(
         train_loader=eval_train_loader,
         test_loader=eval_test_loader,
         compute_heavy_metrics=heavy_metrics,
-        last_step=False
+        last_step=False,
     )
     save_model(model, optimizer, step)
 
@@ -320,7 +297,7 @@ def train(
     run_name: str | None = None,
     checkpoint_frequency: int | None = None,
 ) -> str:
-    run_name = run_name or (cfg.full_name if isinstance(cfg, TrainConfig) else cfg.run_id)
+    run_name = run_name or (cfg.name if isinstance(cfg, TrainConfig) else cfg.run_id)
     if checkpoint_frequency is None:
         checkpoint_frequency = LOG_FREQUENCY
 

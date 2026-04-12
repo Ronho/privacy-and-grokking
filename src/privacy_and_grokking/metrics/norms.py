@@ -15,6 +15,7 @@ def compute_weight_norms(model: nn.Module) -> dict[str, float]:
     )
     return norms
 
+
 def compute_gradient_norms(model: nn.Module) -> dict[str, float]:
     """Compute per-parameter and total L2 gradient norms."""
     norms: dict[str, float] = {}
@@ -24,7 +25,5 @@ def compute_gradient_norms(model: nn.Module) -> dict[str, float]:
             g = param.grad.detach().float().flatten()
             norms[f"grad_norm/{name}"] = torch.linalg.norm(g).item()
             all_grads.append(g)
-    norms["grad_norm/total"] = (
-        torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
-    )
+    norms["grad_norm/total"] = torch.linalg.norm(torch.cat(all_grads)).item() if all_grads else 0.0
     return norms

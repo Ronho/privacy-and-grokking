@@ -17,7 +17,10 @@ from privacy_and_grokking.utils import eval_mode, get_device
 MERLIN_MORGAN_NOISY_SAMPLES = 100
 MERLIN_MORGAN_NOISE_SCALE = 0.01
 
-def _process_loader(model: nn.Module, loader: torch.utils.data.DataLoader, compute_mm: bool, last_step: bool):
+
+def _process_loader(
+    model: nn.Module, loader: torch.utils.data.DataLoader, compute_mm: bool, last_step: bool
+):
     device = get_device()
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
     mse_criterion = nn.MSELoss(reduction="none")
@@ -52,10 +55,12 @@ def _process_loader(model: nn.Module, loader: torch.utils.data.DataLoader, compu
         result["max_prob"].append(prob.max(dim=1, keepdim=True).values)
         result["min_prob"].append(prob.min(dim=1, keepdim=True).values)
         result["ce_loss"].append(ce_criterion(logit, y))
-        result["mse_loss"].append(mse_criterion(
-            logit,
-            F.one_hot(y, num_classes=logit.size(1)).float(),
-        ).gather(1, y.view(-1, 1)))
+        result["mse_loss"].append(
+            mse_criterion(
+                logit,
+                F.one_hot(y, num_classes=logit.size(1)).float(),
+            ).gather(1, y.view(-1, 1))
+        )
         result["correctness"].append((logit.argmax(dim=1) == y).float())
 
         if compute_mm:
@@ -108,6 +113,7 @@ def _process_loader(model: nn.Module, loader: torch.utils.data.DataLoader, compu
 
     return result, buffers, label_list
 
+
 def evaluate(
     model: nn.Module,
     step: int,
@@ -125,8 +131,12 @@ def evaluate(
         metrics.update(compute_gradient_norms(model))
         metrics.update(get_optimizer_internals(optimizer))
 
-        train_results, train_activations, train_labels = _process_loader(model, train_loader, compute_mm=compute_heavy_metrics, last_step=last_step)
-        test_results, test_activations, test_labels = _process_loader(model, test_loader, compute_heavy_metrics, last_step=last_step)
+        train_results, train_activations, train_labels = _process_loader(
+            model, train_loader, compute_mm=compute_heavy_metrics, last_step=last_step
+        )
+        test_results, test_activations, test_labels = _process_loader(
+            model, test_loader, compute_heavy_metrics, last_step=last_step
+        )
         metrics["train/loss/mse/mean"] = train_results["mse_loss"].mean()
         metrics["train/loss/mse/std"] = train_results["mse_loss"].std()
         metrics["test/loss/mse/mean"] = test_results["mse_loss"].mean()
@@ -137,25 +147,39 @@ def evaluate(
         metrics["test/loss/ce/mean"] = test_results["ce_loss"].mean()
         metrics["test/loss/ce/std"] = test_results["ce_loss"].std()
 
-        metrics["loss/mse/overlap"] = compute_distribution_overlap(train_results["mse_loss"], test_results["mse_loss"])
-        metrics["loss/ce/overlap"] = compute_distribution_overlap(train_results["ce_loss"], test_results["ce_loss"])
+        metrics["loss/mse/overlap"] = compute_distribution_overlap(
+            train_results["mse_loss"], test_results["mse_loss"]
+        )
+        metrics["loss/ce/overlap"] = compute_distribution_overlap(
+            train_results["ce_loss"], test_results["ce_loss"]
+        )
 
-        metrics["train/accuracy"] = train_results["correctness"].sum() / len(train_results["correctness"])
-        metrics["test/accuracy"] = test_results["correctness"].sum() / len(test_results["correctness"])
+        metrics["train/accuracy"] = train_results["correctness"].sum() / len(
+            train_results["correctness"]
+        )
+        metrics["test/accuracy"] = test_results["correctness"].sum() / len(
+            test_results["correctness"]
+        )
 
         attacks = [
             ("true_class_prob", train_results["true_class_prob"], test_results["true_class_prob"]),
-            ("true_class_logit", train_results["true_class_logit"], test_results["true_class_logit"]),
+            (
+                "true_class_logit",
+                train_results["true_class_logit"],
+                test_results["true_class_logit"],
+            ),
             ("ce_loss", train_results["ce_loss"], test_results["ce_loss"]),
             ("mse_loss", train_results["mse_loss"], test_results["mse_loss"]),
             ("correctness", train_results["correctness"], test_results["correctness"]),
         ]
 
         if compute_heavy_metrics:
-            attacks.extend([
-                ("mm_ce", train_results["mm_ce"], test_results["mm_ce"]),
-                ("mm_mse", train_results["mm_mse"], test_results["mm_mse"]),
-            ])
+            attacks.extend(
+                [
+                    ("mm_ce", train_results["mm_ce"], test_results["mm_ce"]),
+                    ("mm_mse", train_results["mm_mse"], test_results["mm_mse"]),
+                ]
+            )
 
         for prefix, train_sig, test_sig in attacks:
             m = compute_roc_metrics_single_step(train_sig, test_sig)

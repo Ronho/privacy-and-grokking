@@ -12,9 +12,10 @@ from privacy_and_grokking.datasets.datasets import Datasets, Normalization, get_
 
 def _handler(y):
     if isinstance(y, torch.Tensor):
-        return y.detach().clone().to(dtype=torch.long) 
+        return y.detach().clone().to(dtype=torch.long)
     else:
         return torch.tensor(y, dtype=torch.long)
+
 
 class CanarySubset(TensorDataset):
     def __init__(

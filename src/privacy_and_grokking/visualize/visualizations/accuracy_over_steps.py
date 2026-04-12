@@ -1,0 +1,25 @@
+from matplotlib import pyplot as plt
+
+from privacy_and_grokking.utils import Logger
+from privacy_and_grokking.visualize.handler import DataHandler
+from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data
+
+
+def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
+    logger = Logger.get()
+    logger.info("Creating accuracy over steps plot.", extra={"run_id": dh.run_id})
+
+    train = dh.get_metric_history("validation.train.accuracy")
+    test = dh.get_metric_history("validation.test.accuracy")
+
+    if not train or not test:
+        handle_missing_data(ax, dh.run_id, "accuracy over steps")
+        return
+
+    ax.set_xlabel(STEP_LABEL)
+    ax.set_ylabel("Accuracy")
+    ax.plot(train["steps"], train["values"], label="Train", color="tab:blue")
+    ax.plot(test["steps"], test["values"], label="Test", color="tab:red")
+    ax.legend(loc="best")
+
+    logger.info("Created accuracy over steps plot.", extra={"run_id": dh.run_id})

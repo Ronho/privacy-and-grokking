@@ -1,7 +1,6 @@
 import os
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Annotated
 
 import typer
 from typer import Typer
@@ -106,25 +105,14 @@ def extract(
 def visualize_single(
     exp_name: str,
     run_id: str,
-    include: Annotated[
-        list[str] | None,
-        typer.Option("--include", help="Visualization names to include (default: all)."),
-    ] = None,
-    exclude: Annotated[
-        list[str] | None,
-        typer.Option("--exclude", help="Visualization names to exclude."),
-    ] = None,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
 ):
-    from privacy_and_grokking.visualize import SINGLE_VIZ_NAMES, visualization_single_handler
-
-    effective_include: list[str] | None = include
-    if exclude:
-        all_names = include if include is not None else list(SINGLE_VIZ_NAMES)
-        effective_include = [n for n in all_names if n not in exclude]
+    from privacy_and_grokking.visualize import visualization_single_handler
 
     with Logger() as logger:
         logger.info("Starting single-run visualization handler.", extra={"run_id": run_id})
-        visualization_single_handler(exp_name, run_id, include=effective_include)
+        visualization_single_handler(exp_name, run_id, include=include, exclude=exclude)
         logger.info("Single-run visualization handler completed.")
 
 
@@ -132,25 +120,14 @@ def visualize_single(
 def visualize_multi(
     exp_name: str,
     run_ids: list[str],
-    include: Annotated[
-        list[str] | None,
-        typer.Option("--include", help="Visualization names to include (default: all)."),
-    ] = None,
-    exclude: Annotated[
-        list[str] | None,
-        typer.Option("--exclude", help="Visualization names to exclude."),
-    ] = None,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
 ):
-    from privacy_and_grokking.visualize import MULTI_VIZ_NAMES, visualization_multi_handler
-
-    effective_include: list[str] | None = include
-    if exclude:
-        all_names = include if include is not None else list(MULTI_VIZ_NAMES)
-        effective_include = [n for n in all_names if n not in exclude]
+    from privacy_and_grokking.visualize import visualization_multi_handler
 
     with Logger() as logger:
         logger.info("Starting multi-run visualization handler.", extra={"run_ids": run_ids})
-        visualization_multi_handler(exp_name, run_ids, include=effective_include)
+        visualization_multi_handler(exp_name, run_ids, include=include, exclude=exclude)
         logger.info("Multi-run visualization handler completed.")
 
 
@@ -225,9 +202,11 @@ def process(path: str, num_workers: int):
     with open(path) as f, Pool(num_workers) as pool:
         pool.map(_handle, f)
 
+
 @app.command()
 def command():
     from pathlib import Path
+
     configs = Path("./configs")
     commands = Path("./commands")
     command = commands / "train.txt"
@@ -235,7 +214,9 @@ def command():
     lines = []
     for config in configs.iterdir():
         for i in range(num_samples):
-            lines.append(f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem} --checkpoint-frequency 25000")
+            lines.append(
+                f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem} --checkpoint-frequency 25000"
+            )
     command.parent.mkdir(parents=True, exist_ok=True)
     command.write_text("\n".join(lines), encoding="utf-8")
 

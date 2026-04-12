@@ -78,10 +78,7 @@ def _get_datasets(cfg: TrainConfig):
     pin_memory = torch.cuda.is_available()
 
     train_loader = torch.utils.data.DataLoader(
-        train_sub,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        pin_memory=pin_memory
+        train_sub, batch_size=cfg.batch_size, shuffle=False, pin_memory=pin_memory
     )
     test_loader = torch.utils.data.DataLoader(
         test_sub,
