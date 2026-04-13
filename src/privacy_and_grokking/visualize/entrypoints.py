@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import mlflow
 
 from privacy_and_grokking.utils import Logger, setup_mlflow
-from privacy_and_grokking.visualize.handler import visualization_multi, visualization_single
+from privacy_and_grokking.visualize.handler import (
+    visualization_multi,
+    visualization_multi_groups,
+    visualization_single,
+)
 from privacy_and_grokking.visualize.visualizations import MULTI_VIZ_NAMES, SINGLE_VIZ_NAMES
 
 _MAX_CONCURRENT_GROUP_PROCESSES = 20
@@ -62,6 +66,7 @@ def visualization_multi_handler(
     exclude: list[str] | None = None,
     postfix: str | None = None,
     group: bool = False,
+    aggregate: bool = False,
 ):
     logger = Logger.get()
     setup_mlflow(exp_name)
@@ -85,6 +90,9 @@ def visualization_multi_handler(
     if not resolved_run_ids:
         raise ValueError("No runs found for visualization.")
 
+    if aggregate and not group:
+        raise ValueError("--aggregate requires --group to be set as well.")
+
     if group:
         client = mlflow.tracking.MlflowClient()
         groups: dict[str, list[str]] = {}
@@ -97,6 +105,16 @@ def visualization_multi_handler(
             f"Grouping {len(resolved_run_ids)} runs into {len(groups)} groups.",
             extra={"groups": {k: len(v) for k, v in groups.items()}},
         )
+
+        if aggregate:
+            visualizations = extract_visualizations(MULTI_VIZ_NAMES, include=include, exclude=exclude)
+            logger.info(
+                "Producing aggregated group figure.",
+                visualizations=sorted(visualizations),
+            )
+            visualization_multi_groups(groups, visualizations, postfix=postfix)
+            logger.info("Aggregate group visualization complete.")
+            return
 
         def _run_group(group_name: str, group_run_ids: list[str]) -> str:
             cmd = [

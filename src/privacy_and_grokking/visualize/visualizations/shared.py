@@ -51,3 +51,30 @@ def handle_missing_data(ax: plt.Axes, run_id: str, plot_name: str):
         va="center",
         transform=ax.transAxes,
     )
+
+
+def plot_with_band(
+    ax: plt.Axes,
+    data: dict,
+    color: str,
+    label: str,
+    **kwargs,
+):
+    """Plot a line with an optional shaded band.
+
+    If *data* contains ``band_low`` and ``band_high`` keys (produced by
+    :class:`~privacy_and_grokking.visualize.handler.GroupDataHandler`), a ±std
+    shaded region is drawn around the centre line.  For ordinary single-run
+    data the call behaves identically to ``ax.plot``.
+    """
+    steps = data["steps"]
+    values = data["values"]
+    ax.plot(steps, values, color=color, label=label, **kwargs)
+    if data.get("band_low") is not None and data.get("band_high") is not None:
+        ax.fill_between(
+            steps,
+            data["band_low"],
+            data["band_high"],
+            alpha=0.2,
+            color=color,
+        )

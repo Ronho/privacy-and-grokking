@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
-from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data
+from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data, plot_with_band
 
 
 def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
@@ -18,8 +18,8 @@ def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
 
     ax.set_xlabel(STEP_LABEL)
     ax.set_ylabel("Accuracy")
-    ax.plot(train["steps"], train["values"], label="Train", color="tab:blue")
-    ax.plot(test["steps"], test["values"], label="Test", color="tab:red")
+    plot_with_band(ax, train, color="tab:blue", label="Train")
+    plot_with_band(ax, test, color="tab:red", label="Test")
     ax.legend(loc="best")
 
     logger.info("Created accuracy over steps plot.", extra={"run_id": dh.run_id})

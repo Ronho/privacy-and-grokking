@@ -7,6 +7,7 @@ from privacy_and_grokking.visualize.visualizations.shared import (
     MIA_COLORS,
     STEP_LABEL,
     handle_missing_data,
+    plot_with_band,
 )
 
 
@@ -32,7 +33,7 @@ def mia_tpr_at_fpr_over_steps(ax: plt.Axes, dh: DataHandler, fpr_pct: int = 5):
         base = key[len(prefix) : -len(suffix)]
         label = MIA_BASE_NICE_NAMES.get(base, base)
         color = MIA_COLORS.get(base, "tab:gray")
-        ax.plot(data["steps"], data["values"], label=label, color=color, linewidth=1.5)
+        plot_with_band(ax, data, color=color, label=label, linewidth=1.5)
 
     random_baseline = fpr_pct / 100
     ax.axhline(

@@ -7,6 +7,7 @@ from privacy_and_grokking.visualize.visualizations.shared import (
     MIA_COLORS,
     STEP_LABEL,
     handle_missing_data,
+    plot_with_band,
 )
 
 
@@ -29,7 +30,7 @@ def mia_auc_over_steps(ax: plt.Axes, dh: DataHandler):
         base = key[len(prefix) : -len(suffix)]
         label = MIA_BASE_NICE_NAMES.get(base, base)
         color = MIA_COLORS.get(base, "tab:gray")
-        ax.plot(data["steps"], data["values"], label=label, color=color, linewidth=1.5)
+        plot_with_band(ax, data, color=color, label=label, linewidth=1.5)
 
     ax.axhline(0.5, color="black", linestyle="--", linewidth=1, alpha=0.5, label="Random (0.5)")
     ax.set_xlabel(STEP_LABEL)

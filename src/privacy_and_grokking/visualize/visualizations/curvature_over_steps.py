@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
-from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data
+from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data, plot_with_band
 
 
 def curvature_over_steps(ax: plt.Axes, dh: DataHandler):
@@ -19,21 +19,15 @@ def curvature_over_steps(ax: plt.Axes, dh: DataHandler):
     ax2 = ax.twinx()
 
     if trace["steps"]:
-        ax.plot(
-            trace["steps"],
-            trace["values"],
-            color="tab:blue",
-            linewidth=1.5,
-            label="tr(H) (Hutchinson)",
-        )
+        plot_with_band(ax, trace, color="tab:blue", label="tr(H) (Hutchinson)", linewidth=1.5)
     if top_eig["steps"]:
-        ax2.plot(
-            top_eig["steps"],
-            top_eig["values"],
+        plot_with_band(
+            ax2,
+            top_eig,
             color="tab:orange",
+            label="λ_max(H) (power iter.)",
             linewidth=1.5,
             linestyle="--",
-            label="λ_max(H) (power iter.)",
         )
 
     ax.set_xlabel(STEP_LABEL)

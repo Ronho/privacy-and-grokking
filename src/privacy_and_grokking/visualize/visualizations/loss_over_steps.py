@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from privacy_and_grokking.config.model import TrainConfig
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
-from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data
+from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data, plot_with_band
 
 
 def loss_over_steps(ax: plt.Axes, dh: DataHandler):
@@ -44,25 +44,28 @@ def loss_over_steps(ax: plt.Axes, dh: DataHandler):
     ax.set_xlabel(STEP_LABEL)
     ax.set_ylabel("Loss")
 
-    ax.plot(train_steps, train_values, label="Train (mean)", color="tab:blue")
-    ax.fill_between(
-        train_steps,
-        [m - s for m, s in zip(train_values, train_std_values)],
-        [m + s for m, s in zip(train_values, train_std_values)],
-        alpha=0.2,
-        color="tab:blue",
-        label="Train (±std)",
-    )
+    plot_with_band(ax, train_mean, color="tab:blue", label="Train (mean)")
+    if not train_mean.get("band_low"):
+        # Per-run within-step std band (only shown for single runs, not group aggregates)
+        ax.fill_between(
+            train_steps,
+            [m - s for m, s in zip(train_values, train_std_values)],
+            [m + s for m, s in zip(train_values, train_std_values)],
+            alpha=0.2,
+            color="tab:blue",
+            label="Train (±std)",
+        )
 
-    ax.plot(test_steps, test_values, label="Test (mean)", color="tab:red")
-    ax.fill_between(
-        test_steps,
-        [m - s for m, s in zip(test_values, test_std_values)],
-        [m + s for m, s in zip(test_values, test_std_values)],
-        alpha=0.2,
-        color="tab:red",
-        label="Test (±std)",
-    )
+    plot_with_band(ax, test_mean, color="tab:red", label="Test (mean)")
+    if not test_mean.get("band_low"):
+        ax.fill_between(
+            test_steps,
+            [m - s for m, s in zip(test_values, test_std_values)],
+            [m + s for m, s in zip(test_values, test_std_values)],
+            alpha=0.2,
+            color="tab:red",
+            label="Test (±std)",
+        )
 
     ax2 = ax.twinx()
     ax2.set_ylabel("Overlap", color="tab:orange")

@@ -123,12 +123,20 @@ def visualize_multi(
     include: list[str] | None = None,
     exclude: list[str] | None = None,
     group: bool = False,
+    aggregate: bool = False,
     postfix: str | None = None,
 ):
     with Logger() as logger:
         logger.info("Starting multi-run visualization handler.", extra={"run_ids": run_ids})
         visualization_multi_handler(
-            exp_name, run_ids, tag, include=include, exclude=exclude, postfix=postfix, group=group
+            exp_name,
+            run_ids,
+            tag,
+            include=include,
+            exclude=exclude,
+            postfix=postfix,
+            group=group,
+            aggregate=aggregate,
         )
         logger.info("Multi-run visualization handler completed.")
 

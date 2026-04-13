@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
-from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data
+from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data, plot_with_band
 
 _STAT_COLORS = {
     "norm": "tab:blue",
@@ -32,12 +32,12 @@ def optimizer_internals(ax: plt.Axes, dh: DataHandler, state_key: str) -> None:
         data = dh.get_metric_history(f"optimizer/{state_key}/{stat}")
         if data["steps"]:
             has_data = True
-            ax.plot(
-                data["steps"],
-                data["values"],
+            plot_with_band(
+                ax,
+                data,
                 color=_STAT_COLORS.get(stat, "tab:blue"),
-                linewidth=1.5,
                 label=_STAT_LABELS.get(stat, stat),
+                linewidth=1.5,
             )
 
     if not has_data:

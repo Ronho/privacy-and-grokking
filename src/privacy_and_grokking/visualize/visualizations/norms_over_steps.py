@@ -6,6 +6,7 @@ from privacy_and_grokking.visualize.visualizations.shared import (
     LAYER_COLORS,
     STEP_LABEL,
     TOTAL_COLOR,
+    plot_with_band,
 )
 
 
@@ -27,19 +28,11 @@ def _plot_norms_over_steps(ax: plt.Axes, dh: DataHandler, prefix: str, ylabel: s
         color = LAYER_COLORS[seen[base] % len(LAYER_COLORS)]
         linestyle = "--" if name.endswith(".bias") else "-"
         data = dh.get_metric_history(key)
-        ax.plot(
-            data["steps"],
-            data["values"],
-            label=name,
-            color=color,
-            linestyle=linestyle,
-            linewidth=1,
-            alpha=0.8,
-        )
+        plot_with_band(ax, data, color=color, label=name, linestyle=linestyle, linewidth=1, alpha=0.8)
 
     if total_key in all_keys:
         data = dh.get_metric_history(total_key)
-        ax.plot(data["steps"], data["values"], label="total", color=TOTAL_COLOR, linewidth=2)
+        plot_with_band(ax, data, color=TOTAL_COLOR, label="total", linewidth=2)
 
     ax.set_xlabel(STEP_LABEL)
     ax.set_ylabel(ylabel)

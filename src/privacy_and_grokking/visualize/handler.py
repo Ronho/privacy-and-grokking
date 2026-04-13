@@ -71,6 +71,70 @@ class DataHandler:
             return None
 
 
+class GroupDataHandler:
+    """Aggregates metric histories from multiple :class:`DataHandler` instances.
+
+    For every metric key the histories from all runs are aligned on the
+    intersection of their steps, then ``mean`` and ``std`` (population) are
+    computed across runs.  The returned dict gains ``band_low`` /
+    ``band_high`` keys (mean ± std) that
+    :func:`~privacy_and_grokking.visualize.visualizations.shared.plot_with_band`
+    uses to shade the uncertainty region.
+    """
+
+    def __init__(self, group_name: str, data_handlers: list[DataHandler]):
+        self.group_name = group_name
+        # ``run_id`` is used by visualization functions for logging / titles.
+        self.run_id = group_name
+        self._handlers = data_handlers
+
+    def get_metric_history(self, metric_name: str) -> dict:
+        """Return mean ± std across runs, aligned on the intersected step set."""
+        histories = [dh.get_metric_history(metric_name) for dh in self._handlers]
+        non_empty = [h for h in histories if h["steps"]]
+        if not non_empty:
+            return {"steps": [], "values": [], "band_low": [], "band_high": []}
+
+        # Intersection of steps present in every run that has data.
+        common_steps: set[int] = set(non_empty[0]["steps"])
+        for h in non_empty[1:]:
+            common_steps &= set(h["steps"])
+        common_steps_sorted = sorted(common_steps)
+
+        if not common_steps_sorted:
+            return {"steps": [], "values": [], "band_low": [], "band_high": []}
+
+        step_to_values: dict[int, list[float]] = {s: [] for s in common_steps_sorted}
+        for h in non_empty:
+            step_val = dict(zip(h["steps"], h["values"]))
+            for s in common_steps_sorted:
+                if s in step_val:
+                    step_to_values[s].append(step_val[s])
+
+        means = np.array([np.mean(step_to_values[s]) for s in common_steps_sorted])
+        stds = np.array([np.std(step_to_values[s], ddof=0) for s in common_steps_sorted])
+
+        return {
+            "steps": common_steps_sorted,
+            "values": means.tolist(),
+            "band_low": (means - stds).tolist(),
+            "band_high": (means + stds).tolist(),
+        }
+
+    def discover_keys(self, prefix: str) -> list[str]:
+        """Union of all metric keys across every handler."""
+        all_keys: set[str] = set()
+        for dh in self._handlers:
+            all_keys.update(dh.discover_keys(prefix))
+        return sorted(all_keys)
+
+    def load_weight_trajectory(self) -> dict:
+        return {}
+
+    def load_activation_data(self) -> dict | None:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Dispatch helpers
 # ---------------------------------------------------------------------------
@@ -302,6 +366,109 @@ def visualization_multi(
         path = Path(tmpdir) / f"{filename}.pdf"
         fig.savefig(str(path), bbox_inches="tight")
         for rid in run_ids:
+            mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
+
+    plt.close(fig)
+
+
+def visualization_multi_groups(
+    groups: dict[str, list[str]],
+    visualizations: list[str],
+    postfix: str | None = None,
+) -> None:
+    """Create one aggregated comparison figure with a column per group.
+
+    Each cell shows the **mean ± std** across all runs in the group,
+    rendered via :func:`plot_with_band`.  The figure is saved as a PDF
+    artifact for every run across all groups.
+    """
+    logger = Logger.get()
+
+    group_names = list(groups.keys())
+    group_handlers: list[GroupDataHandler] = [
+        GroupDataHandler(name, [DataHandler(rid) for rid in run_ids])
+        for name, run_ids in groups.items()
+    ]
+
+    # Discover rows from the first run of the first group so that layer /
+    # optimizer-state expansion works even in aggregate mode.
+    probe_handler = group_handlers[0]._handlers[0] if group_handlers[0]._handlers else None
+    if probe_handler is None:
+        logger.warning("No runs found in first group, cannot produce aggregate figure.")
+        return
+
+    row_specs = _discover_dynamic_rows(probe_handler, visualizations)
+    if not row_specs:
+        logger.warning("No visualization rows resolved.", extra={"groups": group_names})
+        return
+
+    n_rows = len(row_specs)
+    n_cols = len(group_names)
+    col_w, row_h = 6.0, 5.0
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(col_w * n_cols, row_h * n_rows),
+        squeeze=False,
+    )
+
+    for row, (row_label, plot_func) in enumerate(row_specs):
+        for col, gdh in enumerate(group_handlers):
+            ax = axes[row][col]
+            try:
+                plot_func(ax, gdh)
+            except Exception as exc:
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"Error:\n{exc}",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                    fontsize=7,
+                    color="tab:red",
+                    wrap=True,
+                )
+            ax.set_yscale("linear")
+            ax.set_xscale("linear")
+            ax.grid(True, alpha=0.3, which="major", axis="both")
+
+            if row == 0:
+                n_runs = len(groups[group_names[col]])
+                ax.set_title(
+                    group_names[col],
+                    fontsize=9,
+                    fontweight="bold",
+                    loc="center",
+                )
+                ax.text(
+                    0.5,
+                    1.02,
+                    f"{n_runs} run{'s' if n_runs != 1 else ''} — mean ± std",
+                    transform=ax.transAxes,
+                    fontsize=6,
+                    color="#888888",
+                    ha="center",
+                    va="bottom",
+                )
+
+            if col == 0:
+                ax.set_ylabel(
+                    f"{row_label}\n{ax.get_ylabel()}",
+                    fontsize=7,
+                )
+
+    fig.tight_layout()
+
+    filename = "multi_group_aggregated"
+    if postfix:
+        filename = f"{filename}_{postfix}"
+
+    all_run_ids = [rid for run_ids in groups.values() for rid in run_ids]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / f"{filename}.pdf"
+        fig.savefig(str(path), bbox_inches="tight")
+        for rid in all_run_ids:
             mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
 
     plt.close(fig)
