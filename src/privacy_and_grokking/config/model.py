@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 
-from privacy_and_grokking.config.loss import Loss
+from privacy_and_grokking.config.loss import Loss, MMDLogitRegularizerConfig
 from privacy_and_grokking.config.optimizer import Optimizer
 from privacy_and_grokking.config.scheduler import Scheduler
 from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
@@ -20,6 +20,7 @@ class TrainConfig(BaseModel):
     dataset: DatasetConfig
     dataset_mask: MaskingConfig
     dataset_mask_idx: int = 0
+    mmd: MMDLogitRegularizerConfig | None = None
 
     @property
     def name(self) -> str:

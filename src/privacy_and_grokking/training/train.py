@@ -166,6 +166,42 @@ def train_handle(
     )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
+    # ── MMD logit regularizer setup ─────────────────────────────────────────────
+    # Hold out `samples_per_class` samples per class from the training split.
+    # These become the proxy non-member reference; the rest form the member
+    # distribution (represented each step by the current training mini-batch).
+    mmd_reg = None
+    proxy_nonmember_x: torch.Tensor | None = None
+    if config.mmd is not None:
+        mmd_reg = config.mmd.build().to(device)
+        logger.info(
+            "MMD logit regularizer enabled",
+            weight=config.mmd.weight,
+            samples_per_class=config.mmd.samples_per_class,
+            var=config.mmd.var,
+        )
+        # Collect `samples_per_class` indices per class from the training split.
+        _per_class: dict[int, list[int]] = {}
+        for _idx in range(len(train_subset)):
+            _, _label = train_subset[_idx]
+            _lbl = int(_label)
+            if _lbl not in _per_class:
+                _per_class[_lbl] = []
+            if len(_per_class[_lbl]) < config.mmd.samples_per_class:
+                _per_class[_lbl].append(_idx)
+            # Early exit once all classes have enough samples.
+            if all(len(v) >= config.mmd.samples_per_class for v in _per_class.values()):
+                break
+        _proxy_indices = [idx for indices in _per_class.values() for idx in indices]
+        _proxy_xs = [train_subset[i][0] for i in _proxy_indices]
+        proxy_nonmember_x = torch.stack(_proxy_xs).to(device)
+        logger.info(
+            "Proxy non-member set built",
+            n_samples=len(_proxy_indices),
+            n_classes=len(_per_class),
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     logger.info("Preparing model.")
     model = create_model(
         name=config.model,
@@ -259,10 +295,32 @@ def train_handle(
                 optimizer.zero_grad()
                 logits = model(x)
                 loss = loss_fn(logits, y)
+
+                # ── MMD logit regularization ──────────────────────────────────
+                mmd_log: dict[str, float] = {}
+                if mmd_reg is not None:
+                    with torch.no_grad():
+                        f_proxy  = model(proxy_nonmember_x)
+                    mmd_val  = mmd_reg(logits, f_proxy)
+                    loss     = loss + config.mmd.weight * mmd_val
+                    _should_log = (
+                        (step < 50)
+                        or (step < LOG_FREQUENCY and step % 100 == 0)
+                        or (step % LOG_FREQUENCY == 0)
+                    )
+                    if _should_log:
+                        mmd_log = {
+                            "reg/mmd/mmd2":  mmd_val.detach().item(),
+                            "reg/mmd/loss": (config.mmd.weight * mmd_val).detach().item(),
+                        }
+                # ────────────────────────────────────────────────────────────
+
                 loss.backward()
 
                 optimizer.step()
                 scheduler.step()
+                if mmd_log:
+                    mlflow.log_metrics(mmd_log, step=step)
 
                 step += 1
                 if prof is not None:
