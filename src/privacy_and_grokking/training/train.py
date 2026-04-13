@@ -141,6 +141,45 @@ def train_handle(
     )
     train_subset = mask_dataset(masking, train, config.dataset_mask_idx)
 
+    mmd_reg = None
+    proxy_nonmember_x: torch.Tensor | None = None
+    if config.mmd is not None:
+        mmd_reg = config.mmd.build().to(device)
+        logger.info(
+            "MMD logit regularizer enabled",
+            weight=config.mmd.weight,
+            samples_per_class=config.mmd.samples_per_class,
+            var=config.mmd.var,
+        )
+        # Collect `samples_per_class` indices per class from the training split.
+        _per_class: dict[int, list[int]] = {}
+        for _idx in range(len(train_subset)):
+            _, _label = train_subset[_idx]
+            _lbl = int(_label)
+            if _lbl not in _per_class:
+                _per_class[_lbl] = []
+            if len(_per_class[_lbl]) < config.mmd.samples_per_class:
+                _per_class[_lbl].append(_idx)
+            # Early exit once all classes have enough samples.
+            if all(len(v) >= config.mmd.samples_per_class for v in _per_class.values()):
+                break
+        _proxy_indices = set(idx for indices in _per_class.values() for idx in indices)
+        _proxy_xs = [train_subset[i][0] for i in sorted(_proxy_indices)]
+        proxy_nonmember_x = torch.stack(_proxy_xs).to(device)
+
+        # Remove proxy samples from the training subset so they are not trained on.
+        _remaining_indices = [
+            i for i in range(len(train_subset)) if i not in _proxy_indices
+        ]
+        train_subset = torch.utils.data.Subset(train_subset, _remaining_indices)
+
+        logger.info(
+            "Proxy non-member set built",
+            n_samples=len(_proxy_indices),
+            n_classes=len(_per_class),
+            remaining_train_samples=len(train_subset),
+        )
+
     train_loader = torch.utils.data.DataLoader(
         GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
@@ -165,42 +204,6 @@ def train_handle(
         # num_workers=0,
     )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
-
-    # ── MMD logit regularizer setup ─────────────────────────────────────────────
-    # Hold out `samples_per_class` samples per class from the training split.
-    # These become the proxy non-member reference; the rest form the member
-    # distribution (represented each step by the current training mini-batch).
-    mmd_reg = None
-    proxy_nonmember_x: torch.Tensor | None = None
-    if config.mmd is not None:
-        mmd_reg = config.mmd.build().to(device)
-        logger.info(
-            "MMD logit regularizer enabled",
-            weight=config.mmd.weight,
-            samples_per_class=config.mmd.samples_per_class,
-            var=config.mmd.var,
-        )
-        # Collect `samples_per_class` indices per class from the training split.
-        _per_class: dict[int, list[int]] = {}
-        for _idx in range(len(train_subset)):
-            _, _label = train_subset[_idx]
-            _lbl = int(_label)
-            if _lbl not in _per_class:
-                _per_class[_lbl] = []
-            if len(_per_class[_lbl]) < config.mmd.samples_per_class:
-                _per_class[_lbl].append(_idx)
-            # Early exit once all classes have enough samples.
-            if all(len(v) >= config.mmd.samples_per_class for v in _per_class.values()):
-                break
-        _proxy_indices = [idx for indices in _per_class.values() for idx in indices]
-        _proxy_xs = [train_subset[i][0] for i in _proxy_indices]
-        proxy_nonmember_x = torch.stack(_proxy_xs).to(device)
-        logger.info(
-            "Proxy non-member set built",
-            n_samples=len(_proxy_indices),
-            n_classes=len(_per_class),
-        )
-    # ─────────────────────────────────────────────────────────────────────────
 
     logger.info("Preparing model.")
     model = create_model(
