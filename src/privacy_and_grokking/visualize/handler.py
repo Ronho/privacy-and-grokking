@@ -376,11 +376,12 @@ def visualization_multi_groups(
     visualizations: list[str],
     postfix: str | None = None,
 ) -> None:
-    """Create one aggregated comparison figure with a column per group.
+    """Create one aggregated figure per group.
 
-    Each cell shows the **mean ± std** across all runs in the group,
-    rendered via :func:`plot_with_band`.  The figure is saved as a PDF
-    artifact for every run across all groups.
+    Each figure stacks all requested visualizations vertically and shows the
+    **mean ± std** across all runs in the group, rendered via
+    :func:`plot_with_band`.  The figure is saved as a PDF artifact for every
+    run in the respective group.
     """
     logger = Logger.get()
 
@@ -403,72 +404,71 @@ def visualization_multi_groups(
         return
 
     n_rows = len(row_specs)
-    n_cols = len(group_names)
     col_w, row_h = 6.0, 5.0
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=(col_w * n_cols, row_h * n_rows),
-        squeeze=False,
-    )
 
-    for row, (row_label, plot_func) in enumerate(row_specs):
-        for col, gdh in enumerate(group_handlers):
-            ax = axes[row][col]
-            try:
-                plot_func(ax, gdh)
-            except Exception as exc:
-                ax.text(
-                    0.5,
-                    0.5,
-                    f"Error:\n{exc}",
-                    ha="center",
-                    va="center",
-                    transform=ax.transAxes,
-                    fontsize=7,
-                    color="tab:red",
-                    wrap=True,
-                )
-            ax.set_yscale("linear")
-            ax.set_xscale("linear")
-            ax.grid(True, alpha=0.3, which="major", axis="both")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for gdh, (group_name, run_ids_for_group) in zip(group_handlers, groups.items()):
+            fig, axes = plt.subplots(
+                n_rows,
+                1,
+                figsize=(col_w, row_h * n_rows),
+                squeeze=False,
+            )
 
-            if row == 0:
-                n_runs = len(groups[group_names[col]])
-                ax.set_title(
-                    group_names[col],
-                    fontsize=9,
-                    fontweight="bold",
-                    loc="center",
-                )
-                ax.text(
-                    0.5,
-                    1.02,
-                    f"{n_runs} run{'s' if n_runs != 1 else ''} — mean ± std",
-                    transform=ax.transAxes,
-                    fontsize=6,
-                    color="#888888",
-                    ha="center",
-                    va="bottom",
-                )
+            n_runs = len(run_ids_for_group)
+            for row, (row_label, plot_func) in enumerate(row_specs):
+                ax = axes[row][0]
+                try:
+                    plot_func(ax, gdh)
+                except Exception as exc:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        f"Error:\n{exc}",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                        fontsize=7,
+                        color="tab:red",
+                        wrap=True,
+                    )
+                ax.set_yscale("linear")
+                ax.set_xscale("linear")
+                ax.grid(True, alpha=0.3, which="major", axis="both")
 
-            if col == 0:
+                if row == 0:
+                    ax.set_title(
+                        group_name,
+                        fontsize=9,
+                        fontweight="bold",
+                        loc="center",
+                    )
+                    ax.text(
+                        0.5,
+                        1.02,
+                        f"{n_runs} run{'s' if n_runs != 1 else ''} — mean ± std",
+                        transform=ax.transAxes,
+                        fontsize=6,
+                        color="#888888",
+                        ha="center",
+                        va="bottom",
+                    )
+
                 ax.set_ylabel(
                     f"{row_label}\n{ax.get_ylabel()}",
                     fontsize=7,
                 )
 
-    fig.tight_layout()
+            fig.tight_layout()
 
-    filename = "multi_group_aggregated"
-    if postfix:
-        filename = f"{filename}_{postfix}"
+            safe_group_name = group_name.replace("/", "_").replace(" ", "_")
+            filename = f"multi_group_aggregated_{safe_group_name}"
+            if postfix:
+                filename = f"{filename}_{postfix}"
 
-    all_run_ids = [rid for run_ids in groups.values() for rid in run_ids]
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / f"{filename}.pdf"
-        fig.savefig(str(path), bbox_inches="tight")
-        for rid in all_run_ids:
-            mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
+            path = Path(tmpdir) / f"{filename}.pdf"
+            fig.savefig(str(path), bbox_inches="tight")
+            for rid in run_ids_for_group:
+                mlflow.log_artifact(str(path), artifact_path="visualizations", run_id=rid)
 
-    plt.close(fig)
+            plt.close(fig)
