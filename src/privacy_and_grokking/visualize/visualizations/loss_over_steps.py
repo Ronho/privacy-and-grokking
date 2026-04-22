@@ -29,6 +29,9 @@ def loss_over_steps(ax: plt.Axes, dh: DataHandler):
     test_mean = dh.get_metric_history(f"eval/test/loss/{loss_name}/mean")
     test_std = dh.get_metric_history(f"eval/test/loss/{loss_name}/std")
     overlap = dh.get_metric_history(f"eval/loss/{loss_name}/overlap")
+    soft_overlap = dh.get_metric_history(f"eval/loss/{loss_name}/soft_overlap")
+    kl_divergence = dh.get_metric_history(f"eval/loss/{loss_name}/kl_divergence")
+    mmd = dh.get_metric_history(f"eval/loss/{loss_name}/mmd")
 
     if not all([x["steps"] for x in (train_mean, train_std, test_mean, test_std, overlap)]):
         handle_missing_data(ax, dh.run_id, "loss over steps")
@@ -68,12 +71,37 @@ def loss_over_steps(ax: plt.Axes, dh: DataHandler):
         )
 
     ax2 = ax.twinx()
-    ax2.set_ylabel("Overlap", color="tab:orange")
+    ax2.set_ylabel("Distribution Metrics")
     ax2.set_ylim(0, 1)
     ax2.plot(
         overlap["steps"], overlap["values"], label="Overlap", color="tab:orange", linestyle="--"
     )
-    ax2.tick_params(axis="y", labelcolor="tab:orange")
+    if soft_overlap["steps"]:
+        ax2.plot(
+            soft_overlap["steps"],
+            soft_overlap["values"],
+            label="Soft Overlap",
+            color="tab:green",
+            linestyle="--",
+        )
+    if kl_divergence["steps"]:
+        ax2.plot(
+            kl_divergence["steps"],
+            kl_divergence["values"],
+            label="KL Divergence",
+            color="tab:purple",
+            linestyle="--",
+        )
+        # KL divergence is unbounded; let matplotlib auto-scale the upper limit
+        ax2.set_ylim(bottom=0)
+    if mmd["steps"]:
+        ax2.plot(
+            mmd["steps"],
+            mmd["values"],
+            label="MMD",
+            color="tab:brown",
+            linestyle="--",
+        )
 
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()

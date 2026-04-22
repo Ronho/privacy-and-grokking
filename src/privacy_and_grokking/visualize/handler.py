@@ -219,7 +219,7 @@ def _single_image_handler(dh: DataHandler, plot_func, filename: str):
         ax.set_yscale("linear")
         ax.set_xscale("linear")
         ax.grid(True, alpha=0.3, which="major", axis="both")
-        fig.suptitle(run_name)
+        fig.suptitle(f"{run_name}\n{dh.run_id}", fontsize=10)
         fig.tight_layout()
 
         _save_figure_to_mlflow(fig, filename, run_id=dh.run_id)
@@ -266,7 +266,7 @@ def visualization_single(
                     ax.set_xscale("linear")
                     ax.grid(True, alpha=0.3, which="major", axis="both")
                     ax.set_title(row_label, fontsize=8)
-                fig.suptitle(run_name)
+                fig.suptitle(f"{run_name}\n{run_id}", fontsize=10)
                 fig.tight_layout()
                 _save_figure_to_mlflow(fig, viz_name, run_id=run_id)
             except Exception as exc:
@@ -330,23 +330,13 @@ def visualization_multi(
             ax.set_xscale("linear")
             ax.grid(True, alpha=0.3, which="major", axis="both")
 
-            # Column header on the top row: bold run name + faded run ID
+            # Column header on the top row: run name + run ID
             if row == 0:
                 ax.set_title(
-                    run_names[col],
+                    f"{run_names[col]}\n{run_ids[col]}",
                     fontsize=9,
                     fontweight="bold",
                     loc="center",
-                )
-                ax.text(
-                    0.5,
-                    1.02,
-                    run_ids[col],
-                    transform=ax.transAxes,
-                    fontsize=6,
-                    color="#888888",
-                    ha="center",
-                    va="bottom",
                 )
 
             # Row label on the left column
@@ -438,20 +428,10 @@ def visualization_multi_groups(
 
                 if row == 0:
                     ax.set_title(
-                        group_name,
+                        f"{group_name}\n{n_runs} run{'s' if n_runs != 1 else ''} — mean ± std",
                         fontsize=9,
                         fontweight="bold",
                         loc="center",
-                    )
-                    ax.text(
-                        0.5,
-                        1.02,
-                        f"{n_runs} run{'s' if n_runs != 1 else ''} — mean ± std",
-                        transform=ax.transAxes,
-                        fontsize=6,
-                        color="#888888",
-                        ha="center",
-                        va="bottom",
                     )
 
                 ax.set_ylabel(

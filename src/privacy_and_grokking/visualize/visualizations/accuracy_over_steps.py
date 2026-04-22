@@ -18,6 +18,7 @@ def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
 
     ax.set_xlabel(STEP_LABEL)
     ax.set_ylabel("Accuracy")
+    ax.set_ylim(0, 1)
     plot_with_band(ax, train, color="tab:blue", label="Train")
     plot_with_band(ax, test, color="tab:red", label="Test")
     ax.legend(loc="best")
