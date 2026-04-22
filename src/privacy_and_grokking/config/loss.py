@@ -45,6 +45,29 @@ class OverlapRegularizerConfig(BaseModel):
         return OverlapRegularizer(n_bins=self.n_bins, sigma=self.sigma)
 
 
+class OverlapAdaptiveRegularizerConfig(BaseModel):
+    name: Literal["overlap_adaptive"] = "overlap_adaptive"
+    weight: float = 0.1
+    max_bins: int = 100
+    sigma: float = 0.05
+
+    def __call__(self) -> "torch.nn.Module":
+        from privacy_and_grokking.losses import OverlapAdaptiveRegularizer
+
+        return OverlapAdaptiveRegularizer(max_bins=self.max_bins, sigma=self.sigma)
+
+
+class OverlapKDERegularizerConfig(BaseModel):
+    name: Literal["overlap_kde"] = "overlap_kde"
+    weight: float = 0.1
+    n_points: int = 200
+
+    def __call__(self) -> "torch.nn.Module":
+        from privacy_and_grokking.losses import OverlapKDERegularizer
+
+        return OverlapKDERegularizer(n_points=self.n_points)
+
+
 class MMDRegularizerConfig(BaseModel):
     name: Literal["mmd"] = "mmd"
     weight: float = 0.1
@@ -57,5 +80,9 @@ class MMDRegularizerConfig(BaseModel):
 
 
 Regularizer = Annotated[
-    OverlapRegularizerConfig | MMDRegularizerConfig, Field(discriminator="name")
+    OverlapRegularizerConfig
+    | OverlapAdaptiveRegularizerConfig
+    | OverlapKDERegularizerConfig
+    | MMDRegularizerConfig,
+    Field(discriminator="name"),
 ]

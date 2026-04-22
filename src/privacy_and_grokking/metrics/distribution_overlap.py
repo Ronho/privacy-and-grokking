@@ -1,4 +1,19 @@
+import math
+
+import numpy as np
 import torch
+from scipy.stats import gaussian_kde
+
+
+def _adaptive_bins(n_a: int, n_b: int, max_bins: int = 100) -> int:
+    """Scale bin count with the smaller sample (cube-root rule)."""
+    n_min = min(n_a, n_b)
+    return min(max_bins, max(10, int(math.ceil(n_min ** (1 / 3) * 2))))
+
+
+# ---------------------------------------------------------------------------
+# Soft (differentiable) overlap — used as a regularizer
+# ---------------------------------------------------------------------------
 
 
 def soft_distribution_overlap(
@@ -83,6 +98,163 @@ def compute_distribution_overlap(
     return float(torch.minimum(hist_a, hist_b).sum().item())
 
 
+def compute_distribution_overlap_adaptive(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    max_bins: int = 100,
+) -> float:
+    """Histogram-intersection overlap with adaptive bin count.
+
+    Scales the number of bins with the smaller sample to avoid sparse-bin
+    artifacts when sample sizes are imbalanced (e.g. 256 vs 10,000).
+    """
+    dist_a = dist_a.flatten().float()
+    dist_b = dist_b.flatten().float()
+    dist_a = dist_a[torch.isfinite(dist_a)]
+    dist_b = dist_b[torch.isfinite(dist_b)]
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return 0.0
+
+    n_bins = _adaptive_bins(dist_a.numel(), dist_b.numel(), max_bins)
+    all_values = torch.cat([dist_a, dist_b])
+    lo = float(all_values.min().item())
+    hi = float(all_values.max().item())
+    if hi <= lo:
+        return 1.0
+
+    hist_a = torch.histc(dist_a, bins=n_bins, min=lo, max=hi)
+    hist_b = torch.histc(dist_b, bins=n_bins, min=lo, max=hi)
+    hist_a = hist_a / hist_a.sum().clamp(min=1e-12)
+    hist_b = hist_b / hist_b.sum().clamp(min=1e-12)
+    return float(torch.minimum(hist_a, hist_b).sum().item())
+
+
+def compute_distribution_overlap_kde(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    n_points: int = 200,
+) -> float:
+    """KDE-based overlap using Silverman bandwidth.
+
+    More accurate than histogram overlap for small or imbalanced samples
+    because the kernel density estimate adapts its smoothing to each
+    sample's size automatically.
+    """
+    a = dist_a.flatten().float().cpu().numpy()
+    b = dist_b.flatten().float().cpu().numpy()
+    a = a[np.isfinite(a)]
+    b = b[np.isfinite(b)]
+    if len(a) < 2 or len(b) < 2:
+        return 0.0
+
+    kde_a = gaussian_kde(a, bw_method="silverman")
+    kde_b = gaussian_kde(b, bw_method="silverman")
+
+    lo = min(a.min(), b.min())
+    hi = max(a.max(), b.max())
+    margin = (hi - lo) * 0.1
+    grid = np.linspace(lo - margin, hi + margin, n_points)
+    dx = grid[1] - grid[0]
+
+    pa = kde_a(grid)
+    pb = kde_b(grid)
+    return float(np.minimum(pa, pb).sum() * dx)
+
+
+# ---------------------------------------------------------------------------
+# Soft (differentiable) overlap — adaptive bins variant
+# ---------------------------------------------------------------------------
+
+
+def soft_distribution_overlap_adaptive(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    max_bins: int = 100,
+    sigma: float = 0.05,
+) -> torch.Tensor:
+    """Differentiable soft overlap with adaptive bin count.
+
+    Same Gaussian-kernel soft binning as :func:`soft_distribution_overlap`
+    but scales the number of bins with the smaller sample.
+    """
+    dist_a = dist_a.flatten()
+    dist_b = dist_b.flatten()
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return torch.tensor(0.0, device=dist_a.device)
+
+    n_bins = _adaptive_bins(dist_a.numel(), dist_b.numel(), max_bins)
+
+    with torch.no_grad():
+        all_vals = torch.cat([dist_a, dist_b])
+        lo = all_vals.min().item()
+        hi = all_vals.max().item()
+        if hi <= lo:
+            return torch.tensor(1.0, device=dist_a.device, requires_grad=dist_a.requires_grad)
+    centres = torch.linspace(lo, hi, n_bins, device=dist_a.device)
+
+    w_a = torch.exp(-0.5 * ((dist_a.unsqueeze(1) - centres.unsqueeze(0)) / sigma) ** 2)
+    w_b = torch.exp(-0.5 * ((dist_b.unsqueeze(1) - centres.unsqueeze(0)) / sigma) ** 2)
+
+    hist_a = w_a.sum(dim=0) / w_a.sum().clamp(min=1e-12)
+    hist_b = w_b.sum(dim=0) / w_b.sum().clamp(min=1e-12)
+
+    overlap = 0.5 * (hist_a + hist_b - (hist_a - hist_b).abs())
+    return overlap.sum()
+
+
+def soft_distribution_overlap_kde(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    n_points: int = 200,
+) -> torch.Tensor:
+    """Differentiable KDE-based overlap.
+
+    Uses scipy to compute Silverman bandwidths (detached), then evaluates
+    Gaussian KDE in PyTorch so gradients flow through *dist_a*.
+    """
+    dist_a = dist_a.flatten()
+    dist_b = dist_b.flatten()
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return torch.tensor(0.0, device=dist_a.device)
+
+    with torch.no_grad():
+        a_np = dist_a.detach().cpu().float().numpy()
+        b_np = dist_b.detach().cpu().float().numpy()
+        if len(a_np) < 2 or len(b_np) < 2:
+            return torch.tensor(0.0, device=dist_a.device)
+
+        bw_a = float(gaussian_kde(a_np, bw_method="silverman").factor)
+        bw_b = float(gaussian_kde(b_np, bw_method="silverman").factor)
+        std_a = float(np.std(a_np))
+        std_b = float(np.std(b_np))
+        sigma_a = max(bw_a * std_a, 1e-6)
+        sigma_b = max(bw_b * std_b, 1e-6)
+
+        lo = min(a_np.min(), b_np.min())
+        hi = max(a_np.max(), b_np.max())
+        margin = (hi - lo) * 0.1
+        grid_np = np.linspace(lo - margin, hi + margin, n_points)
+        dx = float(grid_np[1] - grid_np[0])
+
+    grid = torch.tensor(grid_np, device=dist_a.device, dtype=dist_a.dtype)  # (P,)
+
+    # KDE with gradients through dist_a: p_a(x) = (1/N) Σ K((x - x_i) / σ)
+    diff_a = grid.unsqueeze(1) - dist_a.unsqueeze(0)  # (P, N)
+    kde_a = torch.exp(-0.5 * (diff_a / sigma_a) ** 2).mean(dim=1)  # (P,)
+
+    diff_b = grid.unsqueeze(1) - dist_b.unsqueeze(0)  # (P, M)
+    kde_b = torch.exp(-0.5 * (diff_b / sigma_b) ** 2).mean(dim=1)  # (P,)
+
+    # Smooth min for differentiability
+    overlap = 0.5 * (kde_a + kde_b - (kde_a - kde_b).abs()) * dx
+    return overlap.sum()
+
+
+# ---------------------------------------------------------------------------
+# KL divergence
+# ---------------------------------------------------------------------------
+
+
 def compute_kl_divergence(
     dist_a: torch.Tensor,
     dist_b: torch.Tensor,
@@ -110,6 +282,67 @@ def compute_kl_divergence(
     p = hist_a / hist_a.sum()
     q = hist_b / hist_b.sum()
     return float((p * (p / q).log()).sum().item())
+
+
+def compute_kl_divergence_adaptive(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    max_bins: int = 100,
+) -> float:
+    """KL(dist_a || dist_b) with adaptive bin count."""
+    dist_a = dist_a.flatten().float()
+    dist_b = dist_b.flatten().float()
+    dist_a = dist_a[torch.isfinite(dist_a)]
+    dist_b = dist_b[torch.isfinite(dist_b)]
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return 0.0
+
+    n_bins = _adaptive_bins(dist_a.numel(), dist_b.numel(), max_bins)
+    all_values = torch.cat([dist_a, dist_b])
+    lo, hi = float(all_values.min()), float(all_values.max())
+    if hi <= lo:
+        return 0.0
+
+    hist_a = torch.histc(dist_a, bins=n_bins, min=lo, max=hi) + 1e-8
+    hist_b = torch.histc(dist_b, bins=n_bins, min=lo, max=hi) + 1e-8
+    p = hist_a / hist_a.sum()
+    q = hist_b / hist_b.sum()
+    return float((p * (p / q).log()).sum().item())
+
+
+def compute_kl_divergence_kde(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    n_points: int = 200,
+) -> float:
+    """KL(dist_a || dist_b) estimated via KDE with Silverman bandwidth."""
+    a = dist_a.flatten().float().cpu().numpy()
+    b = dist_b.flatten().float().cpu().numpy()
+    a = a[np.isfinite(a)]
+    b = b[np.isfinite(b)]
+    if len(a) < 2 or len(b) < 2:
+        return 0.0
+
+    kde_a = gaussian_kde(a, bw_method="silverman")
+    kde_b = gaussian_kde(b, bw_method="silverman")
+
+    lo = min(a.min(), b.min())
+    hi = max(a.max(), b.max())
+    margin = (hi - lo) * 0.1
+    grid = np.linspace(lo - margin, hi + margin, n_points)
+    dx = grid[1] - grid[0]
+
+    pa = np.maximum(kde_a(grid), 1e-12)
+    pb = np.maximum(kde_b(grid), 1e-12)
+    # Renormalize to proper densities over the grid
+    pa = pa / (pa.sum() * dx)
+    pb = pb / (pb.sum() * dx)
+    return float((pa * np.log(pa / pb)).sum() * dx)
+
+
+# ---------------------------------------------------------------------------
+# MMD
+# ---------------------------------------------------------------------------
 
 
 def compute_mmd(

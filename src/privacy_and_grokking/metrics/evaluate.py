@@ -10,7 +10,11 @@ import torch.nn.functional as F
 from privacy_and_grokking.metrics.curvature import curvature
 from privacy_and_grokking.metrics.distribution_overlap import (
     compute_distribution_overlap,
+    compute_distribution_overlap_adaptive,
+    compute_distribution_overlap_kde,
     compute_kl_divergence,
+    compute_kl_divergence_adaptive,
+    compute_kl_divergence_kde,
     compute_mmd,
     soft_distribution_overlap,
 )
@@ -156,8 +160,16 @@ def evaluate(
             t = train_results[f"{loss_key}_loss"]
             v = test_results[f"{loss_key}_loss"]
             metrics[f"loss/{loss_key}/overlap"] = compute_distribution_overlap(t, v)
+            metrics[f"loss/{loss_key}/overlap_adaptive"] = compute_distribution_overlap_adaptive(
+                t, v
+            )
+            metrics[f"loss/{loss_key}/overlap_kde"] = compute_distribution_overlap_kde(t, v)
             metrics[f"loss/{loss_key}/soft_overlap"] = soft_distribution_overlap(t, v).item()
             metrics[f"loss/{loss_key}/kl_divergence"] = compute_kl_divergence(t, v)
+            metrics[f"loss/{loss_key}/kl_divergence_adaptive"] = compute_kl_divergence_adaptive(
+                t, v
+            )
+            metrics[f"loss/{loss_key}/kl_divergence_kde"] = compute_kl_divergence_kde(t, v)
             metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)
 
         metrics["train/accuracy"] = train_results["correctness"].sum() / len(

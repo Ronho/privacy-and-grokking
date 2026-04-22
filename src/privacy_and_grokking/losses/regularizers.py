@@ -4,7 +4,11 @@ confidence scores, making membership inference attacks harder."""
 import torch
 import torch.nn as nn
 
-from privacy_and_grokking.metrics.distribution_overlap import soft_distribution_overlap
+from privacy_and_grokking.metrics.distribution_overlap import (
+    soft_distribution_overlap,
+    soft_distribution_overlap_adaptive,
+    soft_distribution_overlap_kde,
+)
 
 
 class OverlapRegularizer(nn.Module):
@@ -22,6 +26,44 @@ class OverlapRegularizer(nn.Module):
     def forward(self, train_losses: torch.Tensor, val_losses: torch.Tensor) -> torch.Tensor:
         overlap = soft_distribution_overlap(
             train_losses, val_losses.detach(), n_bins=self.n_bins, sigma=self.sigma
+        )
+        return 1.0 - overlap
+
+
+class OverlapAdaptiveRegularizer(nn.Module):
+    """1 − soft_overlap_adaptive(train_losses, val_losses).
+
+    Like :class:`OverlapRegularizer` but scales the bin count with the
+    smaller sample, reducing sparse-bin bias under size imbalance.
+    """
+
+    def __init__(self, max_bins: int = 100, sigma: float = 0.05) -> None:
+        super().__init__()
+        self.max_bins = max_bins
+        self.sigma = sigma
+
+    def forward(self, train_losses: torch.Tensor, val_losses: torch.Tensor) -> torch.Tensor:
+        overlap = soft_distribution_overlap_adaptive(
+            train_losses, val_losses.detach(), max_bins=self.max_bins, sigma=self.sigma
+        )
+        return 1.0 - overlap
+
+
+class OverlapKDERegularizer(nn.Module):
+    """1 − soft_overlap_kde(train_losses, val_losses).
+
+    Uses Gaussian KDE with Silverman bandwidth for the most accurate
+    overlap estimate, especially under size imbalance. Gradients flow
+    through *train_losses*.
+    """
+
+    def __init__(self, n_points: int = 200) -> None:
+        super().__init__()
+        self.n_points = n_points
+
+    def forward(self, train_losses: torch.Tensor, val_losses: torch.Tensor) -> torch.Tensor:
+        overlap = soft_distribution_overlap_kde(
+            train_losses, val_losses.detach(), n_points=self.n_points
         )
         return 1.0 - overlap
 
