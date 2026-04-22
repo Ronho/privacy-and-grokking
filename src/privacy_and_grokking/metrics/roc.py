@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from sklearn.metrics import auc, roc_curve
 
@@ -28,10 +29,9 @@ def compute_roc_metrics_single_step(
     roc_auc = auc(fpr, tpr)
 
     metrics: dict[str, float] = {"auc": float(roc_auc)}
-    fpr_t = torch.tensor(fpr)
     for rate in fpr_rates:
-        idx = int(torch.argmin(torch.abs(fpr_t - rate)).item())
+        tpr_at_rate = float(np.interp(rate, fpr, tpr))
         pct = int(rate * 100)
-        metrics[f"tpr-at-fpr/{pct}"] = float(tpr[idx])
+        metrics[f"tpr-at-fpr/{pct}"] = tpr_at_rate
 
     return metrics
