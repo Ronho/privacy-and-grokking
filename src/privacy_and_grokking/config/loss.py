@@ -31,3 +31,31 @@ class CrossEntropyLossConfig(BaseModel):
 
 
 Loss = Annotated[MSELossConfig | CrossEntropyLossConfig, Field(discriminator="name")]
+
+
+class OverlapRegularizerConfig(BaseModel):
+    name: Literal["overlap"] = "overlap"
+    weight: float = 0.1
+    n_bins: int = 50
+    sigma: float = 0.05
+
+    def __call__(self) -> "torch.nn.Module":
+        from privacy_and_grokking.losses import OverlapRegularizer
+
+        return OverlapRegularizer(n_bins=self.n_bins, sigma=self.sigma)
+
+
+class MMDRegularizerConfig(BaseModel):
+    name: Literal["mmd"] = "mmd"
+    weight: float = 0.1
+    bandwidth: float = 0.1
+
+    def __call__(self) -> "torch.nn.Module":
+        from privacy_and_grokking.losses import MMDRegularizer
+
+        return MMDRegularizer(bandwidth=self.bandwidth)
+
+
+Regularizer = Annotated[
+    OverlapRegularizerConfig | MMDRegularizerConfig, Field(discriminator="name")
+]

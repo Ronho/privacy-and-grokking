@@ -1,3 +1,4 @@
+import itertools
 import os
 import random
 import tempfile
@@ -179,6 +180,15 @@ def train_handle(
     loss_fn = config.loss(num_classes=train.num_classes)
     optimizer = config.optimizer(params=model.parameters())
 
+    regularizer_fn = None
+    reg_val_iter = None
+    reg_loss_fn = None
+    if config.regularizer is not None:
+        regularizer_fn = config.regularizer()
+        regularizer_fn.to(device)
+        reg_val_iter = itertools.cycle(eval_test_loader)
+        reg_loss_fn = config.loss(num_classes=train.num_classes, reduction="none")
+
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
     set_all_seeds(config.seed)
@@ -258,8 +268,36 @@ def train_handle(
                     x, y = x.to(device), y.to(device)
                 optimizer.zero_grad()
                 logits = model(x)
-                loss = loss_fn(logits, y)
+                task_loss = loss_fn(logits, y)
+                loss = task_loss
+
+                reg_value = None
+                if regularizer_fn is not None and reg_val_iter is not None:
+                    x_val, y_val = next(reg_val_iter)
+                    if not keep_on_gpu:
+                        x_val, y_val = x_val.to(device), y_val.to(device)
+                    train_losses_per_sample = reg_loss_fn(logits, y)
+                    with torch.no_grad():
+                        val_logits = model(x_val)
+                        val_losses_per_sample = reg_loss_fn(val_logits, y_val)
+                    reg_value = regularizer_fn(train_losses_per_sample, val_losses_per_sample)
+                    loss = task_loss + config.regularizer.weight * reg_value
+
                 loss.backward()
+
+                mlflow.log_metrics(
+                    {
+                        "train/task_loss": task_loss.item(),
+                        "train/total_loss": loss.item(),
+                        **({
+                            f"train/regularizer/{config.regularizer.name}": reg_value.item(),
+                            f"train/regularizer/{config.regularizer.name}/weighted": (
+                                config.regularizer.weight * reg_value
+                            ).item(),
+                        } if reg_value is not None else {}),
+                    },
+                    step=step,
+                )
 
                 optimizer.step()
                 scheduler.step()

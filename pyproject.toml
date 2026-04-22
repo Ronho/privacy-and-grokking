@@ -120,7 +120,7 @@ qa-fix = { sequence = [
   { cmd = "uv run pytest", ignore_fail = true }
 ], help = "Fix code style and run tests" }
 
-mlflow = { cmd = "uv run mlflow ui --backend-store-uri=sqlite:///data/mlflow.db" }
+mlflow = { cmd = "uv run mlflow ui --backend-store-uri=sqlite:///data/mlflow.db --port 5050"}
 mlflow-host = { cmd = "uv run poe mlflow --host 0.0.0.0 --port 5050 --allowed-hosts=*" }
 mlflow-gc = { cmd = "uv run mlflow gc --backend-store-uri sqlite:///data/mlflow.db --tracking-uri sqlite:///data/mlflow.db" }
 
