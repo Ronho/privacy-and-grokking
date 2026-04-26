@@ -214,6 +214,15 @@ def process(path: str, num_workers: int):
 
 
 @app.command()
+def search():
+    from privacy_and_grokking.search import generate_search_configs
+
+    with Logger() as logger:
+        configs = generate_search_configs()
+        logger.info(f"Generated {len(configs)} search configs.")
+
+
+@app.command()
 def command():
     from pathlib import Path
 
