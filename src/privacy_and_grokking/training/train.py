@@ -183,11 +183,14 @@ def train_handle(
     regularizer_fn = None
     reg_val_iter = None
     reg_loss_fn = None
+    noise_generator = None
     if config.regularizer is not None:
         regularizer_fn = config.regularizer()
         regularizer_fn.to(device)
-        reg_val_iter = itertools.cycle(eval_test_loader)
         reg_loss_fn = config.loss(num_classes=train.num_classes, reduction="none")
+        noise_generator = config.regularizer.create_noise_generator()
+        if noise_generator is None:
+            reg_val_iter = itertools.cycle(eval_test_loader)
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -272,14 +275,37 @@ def train_handle(
                 loss = task_loss
 
                 reg_value = None
-                if regularizer_fn is not None and reg_val_iter is not None:
-                    x_val, y_val = next(reg_val_iter)
-                    if not keep_on_gpu:
-                        x_val, y_val = x_val.to(device), y_val.to(device)
+                if regularizer_fn is not None:
                     train_losses_per_sample = reg_loss_fn(logits, y)
-                    with torch.no_grad():
-                        val_logits = model(x_val)
-                        val_losses_per_sample = reg_loss_fn(val_logits, y_val)
+                    # reduction="none" may return (B, C) for MSE or (B,) for CE;
+                    # reduce to a true per-sample scalar (B,).
+                    if train_losses_per_sample.dim() > 1:
+                        train_losses_per_sample = train_losses_per_sample.mean(
+                            dim=tuple(range(1, train_losses_per_sample.dim()))
+                        )
+                    if noise_generator is not None:
+                        num_copies = config.regularizer.num_noisy_samples
+                        val_losses_parts = []
+                        for _ in range(num_copies):
+                            x_noisy = noise_generator(x)
+                            with torch.no_grad():
+                                val_logits = model(x_noisy)
+                                vl = reg_loss_fn(val_logits, y)
+                                if vl.dim() > 1:
+                                    vl = vl.mean(dim=tuple(range(1, vl.dim())))
+                                val_losses_parts.append(vl)
+                        val_losses_per_sample = torch.cat(val_losses_parts, dim=0)
+                    else:
+                        x_val, y_val = next(reg_val_iter)
+                        if not keep_on_gpu:
+                            x_val, y_val = x_val.to(device), y_val.to(device)
+                        with torch.no_grad():
+                            val_logits = model(x_val)
+                            val_losses_per_sample = reg_loss_fn(val_logits, y_val)
+                            if val_losses_per_sample.dim() > 1:
+                                val_losses_per_sample = val_losses_per_sample.mean(
+                                    dim=tuple(range(1, val_losses_per_sample.dim()))
+                                )
                     reg_value = regularizer_fn(train_losses_per_sample, val_losses_per_sample)
                     loss = task_loss + config.regularizer.weight * reg_value
 

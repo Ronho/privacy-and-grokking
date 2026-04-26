@@ -3,6 +3,7 @@ from privacy_and_grokking.losses.regularizers import (
     OverlapAdaptiveRegularizer,
     OverlapKDERegularizer,
     OverlapRegularizer,
+    PerSampleDistanceRegularizer,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "OverlapAdaptiveRegularizer",
     "OverlapKDERegularizer",
     "OverlapRegularizer",
+    "PerSampleDistanceRegularizer",
 ]

@@ -68,6 +68,69 @@ class OverlapKDERegularizer(nn.Module):
         return 1.0 - overlap
 
 
+class PerSampleDistanceRegularizer(nn.Module):
+    """Per-sample distance between clean and noisy losses.
+
+    Unlike the distributional regularizers (Overlap, MMD, …), this one
+    exploits the 1-to-1 pairing that exists in noisy-self-validation mode:
+    for each sample *i* it computes the distance between the clean loss and
+    the noisy loss, then aggregates across the batch.
+
+    Supports multiple noisy copies per sample via the training loop's
+    ``num_noisy_samples`` parameter.  When *K* copies are used the input
+    ``val_losses`` has shape ``(K * B,)`` — this module reshapes it to
+    ``(K, B)``, computes per-copy distances, and averages over copies first,
+    then over the batch.
+
+    Parameters
+    ----------
+    metric : ``"l1"`` | ``"l2"`` | ``"huber"``
+        Distance function applied element-wise.
+    huber_delta : float
+        Delta parameter for the Huber loss (only used when *metric* is
+        ``"huber"``).
+    """
+
+    def __init__(self, metric: str = "l1", huber_delta: float = 1.0) -> None:
+        super().__init__()
+        self.metric = metric
+        self.huber_delta = huber_delta
+
+    def forward(self, train_losses: torch.Tensor, val_losses: torch.Tensor) -> torch.Tensor:
+        val_losses = val_losses.detach()
+        batch_size = train_losses.shape[0]
+        num_val = val_losses.shape[0]
+
+        if num_val % batch_size != 0:
+            raise ValueError(
+                f"val_losses length ({num_val}) must be a multiple of "
+                f"train_losses length ({batch_size})"
+            )
+
+        num_copies = num_val // batch_size
+        # (K, B) — each row is one noisy copy's per-sample losses
+        val_losses = val_losses.reshape(num_copies, batch_size)
+        # broadcast train_losses to (1, B) for the subtraction
+        diffs = val_losses - train_losses.unsqueeze(0)  # (K, B)
+
+        if self.metric == "l1":
+            distances = diffs.abs()
+        elif self.metric == "l2":
+            distances = diffs.pow(2)
+        elif self.metric == "huber":
+            distances = torch.nn.functional.huber_loss(
+                val_losses,
+                train_losses.unsqueeze(0).expand_as(val_losses),
+                reduction="none",
+                delta=self.huber_delta,
+            )
+        else:
+            raise ValueError(f"Unknown metric: {self.metric!r}")
+
+        # mean over copies, then mean over batch
+        return distances.mean()
+
+
 def _gaussian_kernel(x: torch.Tensor, y: torch.Tensor, bandwidth: float) -> torch.Tensor:
     """Gaussian RBF kernel between all pairs of rows in *x* and *y*."""
     # x: (N, D), y: (M, D) -> (N, M)

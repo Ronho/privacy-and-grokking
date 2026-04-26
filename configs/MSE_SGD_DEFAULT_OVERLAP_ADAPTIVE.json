@@ -7,9 +7,9 @@
         "name": "mse"
     },
     "regularizer": {
-        "name": "overlap",
+        "name": "overlap_adaptive",
         "weight": 2,
-        "n_bins": 50,
+        "max_bins": 100,
         "sigma": 0.05,
         "validation_source": "noisy_self",
         "noise_type": "salt_and_pepper",

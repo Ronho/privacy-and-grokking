@@ -9,7 +9,10 @@
     "regularizer": {
         "name": "mmd",
         "weight": 20,
-        "bandwidth": 1
+        "bandwidth": 1,
+        "validation_source": "noisy_self",
+        "noise_type": "salt_and_pepper",
+        "noise_fraction": 0.25
     },
     "scheduler": {
         "name": "None"
