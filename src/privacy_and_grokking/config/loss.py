@@ -50,11 +50,20 @@ class RegularizerConfigBase(BaseModel):
     noise_std: float | None = None
     noise_fraction: float | None = None
     num_noisy_samples: int = 1
+    loss_reduction: Literal["mean", "max"] | None = "mean"
+
+    # Subclasses that support loss_reduction=None should override this.
+    _supports_none_reduction: bool = False
 
     @model_validator(mode="after")
     def validate_noise_fields(self) -> Self:
         if self.num_noisy_samples < 1:
             raise ValueError("num_noisy_samples must be >= 1")
+        if self.loss_reduction is None and not self._supports_none_reduction:
+            raise ValueError(
+                f"loss_reduction=None is not supported by {type(self).__name__}; "
+                "use 'mean' or 'max'"
+            )
         if self.validation_source == ValidationSource.TEST_SET:
             if self.noise_type is not None:
                 raise ValueError(
@@ -165,6 +174,8 @@ class PerSampleDistanceRegularizerConfig(RegularizerConfigBase):
     weight: float = 0.1
     metric: Literal["l1", "l2", "huber"] = "l1"
     huber_delta: float = 1.0
+
+    _supports_none_reduction: bool = True
 
     def __call__(self) -> "torch.nn.Module":
         from privacy_and_grokking.losses import PerSampleDistanceRegularizer

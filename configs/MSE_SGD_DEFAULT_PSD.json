@@ -10,6 +10,7 @@
         "name": "per_sample_distance",
         "weight": 1,
         "metric": "l1",
+        "loss_reduction": null,
         "validation_source": "noisy_self",
         "noise_type": "salt_and_pepper",
         "noise_fraction": 0.1,

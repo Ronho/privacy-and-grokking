@@ -78,9 +78,16 @@ class PerSampleDistanceRegularizer(nn.Module):
 
     Supports multiple noisy copies per sample via the training loop's
     ``num_noisy_samples`` parameter.  When *K* copies are used the input
-    ``val_losses`` has shape ``(K * B,)`` — this module reshapes it to
-    ``(K, B)``, computes per-copy distances, and averages over copies first,
-    then over the batch.
+    ``val_losses`` has shape ``(K * B,)`` or ``(K * B, C)`` — this module
+    reshapes it to ``(K, B)`` or ``(K, B, C)``, computes per-copy
+    distances, and averages over copies first, then over the batch.
+
+    When the loss is a per-class vector (``dim > 1``, e.g. MSE with
+    ``reduction="none"`` giving ``(B, C)``), the difference is taken across
+    the full class dimension and then reduced to a scalar per sample via
+    the L2 norm (for ``"l1"`` and ``"huber"``) or the squared L2 norm
+    (for ``"l2"``).  When the loss is already a scalar per sample
+    (``dim == 1``), the original element-wise behaviour is used.
 
     Parameters
     ----------
@@ -108,27 +115,57 @@ class PerSampleDistanceRegularizer(nn.Module):
             )
 
         num_copies = num_val // batch_size
-        # (K, B) — each row is one noisy copy's per-sample losses
-        val_losses = val_losses.reshape(num_copies, batch_size)
-        # broadcast train_losses to (1, B) for the subtraction
-        diffs = val_losses - train_losses.unsqueeze(0)  # (K, B)
 
-        if self.metric == "l1":
-            distances = diffs.abs()
-        elif self.metric == "l2":
-            distances = diffs.pow(2)
-        elif self.metric == "huber":
-            distances = torch.nn.functional.huber_loss(
-                val_losses,
-                train_losses.unsqueeze(0).expand_as(val_losses),
-                reduction="none",
-                delta=self.huber_delta,
-            )
+        # Inputs may be (B,) scalars or (B, C) per-class loss vectors.
+        if train_losses.dim() == 1:
+            # Scalar per sample — original behaviour.
+            # (K, B) — each row is one noisy copy's per-sample losses
+            val_losses = val_losses.reshape(num_copies, batch_size)
+            diffs = val_losses - train_losses.unsqueeze(0)  # (K, B)
+
+            if self.metric == "l1":
+                distances = diffs.abs()
+            elif self.metric == "l2":
+                distances = diffs.pow(2)
+            elif self.metric == "huber":
+                distances = torch.nn.functional.huber_loss(
+                    val_losses,
+                    train_losses.unsqueeze(0).expand_as(val_losses),
+                    reduction="none",
+                    delta=self.huber_delta,
+                )
+            else:
+                raise ValueError(f"Unknown metric: {self.metric!r}")
+
+            return distances.mean()
         else:
-            raise ValueError(f"Unknown metric: {self.metric!r}")
+            # Per-class loss vectors — (B, C) input.
+            # Reshape val_losses from (K*B, C) to (K, B, C).
+            extra_dims = train_losses.shape[1:]
+            val_losses = val_losses.reshape(num_copies, batch_size, *extra_dims)
+            # Difference per copy per sample per class: (K, B, C)
+            diffs = val_losses - train_losses.unsqueeze(0)
 
-        # mean over copies, then mean over batch
-        return distances.mean()
+            if self.metric == "l1":
+                # L2 norm across class dim, giving (K, B)
+                distances = torch.linalg.vector_norm(diffs, ord=2, dim=-1)
+            elif self.metric == "l2":
+                # Squared L2 norm across class dim
+                distances = diffs.pow(2).sum(dim=-1)
+            elif self.metric == "huber":
+                # Element-wise Huber, then L2 norm across class dim
+                elem = torch.nn.functional.huber_loss(
+                    val_losses,
+                    train_losses.unsqueeze(0).expand_as(val_losses),
+                    reduction="none",
+                    delta=self.huber_delta,
+                )
+                distances = torch.linalg.vector_norm(elem, ord=2, dim=-1)
+            else:
+                raise ValueError(f"Unknown metric: {self.metric!r}")
+
+            # mean over copies, then mean over batch
+            return distances.mean()
 
 
 def _gaussian_kernel(x: torch.Tensor, y: torch.Tensor, bandwidth: float) -> torch.Tensor:

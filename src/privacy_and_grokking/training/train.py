@@ -35,6 +35,33 @@ LOG_FREQUENCY = 1000
 HEAVY_METRICS_LOG_FREQUENCY = LOG_FREQUENCY * 10
 
 
+def _reduce_loss(
+    losses: torch.Tensor, reduction: str | None
+) -> torch.Tensor:
+    """Reduce per-sample loss from ``(B, C, ...)`` to ``(B,)`` or leave as-is.
+
+    Parameters
+    ----------
+    losses : Tensor
+        Per-sample unreduced loss, shape ``(B,)`` or ``(B, C, ...)``.
+    reduction : ``"mean"`` | ``"max"`` | ``None``
+        How to collapse the extra (non-batch) dimensions.
+        ``None`` keeps the tensor unchanged.
+    """
+    if reduction is None or losses.dim() <= 1:
+        return losses
+    extra_dims = tuple(range(1, losses.dim()))
+    if reduction == "mean":
+        return losses.mean(dim=extra_dims)
+    if reduction == "max":
+        result = losses
+        # Reduce one dim at a time from the back to use torch.max properly.
+        for d in sorted(extra_dims, reverse=True):
+            result = result.max(dim=d).values
+        return result
+    raise ValueError(f"Unknown loss_reduction: {reduction!r}")
+
+
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -277,12 +304,12 @@ def train_handle(
                 reg_value = None
                 if regularizer_fn is not None:
                     train_losses_per_sample = reg_loss_fn(logits, y)
-                    # reduction="none" may return (B, C) for MSE or (B,) for CE;
-                    # reduce to a true per-sample scalar (B,).
-                    if train_losses_per_sample.dim() > 1:
-                        train_losses_per_sample = train_losses_per_sample.mean(
-                            dim=tuple(range(1, train_losses_per_sample.dim()))
-                        )
+                    # reduction="none" may return (B, C) for MSE or (B,) for CE.
+                    # Apply the configured loss_reduction to collapse extra dims.
+                    loss_red = config.regularizer.loss_reduction
+                    train_losses_per_sample = _reduce_loss(
+                        train_losses_per_sample, loss_red
+                    )
                     if noise_generator is not None:
                         num_copies = config.regularizer.num_noisy_samples
                         val_losses_parts = []
@@ -291,8 +318,7 @@ def train_handle(
                             with torch.no_grad():
                                 val_logits = model(x_noisy)
                                 vl = reg_loss_fn(val_logits, y)
-                                if vl.dim() > 1:
-                                    vl = vl.mean(dim=tuple(range(1, vl.dim())))
+                                vl = _reduce_loss(vl, loss_red)
                                 val_losses_parts.append(vl)
                         val_losses_per_sample = torch.cat(val_losses_parts, dim=0)
                     else:
@@ -302,10 +328,9 @@ def train_handle(
                         with torch.no_grad():
                             val_logits = model(x_val)
                             val_losses_per_sample = reg_loss_fn(val_logits, y_val)
-                            if val_losses_per_sample.dim() > 1:
-                                val_losses_per_sample = val_losses_per_sample.mean(
-                                    dim=tuple(range(1, val_losses_per_sample.dim()))
-                                )
+                            val_losses_per_sample = _reduce_loss(
+                                val_losses_per_sample, loss_red
+                            )
                     reg_value = regularizer_fn(train_losses_per_sample, val_losses_per_sample)
                     loss = task_loss + config.regularizer.weight * reg_value
 
