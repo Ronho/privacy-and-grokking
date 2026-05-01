@@ -1,4 +1,3 @@
-import itertools
 import os
 import random
 import tempfile
@@ -22,7 +21,6 @@ from privacy_and_grokking.datasets import (
     mask_dataset,
 )
 from privacy_and_grokking.metrics import evaluate
-from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import (
     Logger,
     get_device,
@@ -195,11 +193,9 @@ def train_handle(
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     logger.info("Preparing model.")
-    model = create_model(
-        name=config.model,
+    model = config.model(
         input_dim=train.input_shape,
         num_classes=train.num_classes,
-        initialization_scale=config.initialization_scale,
     )
     model.to(device)
 
@@ -208,16 +204,12 @@ def train_handle(
     optimizer = config.optimizer(params=model.parameters())
 
     regularizer_fn = None
-    reg_val_iter = None
     reg_loss_fn = None
-    noise_generator = None
     if config.regularizer is not None:
         regularizer_fn = config.regularizer()
-        regularizer_fn.to(device)
-        reg_loss_fn = config.loss(num_classes=train.num_classes, reduction="none")
-        noise_generator = config.regularizer.create_noise_generator()
-        if noise_generator is None:
-            reg_val_iter = itertools.cycle(eval_test_loader)
+        reg_loss_fn = config.loss.model_copy(update={"reduction": "none"})(
+            num_classes=train.num_classes
+        )
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -229,7 +221,7 @@ def train_handle(
     scheduler = config.scheduler(
         optimizer=optimizer,
         optimization_steps=optimization_steps,
-        checkpoint=cfg.checkpoint if restart else -1,
+        last_epoch=cfg.checkpoint if restart else -1,
     )
 
     logger.info("Starting training loop.")
@@ -310,28 +302,7 @@ def train_handle(
                     train_losses_per_sample = _reduce_loss(
                         train_losses_per_sample, loss_red
                     )
-                    if noise_generator is not None:
-                        num_copies = config.regularizer.num_noisy_samples
-                        val_losses_parts = []
-                        for _ in range(num_copies):
-                            x_noisy = noise_generator(x)
-                            with torch.no_grad():
-                                val_logits = model(x_noisy)
-                                vl = reg_loss_fn(val_logits, y)
-                                vl = _reduce_loss(vl, loss_red)
-                                val_losses_parts.append(vl)
-                        val_losses_per_sample = torch.cat(val_losses_parts, dim=0)
-                    else:
-                        x_val, y_val = next(reg_val_iter)
-                        if not keep_on_gpu:
-                            x_val, y_val = x_val.to(device), y_val.to(device)
-                        with torch.no_grad():
-                            val_logits = model(x_val)
-                            val_losses_per_sample = reg_loss_fn(val_logits, y_val)
-                            val_losses_per_sample = _reduce_loss(
-                                val_losses_per_sample, loss_red
-                            )
-                    reg_value = regularizer_fn(train_losses_per_sample, val_losses_per_sample)
+                    reg_value = regularizer_fn(train_losses_per_sample)
                     loss = task_loss + config.regularizer.weight * reg_value
 
                 loss.backward()

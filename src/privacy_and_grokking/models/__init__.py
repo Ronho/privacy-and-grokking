@@ -1,11 +1,18 @@
-from .cnn import CNN
-from .mlp import MLP, MLPBatchNorm
-from .wrapper import Model, create_model
+from typing import Annotated
+
+from pydantic import Field
+
+from .cnn import CNNConfig
+from .mlp import MLPConfig
+from .mlp_batchnorm import MLPBatchNormConfig
+
+Model = Annotated[
+    MLPConfig | MLPBatchNormConfig | CNNConfig, Field(discriminator="name")
+]
 
 __all__ = [
-    "CNN",
-    "MLP",
-    "MLPBatchNorm",
-    "create_model",
+    "CNNConfig",
+    "MLPBatchNormConfig",
+    "MLPConfig",
     "Model",
 ]

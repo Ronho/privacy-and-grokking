@@ -13,7 +13,6 @@ class TrainConfig(BaseModel):
     model: Model
     seed: int
     batch_size: int
-    initialization_scale: float | None
     loss: Loss
     regularizer: Regularizer | None = None
     optimizer: Optimizer
@@ -24,7 +23,7 @@ class TrainConfig(BaseModel):
 
     @property
     def name(self) -> str:
-        return f"{self.model.upper()}_{self.dataset.name.upper()}_{self.dataset_mask.name.upper()}_{self.optimizer.name.upper()}_{self.loss.name.upper()}"
+        return f"{self.model.name.upper()}_{self.dataset.name.upper()}_{self.dataset_mask.name.upper()}_{self.optimizer.name.upper()}_{self.loss.name.upper()}"
 
     @property
     def full_name(self) -> str:
