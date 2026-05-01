@@ -26,7 +26,7 @@ class MMDRegularizerConfig(SelfContainedTwoSampleRegularizerConfig):
     name: Literal["mmd"] = "mmd"
     bandwidth: float = 0.1
 
-    def __call__(self) -> RegularizerType:
+    def _make_regularizer(self) -> RegularizerType:
         validation_set_generator = self.source()
 
         def regularizer(train_losses: torch.Tensor) -> torch.Tensor:

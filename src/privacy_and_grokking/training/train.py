@@ -33,33 +33,6 @@ LOG_FREQUENCY = 1000
 HEAVY_METRICS_LOG_FREQUENCY = LOG_FREQUENCY * 10
 
 
-def _reduce_loss(
-    losses: torch.Tensor, reduction: str | None
-) -> torch.Tensor:
-    """Reduce per-sample loss from ``(B, C, ...)`` to ``(B,)`` or leave as-is.
-
-    Parameters
-    ----------
-    losses : Tensor
-        Per-sample unreduced loss, shape ``(B,)`` or ``(B, C, ...)``.
-    reduction : ``"mean"`` | ``"max"`` | ``None``
-        How to collapse the extra (non-batch) dimensions.
-        ``None`` keeps the tensor unchanged.
-    """
-    if reduction is None or losses.dim() <= 1:
-        return losses
-    extra_dims = tuple(range(1, losses.dim()))
-    if reduction == "mean":
-        return losses.mean(dim=extra_dims)
-    if reduction == "max":
-        result = losses
-        # Reduce one dim at a time from the back to use torch.max properly.
-        for d in sorted(extra_dims, reverse=True):
-            result = result.max(dim=d).values
-        return result
-    raise ValueError(f"Unknown loss_reduction: {reduction!r}")
-
-
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -205,11 +178,12 @@ def train_handle(
 
     regularizer_fn = None
     reg_loss_fn = None
-    if config.regularizer is not None:
-        regularizer_fn = config.regularizer()
-        reg_loss_fn = config.loss.model_copy(update={"reduction": "none"})(
-            num_classes=train.num_classes
-        )
+    regularizer_cfg = config.regularizer
+    if regularizer_cfg is not None:
+        regularizer_fn = regularizer_cfg()
+        reg_loss_fn = config.loss.model_copy(
+            update={"reduction": regularizer_cfg.loss_reduction}
+        )(num_classes=train.num_classes)
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -296,14 +270,8 @@ def train_handle(
                 reg_value = None
                 if regularizer_fn is not None:
                     train_losses_per_sample = reg_loss_fn(logits, y)
-                    # reduction="none" may return (B, C) for MSE or (B,) for CE.
-                    # Apply the configured loss_reduction to collapse extra dims.
-                    loss_red = config.regularizer.loss_reduction
-                    train_losses_per_sample = _reduce_loss(
-                        train_losses_per_sample, loss_red
-                    )
                     reg_value = regularizer_fn(train_losses_per_sample)
-                    loss = task_loss + config.regularizer.weight * reg_value
+                    loss = task_loss + reg_value
 
                 loss.backward()
 
@@ -312,10 +280,7 @@ def train_handle(
                         "train/task_loss": task_loss.item(),
                         "train/total_loss": loss.item(),
                         **({
-                            f"train/regularizer/{config.regularizer.name}": reg_value.item(),
-                            f"train/regularizer/{config.regularizer.name}/weighted": (
-                                config.regularizer.weight * reg_value
-                            ).item(),
+                            f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
                         } if reg_value is not None else {}),
                     },
                     step=step,

@@ -20,7 +20,7 @@ class OverlapRegularizerConfig(SelfContainedTwoSampleRegularizerConfig):
     n_bins: int = 50
     sigma: float = 0.05
 
-    def __call__(self) -> RegularizerType:
+    def _make_regularizer(self) -> RegularizerType:
         validation_set_generator = self.source()
 
         def regularizer(train_losses: torch.Tensor) -> torch.Tensor:

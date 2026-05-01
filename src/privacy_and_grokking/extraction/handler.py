@@ -15,7 +15,6 @@ from privacy_and_grokking.datasets import (
     mask_dataset,
 )
 from privacy_and_grokking.metrics import evaluate
-from privacy_and_grokking.models import create_model
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
 
@@ -119,11 +118,9 @@ def _step_wise(run_id: str) -> None:
                 map_location=device,
                 weights_only=True,
             )
-        model = create_model(
-            name=cfg.model,
+        model = cfg.model(
             input_dim=input_shape,
             num_classes=num_classes,
-            initialization_scale=None,
         )
         model.to(device)
         model.load_state_dict(state_dict)

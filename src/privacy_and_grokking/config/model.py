@@ -1,9 +1,10 @@
 from pydantic import BaseModel, ConfigDict
 
-from privacy_and_grokking.config.loss import Loss, Regularizer
 from privacy_and_grokking.config.optimizer import Optimizer
 from privacy_and_grokking.config.scheduler import Scheduler
 from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
+from privacy_and_grokking.loss.loss import Loss
+from privacy_and_grokking.loss.regularizer import SelfContainedTwoSampleRegularizer
 from privacy_and_grokking.models import Model
 
 
@@ -14,7 +15,7 @@ class TrainConfig(BaseModel):
     seed: int
     batch_size: int
     loss: Loss
-    regularizer: Regularizer | None = None
+    regularizer: SelfContainedTwoSampleRegularizer | None = None
     optimizer: Optimizer
     scheduler: Scheduler
     dataset: DatasetConfig

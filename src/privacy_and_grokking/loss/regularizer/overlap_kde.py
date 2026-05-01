@@ -19,7 +19,7 @@ class OverlapKDERegularizerConfig(SelfContainedTwoSampleRegularizerConfig):
     name: Literal["overlap_kde"] = "overlap_kde"
     n_points: int = 200
 
-    def __call__(self) -> RegularizerType:
+    def _make_regularizer(self) -> RegularizerType:
         validation_set_generator = self.source()
 
         def regularizer(train_losses: torch.Tensor) -> torch.Tensor:

@@ -29,7 +29,7 @@ class PerSampleDistanceRegularizerConfig(SelfContainedTwoSampleRegularizerConfig
     metric: Literal["l1", "l2", "huber"] = "l1"
     huber_delta: float = 1.0
 
-    def __call__(self) -> RegularizerType:
+    def _make_regularizer(self) -> RegularizerType:
         validation_set_generator = self.source()
         metric = self.metric
         huber_delta = self.huber_delta
