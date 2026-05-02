@@ -1,8 +1,9 @@
 {
-    "model": "mlp",
+    "model": {
+        "name": "mlp"
+    },
     "seed": 0,
     "batch_size": 200,
-    "initialization_scale": null,
     "loss": {
         "name": "mse"
     },
@@ -10,11 +11,11 @@
         "name": "per_sample_distance",
         "weight": 1,
         "metric": "l1",
-        "loss_reduction": null,
-        "validation_source": "noisy_self",
-        "noise_type": "salt_and_pepper",
-        "noise_fraction": 0.1,
-        "num_noisy_samples": 3
+        "source": {
+            "name": "salt_and_pepper",
+            "fraction": 0.1,
+            "num_noisy_samples": 3
+        }
     },
     "scheduler": {
         "name": "None"
@@ -22,18 +23,18 @@
     "optimizer": {
         "name": "SGD"
     },
-    "dataset": {
-        "name": "mnist",
+    "data": {
+        "data": {
+            "name": "mnist"
+        },
+        "mask": {
+            "name": "uniform",
+            "num_models": 256,
+            "p": 0.5,
+            "seed": 1,
+            "model_index": 0
+        },
         "train_size": 1000,
-        "canary_share": 0,
-        "canary_config": null,
         "seed": 1
-    },
-    "dataset_mask": {
-        "name": "uniform",
-        "num_models": 256,
-        "p": 0.5,
-        "seed": 1
-    },
-    "dataset_mask_idx": 0
+    }
 }
