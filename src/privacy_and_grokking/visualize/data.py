@@ -8,10 +8,10 @@ from privacy_and_grokking.datasets.canaries import (
     SquareWatermarkCanaryConfig,
     UniformNoiseCanaryConfig,
 )
+from privacy_and_grokking.datasets.masking.uniform import UniformMaskingConfig
 from privacy_and_grokking.datasets.sets.base import Normalization
 from privacy_and_grokking.datasets.sets.cifar10 import CIFAR10Config
 from privacy_and_grokking.datasets.sets.mnist import MNISTConfig
-from privacy_and_grokking.datasets.masking.uniform import UniformMaskingConfig
 from privacy_and_grokking.logger import get_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
 from privacy_and_grokking.visualize.masks import vis_masking_strategy
