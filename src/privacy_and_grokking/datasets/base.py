@@ -93,17 +93,41 @@ class DatasetConfig(BaseModel):
         Canary samples get their images modified by the canary transform and their
         labels reassigned via derangement (no sample keeps its original label).
         """
-        if self.canary is None or self.canary.share <= 0:
-            return dataset
+        if self.canary is None:
+            # No canary config — just apply train_size subsetting if needed
+            num_samples = len(dataset)
+            if self.train_size is not None:
+                if self.train_size > num_samples:
+                    raise ValueError("train_size exceeds dataset size.")
+                rng = torch.Generator()
+                if self.seed:
+                    rng.manual_seed(self.seed)
+                labels = torch.tensor([dataset[i][1] for i in range(num_samples)], dtype=torch.long)
+                train_dist = distribute_a_across_b(self.train_size, num_classes)
+                subset_indices_list: list[torch.Tensor] = []
+                for cls, amt in enumerate(train_dist):
+                    class_indices = (labels == cls).nonzero().squeeze(-1)
+                    perm = torch.randperm(len(class_indices), generator=rng)
+                    subset_indices_list.append(class_indices[perm[:amt]])
+                subset_indices = torch.cat(subset_indices_list)
+            else:
+                subset_indices = torch.arange(num_samples)
+            return CanaryDataset(
+                dataset=dataset,
+                subset_indices=subset_indices,
+                num_classes=num_classes,
+            )
 
         if self.seed is None:
             raise ValueError("A seed is required for deterministic canary assignment.")
 
         rng = torch.Generator()
-        rng.manual_seed(self.seed)
+        if self.seed:
+            rng.manual_seed(self.seed)
 
-        num_samples = len(dataset)  # type: ignore[arg-type]
-        num_canaries = int(num_samples * self.canary.share)
+        num_samples = len(dataset)
+        share = self.canary.share
+        num_canaries = int(num_samples * share)
 
         # Collect labels and group indices by class
         labels = torch.tensor([dataset[i][1] for i in range(num_samples)], dtype=torch.long)
@@ -122,7 +146,7 @@ class DatasetConfig(BaseModel):
         if self.train_size is not None:
             if self.train_size > num_samples:
                 raise ValueError("train_size exceeds dataset size.")
-            train_num_canaries = int(self.train_size * self.canary.share)
+            train_num_canaries = int(self.train_size * share)
             train_canary_dist = distribute_a_across_b(train_num_canaries, num_classes)
             train_dist = distribute_a_across_b(self.train_size, num_classes)
             subset_indices_list: list[torch.Tensor] = []
@@ -160,7 +184,10 @@ class DatasetConfig(BaseModel):
         container = self.data()
 
         train = self.apply_canary(container.train, container.num_classes)
+        print(f"------------- 1 {len(train)}")
         train = self.apply_mask(train, container.num_classes)
+        print(f"------------- 2 {len(train)}")
+
 
         return DataContainer(
             train=train,  # type: ignore[arg-type]

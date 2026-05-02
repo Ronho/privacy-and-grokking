@@ -57,7 +57,10 @@ def train(
     seed: int | None = None,
     run_name: str | None = None,
     checkpoint_frequency: int = LOG_FREQUENCY,
+    profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
 ):
+    if profile:
+        os.environ["PAG_PROFILE"] = "1"
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
