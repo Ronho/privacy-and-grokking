@@ -4,7 +4,6 @@ import torch
 from matplotlib import pyplot as plt
 
 from privacy_and_grokking.config import TrainConfig
-from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
 from privacy_and_grokking.visualize.visualizations.shared import handle_missing_data
@@ -26,16 +25,10 @@ def class_distribution(ax: plt.Axes, dh: DataHandler):
         handle_missing_data(ax, dh.run_id, "class distribution")
         return
 
-    train_ds, test_ds = generate_datasets(cfg.dataset)
-    masking = create_masking(
-        config=cfg.dataset_mask,
-        num_samples=len(train_ds),
-        num_classes=train_ds.num_classes,
-    )
-    train_subset = mask_dataset(masking, train_ds, cfg.dataset_mask_idx)
+    container = cfg.data()
 
-    train_labels = torch.tensor([y for _, y in train_subset])
-    test_labels = torch.tensor([y for _, y in test_ds])
+    train_labels = torch.tensor([y for _, y in container.train])
+    test_labels = torch.tensor([y for _, y in container.test])
 
     classes = sorted(torch.cat([train_labels, test_labels]).unique().tolist())
     num_classes = len(classes)

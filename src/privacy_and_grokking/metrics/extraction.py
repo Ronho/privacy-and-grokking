@@ -9,11 +9,6 @@ from torch.utils.data import Subset
 from tqdm import tqdm
 
 from privacy_and_grokking.config import TrainConfig
-from privacy_and_grokking.datasets import (
-    create_masking,
-    generate_datasets,
-    mask_dataset,
-)
 from privacy_and_grokking.metrics.evaluate import evaluate
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
@@ -54,25 +49,15 @@ def _stratified_indices(dataset, n: int) -> list[int]:
 
 
 def _get_datasets(cfg: TrainConfig):
-    train, test = generate_datasets(cfg.data)
-    masking = create_masking(
-        config=cfg.data.mask,
-        num_samples=len(train),
-        num_classes=train.num_classes,
-    )
-    train_subset = mask_dataset(
-        masking,
-        train,
-        cfg.data.mask.model_index,
-    )
-    subsample_size = min(len(train_subset), len(test))  # type: ignore
+    container = cfg.data()
+    subsample_size = min(len(container.train), len(container.test))  # type: ignore
     train_sub = Subset(
-        train_subset,
-        _stratified_indices(train_subset, subsample_size),
+        container.train,
+        _stratified_indices(container.train, subsample_size),
     )
     test_sub = Subset(
-        test,
-        _stratified_indices(test, subsample_size),
+        container.test,
+        _stratified_indices(container.test, subsample_size),
     )
     pin_memory = torch.cuda.is_available()
 
@@ -86,7 +71,7 @@ def _get_datasets(cfg: TrainConfig):
         pin_memory=pin_memory,
     )
 
-    return train_loader, test_loader, train.input_shape, train.num_classes
+    return train_loader, test_loader, container.input_shape, container.num_classes
 
 
 def _step_wise(run_id: str) -> None:

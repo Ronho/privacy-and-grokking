@@ -29,148 +29,227 @@ BASE_CONFIG = "MSE_SGD_DEFAULT.json"
 # ---------------------------------------------------------------------------
 # Search space definition
 #
-# Each entry is a regularizer template: a dict that will become the
-# "regularizer" field in the config. Use lists for values you want to
-# sweep over; scalar values are kept fixed.
+# Each entry is a regularizer template using the new nested format:
+#   { "weight": ..., "loss_reduction": ..., "regularizer": { "name": ..., "source": { ... } } }
 #
-# The generator takes the cartesian product of all list-valued fields
-# within each regularizer template.
+# Use lists for values you want to sweep over; scalar values are kept fixed.
+# The generator takes the cartesian product of all list-valued fields.
 # ---------------------------------------------------------------------------
 SEARCH_SPACE: list[dict] = [
     # ===================================================================
     # Per-Sample Distance (PSD) — salt & pepper
     # ===================================================================
     {
-        "name": "per_sample_distance",
         "weight": [0.1, 1.0, 10.0],
-        "metric": ["l1", "l2", "huber"],
         "loss_reduction": [None, "mean", "max"],
-        "validation_source": "noisy_self",
-        "noise_type": "salt_and_pepper",
-        "noise_fraction": [0.05, 0.1, 0.25],
-        "num_noisy_samples": 3,
+        "regularizer": {
+            "name": "per_sample_distance",
+            "metric": ["l1", "l2", "huber"],
+            "source": {
+                "name": "salt_and_pepper",
+                "fraction": [0.05, 0.1, 0.25],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # Per-Sample Distance (PSD) — gaussian
     {
-        "name": "per_sample_distance",
         "weight": [0.1, 1.0, 10.0],
-        "metric": ["l1", "l2", "huber"],
         "loss_reduction": [None, "mean", "max"],
-        "validation_source": "noisy_self",
-        "noise_type": "gaussian",
-        "noise_std": [0.1, 0.3, 0.5],
-        "num_noisy_samples": 3,
+        "regularizer": {
+            "name": "per_sample_distance",
+            "metric": ["l1", "l2", "huber"],
+            "source": {
+                "name": "gaussian",
+                "std": [0.1, 0.3, 0.5],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # ===================================================================
     # MMD — salt & pepper
     # ===================================================================
     {
-        "name": "mmd",
         "weight": [0.1, 1.0, 10.0, 20.0],
-        "bandwidth": [0.1, 0.5, 1.0],
-        "validation_source": "noisy_self",
-        "noise_type": "salt_and_pepper",
-        "noise_fraction": [0.05, 0.1, 0.25],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "mmd",
+            "bandwidth": [0.1, 0.5, 1.0],
+            "source": {
+                "name": "salt_and_pepper",
+                "fraction": [0.05, 0.1, 0.25],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # MMD — gaussian
     {
-        "name": "mmd",
         "weight": [0.1, 1.0, 10.0, 20.0],
-        "bandwidth": [0.1, 0.5, 1.0],
-        "validation_source": "noisy_self",
-        "noise_type": "gaussian",
-        "noise_std": [0.1, 0.3, 0.5],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "mmd",
+            "bandwidth": [0.1, 0.5, 1.0],
+            "source": {
+                "name": "gaussian",
+                "std": [0.1, 0.3, 0.5],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # ===================================================================
     # Overlap (fixed-bin histogram) — salt & pepper
     # ===================================================================
     {
-        "name": "overlap",
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "n_bins": 50,
-        "sigma": 0.05,
-        "validation_source": "noisy_self",
-        "noise_type": "salt_and_pepper",
-        "noise_fraction": [0.05, 0.1, 0.25],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "overlap",
+            "n_bins": 50,
+            "sigma": 0.05,
+            "source": {
+                "name": "salt_and_pepper",
+                "fraction": [0.05, 0.1, 0.25],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # Overlap (fixed-bin histogram) — gaussian
     {
-        "name": "overlap",
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "n_bins": 50,
-        "sigma": 0.05,
-        "validation_source": "noisy_self",
-        "noise_type": "gaussian",
-        "noise_std": [0.1, 0.3, 0.5],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "overlap",
+            "n_bins": 50,
+            "sigma": 0.05,
+            "source": {
+                "name": "gaussian",
+                "std": [0.1, 0.3, 0.5],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # ===================================================================
     # Overlap KDE — salt & pepper
     # ===================================================================
     {
-        "name": "overlap_kde",
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "n_points": 200,
-        "validation_source": "noisy_self",
-        "noise_type": "salt_and_pepper",
-        "noise_fraction": [0.05, 0.1, 0.25],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "overlap_kde",
+            "n_points": 200,
+            "source": {
+                "name": "salt_and_pepper",
+                "fraction": [0.05, 0.1, 0.25],
+                "num_noisy_samples": 3,
+            },
+        },
     },
     # Overlap KDE — gaussian
     {
-        "name": "overlap_kde",
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "n_points": 200,
-        "validation_source": "noisy_self",
-        "noise_type": "gaussian",
-        "noise_std": [0.1, 0.3, 0.5],
-        "num_noisy_samples": 3,
+        "loss_reduction": "mean",
+        "regularizer": {
+            "name": "overlap_kde",
+            "n_points": 200,
+            "source": {
+                "name": "gaussian",
+                "std": [0.1, 0.3, 0.5],
+                "num_noisy_samples": 3,
+            },
+        },
     },
 ]
 
 
-def _expand_template(template: dict) -> list[dict]:
-    """Expand a single regularizer template into all combinations.
+def _flatten_sweep_keys(d: dict, prefix: str = "") -> tuple[dict, list[tuple[str, list]]]:
+    """Recursively find list-valued fields in a nested dict.
 
-    Fields with list values are swept; scalar fields are kept fixed.
+    Returns (fixed_structure, sweep_items) where sweep_items is a list of
+    (dotted_key_path, values_list) pairs.
     """
-    sweep_keys = []
-    sweep_values = []
     fixed = {}
-
-    for key, value in template.items():
-        if isinstance(value, list):
-            sweep_keys.append(key)
-            sweep_values.append(value)
+    sweeps: list[tuple[str, list]] = []
+    for key, value in d.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            sub_fixed, sub_sweeps = _flatten_sweep_keys(value, full_key)
+            fixed[key] = sub_fixed
+            sweeps.extend(sub_sweeps)
+        elif isinstance(value, list):
+            sweeps.append((full_key, value))
         else:
             fixed[key] = value
+    return fixed, sweeps
 
-    if not sweep_keys:
+
+def _set_nested(d: dict, dotted_key: str, value) -> None:
+    """Set a value in a nested dict using a dotted key path."""
+    parts = dotted_key.split(".")
+    for part in parts[:-1]:
+        d = d[part]
+    d[parts[-1]] = value
+
+
+def _deep_copy_dict(d: dict) -> dict:
+    """Simple deep copy for nested dicts with primitive values."""
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, dict):
+            result[k] = _deep_copy_dict(v)
+        else:
+            result[k] = v
+    return result
+
+
+def _expand_template(template: dict) -> list[dict]:
+    """Expand a regularizer template into all combinations.
+
+    Supports nested dicts — list values at any depth are swept.
+    """
+    fixed, sweeps = _flatten_sweep_keys(template)
+
+    if not sweeps:
         return [dict(fixed)]
+
+    sweep_keys = [s[0] for s in sweeps]
+    sweep_values = [s[1] for s in sweeps]
 
     configs = []
     for combo in itertools.product(*sweep_values):
-        cfg = dict(fixed)
-        for key, val in zip(sweep_keys, combo):
-            cfg[key] = val
+        cfg = _deep_copy_dict(fixed)
+        for key, val in zip(sweep_keys, combo, strict=True):
+            _set_nested(cfg, key, val)
         configs.append(cfg)
     return configs
 
 
 def _regularizer_label(reg: dict) -> str:
     """Create a short descriptive label from a regularizer config."""
-    parts = [reg["name"], reg["noise_type"]]
-    for key, value in reg.items():
-        if key == "name":
-            continue
-        # Skip fields that are constant / already encoded in the label prefix
-        if key in ("validation_source", "noise_type", "num_noisy_samples"):
+    inner = reg.get("regularizer", {})
+    source = inner.get("source", {})
+    parts = [inner.get("name", "unknown"), source.get("name", "unknown")]
+
+    # Add weight
+    if "weight" in reg:
+        parts.append(f"weight={reg['weight']}")
+
+    # Add inner regularizer params (skip name and source)
+    for key, value in inner.items():
+        if key in ("name", "source"):
             continue
         parts.append(f"{key}={value}")
-    return "__".join(parts)
+
+    # Add source params (skip name and num_noisy_samples)
+    for key, value in source.items():
+        if key in ("name", "num_noisy_samples"):
+            continue
+        parts.append(f"{key}={value}")
+
+    # Add loss_reduction if non-default
+    if reg.get("loss_reduction") != "mean":
+        parts.append(f"loss_reduction={reg.get('loss_reduction')}")
+
+    return "__".join(str(p) for p in parts)
 
 
 def generate_search_configs() -> list[Path]:

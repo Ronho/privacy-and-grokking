@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from privacy_and_grokking.datasets import CanarySubset, MaskingConfig, Maskings, create_masking
+from privacy_and_grokking.datasets.base import CanaryDataset
+from privacy_and_grokking.datasets.masking.base import MaskingConfig
 from privacy_and_grokking.logger import get_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
 
@@ -100,8 +101,8 @@ def _visualize_models_per_datapoint(ax, mask: torch.Tensor, set_ylabel: bool = T
 
 
 def vis_masking_strategy(
-    dataset: CanarySubset,
-    masking_type: Maskings,
+    dataset: CanaryDataset,
+    masking_type: str,
     num_models_list: list[int],
     overwrite: bool = False,
 ):
@@ -120,7 +121,7 @@ def vis_masking_strategy(
 
     for col_idx, num_models in enumerate(num_models_list):
         config = MaskingConfig(name=masking_type, num_models=num_models, p=0.5, seed=1)
-        masking = create_masking(config, len(dataset), dataset.num_classes)
+        masking = config(num_samples=len(dataset), num_classes=dataset.num_classes)
         mask = masking(labels)
         axes[0, col_idx].set_title(f"{num_models} Models", fontsize=9, fontweight="bold")
 
