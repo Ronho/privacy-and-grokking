@@ -6,7 +6,7 @@ import torch
 from pydantic import BaseModel
 from torch.utils.data import Dataset
 
-CACHE_PATH = Path(__file__).parent.parent.parent.parent.resolve() / "cache"
+CACHE_PATH = Path(__file__).parent.parent.parent.parent.parent.resolve() / "cache"
 
 @dataclass
 class Normalization:
