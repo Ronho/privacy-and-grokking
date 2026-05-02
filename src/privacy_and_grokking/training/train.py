@@ -1,4 +1,3 @@
-import itertools
 import os
 import random
 import tempfile
@@ -17,12 +16,8 @@ from privacy_and_grokking.config import (
 )
 from privacy_and_grokking.datasets import (
     GpuDataset,
-    create_masking,
-    generate_datasets,
-    mask_dataset,
 )
-from privacy_and_grokking.metrics import evaluate
-from privacy_and_grokking.models import create_model
+from privacy_and_grokking.metrics import MetricsConfig, evaluate
 from privacy_and_grokking.utils import (
     Logger,
     get_device,
@@ -33,33 +28,6 @@ from privacy_and_grokking.utils import (
 
 LOG_FREQUENCY = 1000
 HEAVY_METRICS_LOG_FREQUENCY = LOG_FREQUENCY * 10
-
-
-def _reduce_loss(
-    losses: torch.Tensor, reduction: str | None
-) -> torch.Tensor:
-    """Reduce per-sample loss from ``(B, C, ...)`` to ``(B,)`` or leave as-is.
-
-    Parameters
-    ----------
-    losses : Tensor
-        Per-sample unreduced loss, shape ``(B,)`` or ``(B, C, ...)``.
-    reduction : ``"mean"`` | ``"max"`` | ``None``
-        How to collapse the extra (non-batch) dimensions.
-        ``None`` keeps the tensor unchanged.
-    """
-    if reduction is None or losses.dim() <= 1:
-        return losses
-    extra_dims = tuple(range(1, losses.dim()))
-    if reduction == "mean":
-        return losses.mean(dim=extra_dims)
-    if reduction == "max":
-        result = losses
-        # Reduce one dim at a time from the back to use torch.max properly.
-        for d in sorted(extra_dims, reverse=True):
-            result = result.max(dim=d).values
-        return result
-    raise ValueError(f"Unknown loss_reduction: {reduction!r}")
 
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
@@ -155,69 +123,57 @@ def train_handle(
     mlflow.set_tag("restart_count", str(restart_index))
     mlflow.log_dict(get_git_changes(), f"git/restart_{restart_index}.json")
 
+    metrics_config: MetricsConfig = config.metrics
+    log_frequency = metrics_config.log_frequency
+    heavy_metrics_log_frequency = metrics_config.heavy_metrics_log_frequency
+
     device_name = get_device()
     device = torch.device(device_name)
     logger.info(f"Using device {device_name}", device=device_name)
 
     logger.info("Preparing dataset.")
     keep_on_gpu = torch.cuda.is_available()
-    train, test = generate_datasets(config=config.dataset)
-    masking = create_masking(
-        config=config.dataset_mask,
-        num_samples=len(train),
-        num_classes=train.num_classes,
-    )
-    train_subset = mask_dataset(masking, train, config.dataset_mask_idx)
+    data_container = config.data()
+    train_subset = data_container.train
+    test = data_container.test
 
     train_loader = torch.utils.data.DataLoader(
         GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
-        # pin_memory=pin_memory,
-        # num_workers=2,
-        # persistent_workers=True
     )
     eval_train_loader = torch.utils.data.DataLoader(
         GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=False,
-        # pin_memory=pin_memory,
-        # num_workers=0,
     )
     eval_test_loader = torch.utils.data.DataLoader(
         GpuDataset(test, device) if keep_on_gpu else test,
         batch_size=config.batch_size,
         shuffle=False,
-        # pin_memory=pin_memory,
-        # num_workers=0,
     )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     logger.info("Preparing model.")
-    model = create_model(
-        name=config.model,
-        input_dim=train.input_shape,
-        num_classes=train.num_classes,
-        initialization_scale=config.initialization_scale,
+    model = config.model(
+        input_dim=data_container.input_shape,
+        num_classes=data_container.num_classes,
     )
     model.to(device)
 
     logger.info("Preparing optimizer and loss function.")
-    loss_fn = config.loss(num_classes=train.num_classes)
+    loss_fn = config.loss(num_classes=data_container.num_classes)
     optimizer = config.optimizer(params=model.parameters())
 
     regularizer_fn = None
-    reg_val_iter = None
     reg_loss_fn = None
-    noise_generator = None
-    if config.regularizer is not None:
-        regularizer_fn = config.regularizer()
-        regularizer_fn.to(device)
-        reg_loss_fn = config.loss(num_classes=train.num_classes, reduction="none")
-        noise_generator = config.regularizer.create_noise_generator()
-        if noise_generator is None:
-            reg_val_iter = itertools.cycle(eval_test_loader)
+    regularizer_cfg = config.regularizer
+    if regularizer_cfg is not None:
+        regularizer_fn = regularizer_cfg()
+        reg_loss_fn = config.loss.model_copy(
+            update={"reduction": "none"}
+        )(num_classes=data_container.num_classes)
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -229,7 +185,7 @@ def train_handle(
     scheduler = config.scheduler(
         optimizer=optimizer,
         optimization_steps=optimization_steps,
-        checkpoint=cfg.checkpoint if restart else -1,
+        last_epoch=cfg.checkpoint if restart else -1,
     )
 
     logger.info("Starting training loop.")
@@ -265,10 +221,10 @@ def train_handle(
 
                 if (
                     (step < 50)
-                    or (step < LOG_FREQUENCY and step % 100 == 0)
-                    or (step % LOG_FREQUENCY == 0)
+                    or (step < log_frequency and step % 100 == 0)
+                    or (step % log_frequency == 0)
                 ):
-                    heavy_metrics = step % HEAVY_METRICS_LOG_FREQUENCY == 0
+                    heavy_metrics = step % heavy_metrics_log_frequency == 0
                     metrics = evaluate(
                         model=model,
                         step=step,
@@ -279,6 +235,7 @@ def train_handle(
                         test_loader=eval_test_loader,
                         compute_heavy_metrics=heavy_metrics,
                         last_step=False,
+                        metrics_config=metrics_config,
                     )
                     mlflow.log_metrics(metrics, step=step)
 
@@ -304,54 +261,28 @@ def train_handle(
                 reg_value = None
                 if regularizer_fn is not None:
                     train_losses_per_sample = reg_loss_fn(logits, y)
-                    # reduction="none" may return (B, C) for MSE or (B,) for CE.
-                    # Apply the configured loss_reduction to collapse extra dims.
-                    loss_red = config.regularizer.loss_reduction
-                    train_losses_per_sample = _reduce_loss(
-                        train_losses_per_sample, loss_red
-                    )
-                    if noise_generator is not None:
-                        num_copies = config.regularizer.num_noisy_samples
-                        val_losses_parts = []
-                        for _ in range(num_copies):
-                            x_noisy = noise_generator(x)
-                            with torch.no_grad():
-                                val_logits = model(x_noisy)
-                                vl = reg_loss_fn(val_logits, y)
-                                vl = _reduce_loss(vl, loss_red)
-                                val_losses_parts.append(vl)
-                        val_losses_per_sample = torch.cat(val_losses_parts, dim=0)
-                    else:
-                        x_val, y_val = next(reg_val_iter)
-                        if not keep_on_gpu:
-                            x_val, y_val = x_val.to(device), y_val.to(device)
-                        with torch.no_grad():
-                            val_logits = model(x_val)
-                            val_losses_per_sample = reg_loss_fn(val_logits, y_val)
-                            val_losses_per_sample = _reduce_loss(
-                                val_losses_per_sample, loss_red
-                            )
-                    reg_value = regularizer_fn(train_losses_per_sample, val_losses_per_sample)
-                    loss = task_loss + config.regularizer.weight * reg_value
+                    # Collapse extra dims to get (B,) — e.g. MSE gives (B, C).
+                    if train_losses_per_sample.dim() > 1:
+                        extra = tuple(range(1, train_losses_per_sample.dim()))
+                        train_losses_per_sample = train_losses_per_sample.mean(dim=extra)
+                    reg_value = regularizer_fn(train_losses_per_sample)
+                    loss = task_loss + reg_value
 
                 loss.backward()
-
-                mlflow.log_metrics(
-                    {
-                        "train/task_loss": task_loss.item(),
-                        "train/total_loss": loss.item(),
-                        **({
-                            f"train/regularizer/{config.regularizer.name}": reg_value.item(),
-                            f"train/regularizer/{config.regularizer.name}/weighted": (
-                                config.regularizer.weight * reg_value
-                            ).item(),
-                        } if reg_value is not None else {}),
-                    },
-                    step=step,
-                )
-
                 optimizer.step()
                 scheduler.step()
+
+                if step % log_frequency == 0:
+                    mlflow.log_metrics(
+                        {
+                            "train/task_loss": task_loss.item(),
+                            "train/total_loss": loss.item(),
+                            **({
+                                f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
+                            } if reg_value is not None else {}),
+                        },
+                        step=step,
+                    )
 
                 step += 1
                 if prof is not None:
@@ -373,6 +304,7 @@ def train_handle(
         test_loader=eval_test_loader,
         compute_heavy_metrics=heavy_metrics,
         last_step=False,
+        metrics_config=metrics_config,
     )
     save_model(model, optimizer, step)
 

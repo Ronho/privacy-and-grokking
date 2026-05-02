@@ -57,11 +57,15 @@ def train(
     seed: int | None = None,
     run_name: str | None = None,
     checkpoint_frequency: int = LOG_FREQUENCY,
+    profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
 ):
+    if profile:
+        os.environ["PAG_PROFILE"] = "1"
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
-    cfg.dataset_mask_idx = mask_index
+    if cfg.data.mask is not None:
+        cfg.data.mask.model_index = mask_index
     training(
         exp_name=exp_name,
         total_steps=total_steps,
@@ -94,7 +98,7 @@ def extract(
     exp_name: str,
     run_id: str,
 ):
-    from privacy_and_grokking.extraction import extraction_handler
+    from privacy_and_grokking.metrics import extraction_handler
 
     with Logger() as logger:
         logger.info("Starting extraction handler.", extra={"run_id": run_id})
@@ -171,7 +175,8 @@ def pipeline(
             cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
             if seed is not None:
                 cfg.seed = seed
-            cfg.dataset_mask_idx = mask_index
+            if cfg.data.mask is not None:
+                cfg.data.mask.model_index = mask_index
             logger.info("Running train step.")
         current_run_id = training(
             exp_name=exp_name,
@@ -183,7 +188,7 @@ def pipeline(
         logger.info("Train step complete.", extra={"run_id": current_run_id})
 
         # Extract
-        from privacy_and_grokking.extraction import extraction_handler
+        from privacy_and_grokking.metrics import extraction_handler
 
         logger.info("Running extract step.", extra={"run_id": current_run_id})
         extraction_handler(exp_name, current_run_id)

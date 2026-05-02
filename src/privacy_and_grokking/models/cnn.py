@@ -1,8 +1,11 @@
 from math import floor
+from typing import Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from privacy_and_grokking.models.base import ModelConfig
 
 
 class CNN(nn.Module):
@@ -48,3 +51,12 @@ class CNN(nn.Module):
     @property
     def last_layer(self):
         return self.fc2
+
+
+class CNNConfig(ModelConfig):
+    name: Literal["cnn"] = "cnn"
+
+    def _create(
+        self, input_dim: torch.Size, num_classes: int
+    ) -> nn.Module:
+        return CNN(input_dim, num_classes)

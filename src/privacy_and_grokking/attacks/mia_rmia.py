@@ -3,9 +3,7 @@ import torch.nn.functional as F  # noqa: N812
 from tqdm import trange
 
 from privacy_and_grokking.config import TrainConfig
-from privacy_and_grokking.datasets import create_masking, generate_datasets, mask_dataset
 from privacy_and_grokking.logger import get_logger
-from privacy_and_grokking.models import create_model
 from privacy_and_grokking.path_keeper import get_path_keeper
 from privacy_and_grokking.utils import get_device
 
@@ -81,18 +79,12 @@ def attack(cfg: TrainConfig):
     device = get_device()
     pk = get_path_keeper()
 
-    train, test = generate_datasets(cfg.dataset)
-    masking = create_masking(
-        config=cfg.dataset_mask,
-        num_samples=len(train),
-        num_classes=train.num_classes,
-    )
-    train_subset = mask_dataset(masking, train, cfg.dataset_mask_idx)
-    input_dim = train.input_shape
-    num_classes = train.num_classes
+    container = cfg.data()
+    input_dim = container.input_shape
+    num_classes = container.num_classes
 
-    in_target_x, in_target_y = reduce_data(train_subset, max_samples=1000)
-    test_x, test_y = reduce_data(test, max_samples=11000)
+    in_target_x, in_target_y = reduce_data(container.train, max_samples=1000)
+    test_x, test_y = reduce_data(container.test, max_samples=11000)
 
     out_target_x, out_target_y = test_x[:1000], test_y[:1000]
     population_x, population_y = test_x[1000:], test_y[1000:]
@@ -109,10 +101,10 @@ def attack(cfg: TrainConfig):
             model = model_name
             break
     if model is None:
-        raise ValueError(f"No reference model defined for dataset {cfg.dataset.name}")
+        raise ValueError(f"No reference model defined for dataset {cfg.data.name}")
 
     pk.set_params({"model": model, "step": REFERENCE_MODEL_STEP})
-    reference_model = create_model(name=cfg.model, input_dim=input_dim, num_classes=num_classes)
+    reference_model = cfg.model(input_dim=input_dim, num_classes=num_classes)
     reference_model.load_state_dict(
         torch.load(pk.MODEL_TORCH, weights_only=True, map_location=device)
     )
@@ -126,8 +118,7 @@ def attack(cfg: TrainConfig):
     for i in trange(len(steps)):
         pk.set_params({"model": cfg.full_name, "step": steps[i]})
 
-        target_model = create_model(
-            name=cfg.model,
+        target_model = cfg.model(
             input_dim=input_dim,
             num_classes=num_classes,
         )

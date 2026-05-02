@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -7,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from privacy_and_grokking.metrics.config import MetricsConfig
 from privacy_and_grokking.metrics.curvature import curvature
 from privacy_and_grokking.metrics.distribution_overlap import (
     compute_distribution_overlap,
@@ -133,77 +136,129 @@ def evaluate(
     test_loader: torch.utils.data.DataLoader,
     compute_heavy_metrics: bool,
     last_step: bool,
+    metrics_config: MetricsConfig | None = None,
 ) -> dict[str, float]:
+    if metrics_config is None:
+        metrics_config = MetricsConfig()
+
     metrics = {}
     with eval_mode(model):
-        metrics.update(compute_weight_norms(model))
-        metrics.update(compute_gradient_norms(model))
-        metrics.update(get_optimizer_internals(optimizer))
+        if metrics_config.weight_norms:
+            metrics.update(compute_weight_norms(model))
+        if metrics_config.gradient_norms:
+            metrics.update(compute_gradient_norms(model))
+        if metrics_config.optimizer_internals:
+            metrics.update(get_optimizer_internals(optimizer))
 
+        compute_mm = (
+            compute_heavy_metrics and metrics_config.merlin_morgan
+        )
         train_results, train_activations, train_labels = _process_loader(
-            model, train_loader, compute_mm=compute_heavy_metrics, last_step=last_step
+            model, train_loader, compute_mm=compute_mm, last_step=last_step
         )
         test_results, test_activations, test_labels = _process_loader(
-            model, test_loader, compute_heavy_metrics, last_step=last_step
+            model, test_loader, compute_mm, last_step=last_step
         )
-        metrics["train/loss/mse/mean"] = train_results["mse_loss"].mean()
-        metrics["train/loss/mse/std"] = train_results["mse_loss"].std()
-        metrics["test/loss/mse/mean"] = test_results["mse_loss"].mean()
-        metrics["test/loss/mse/std"] = test_results["mse_loss"].std()
 
-        metrics["train/loss/ce/mean"] = train_results["ce_loss"].mean()
-        metrics["train/loss/ce/std"] = train_results["ce_loss"].std()
-        metrics["test/loss/ce/mean"] = test_results["ce_loss"].mean()
-        metrics["test/loss/ce/std"] = test_results["ce_loss"].std()
+        if metrics_config.loss_stats:
+            metrics["train/loss/mse/mean"] = train_results["mse_loss"].mean()
+            metrics["train/loss/mse/std"] = train_results["mse_loss"].std()
+            metrics["test/loss/mse/mean"] = test_results["mse_loss"].mean()
+            metrics["test/loss/mse/std"] = test_results["mse_loss"].std()
 
-        for loss_key in ("mse", "ce"):
-            t = train_results[f"{loss_key}_loss"]
-            v = test_results[f"{loss_key}_loss"]
-            metrics[f"loss/{loss_key}/overlap"] = compute_distribution_overlap(t, v)
-            metrics[f"loss/{loss_key}/overlap_adaptive"] = compute_distribution_overlap_adaptive(
-                t, v
+            metrics["train/loss/ce/mean"] = train_results["ce_loss"].mean()
+            metrics["train/loss/ce/std"] = train_results["ce_loss"].std()
+            metrics["test/loss/ce/mean"] = test_results["ce_loss"].mean()
+            metrics["test/loss/ce/std"] = test_results["ce_loss"].std()
+
+        if metrics_config.any_distribution_metric:
+            for loss_key in ("mse", "ce"):
+                t = train_results[f"{loss_key}_loss"]
+                v = test_results[f"{loss_key}_loss"]
+                if metrics_config.distribution_overlap:
+                    metrics[f"loss/{loss_key}/overlap"] = (
+                        compute_distribution_overlap(t, v)
+                    )
+                if metrics_config.distribution_overlap_adaptive:
+                    metrics[f"loss/{loss_key}/overlap_adaptive"] = (
+                        compute_distribution_overlap_adaptive(t, v)
+                    )
+                if metrics_config.distribution_overlap_kde:
+                    metrics[f"loss/{loss_key}/overlap_kde"] = (
+                        compute_distribution_overlap_kde(t, v)
+                    )
+                if metrics_config.soft_overlap:
+                    metrics[f"loss/{loss_key}/soft_overlap"] = (
+                        soft_distribution_overlap(t, v).item()
+                    )
+                if metrics_config.kl_divergence:
+                    metrics[f"loss/{loss_key}/kl_divergence"] = (
+                        compute_kl_divergence(t, v)
+                    )
+                if metrics_config.kl_divergence_adaptive:
+                    metrics[f"loss/{loss_key}/kl_divergence_adaptive"] = (
+                        compute_kl_divergence_adaptive(t, v)
+                    )
+                if metrics_config.kl_divergence_kde:
+                    metrics[f"loss/{loss_key}/kl_divergence_kde"] = (
+                        compute_kl_divergence_kde(t, v)
+                    )
+                if metrics_config.mmd:
+                    metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)
+
+        if metrics_config.accuracy:
+            metrics["train/accuracy"] = train_results["correctness"].sum() / len(
+                train_results["correctness"]
             )
-            metrics[f"loss/{loss_key}/overlap_kde"] = compute_distribution_overlap_kde(t, v)
-            metrics[f"loss/{loss_key}/soft_overlap"] = soft_distribution_overlap(t, v).item()
-            metrics[f"loss/{loss_key}/kl_divergence"] = compute_kl_divergence(t, v)
-            metrics[f"loss/{loss_key}/kl_divergence_adaptive"] = compute_kl_divergence_adaptive(
-                t, v
+            metrics["test/accuracy"] = test_results["correctness"].sum() / len(
+                test_results["correctness"]
             )
-            metrics[f"loss/{loss_key}/kl_divergence_kde"] = compute_kl_divergence_kde(t, v)
-            metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)
 
-        metrics["train/accuracy"] = train_results["correctness"].sum() / len(
-            train_results["correctness"]
-        )
-        metrics["test/accuracy"] = test_results["correctness"].sum() / len(
-            test_results["correctness"]
-        )
+        if metrics_config.any_attack_metric:
+            attacks = []
+            if metrics_config.attack_true_class_prob:
+                attacks.append((
+                    "true_class_prob",
+                    train_results["true_class_prob"],
+                    test_results["true_class_prob"],
+                ))
+            if metrics_config.attack_true_class_logit:
+                attacks.append((
+                    "true_class_logit",
+                    train_results["true_class_logit"],
+                    test_results["true_class_logit"],
+                ))
+            if metrics_config.attack_ce_loss:
+                attacks.append((
+                    "ce_loss",
+                    -train_results["ce_loss"],
+                    -test_results["ce_loss"],
+                ))
+            if metrics_config.attack_mse_loss:
+                attacks.append((
+                    "mse_loss",
+                    -train_results["mse_loss"],
+                    -test_results["mse_loss"],
+                ))
+            if metrics_config.attack_correctness:
+                attacks.append((
+                    "correctness",
+                    train_results["correctness"],
+                    test_results["correctness"],
+                ))
 
-        attacks = [
-            ("true_class_prob", train_results["true_class_prob"], test_results["true_class_prob"]),
-            (
-                "true_class_logit",
-                train_results["true_class_logit"],
-                test_results["true_class_logit"],
-            ),
-            ("ce_loss", -train_results["ce_loss"], -test_results["ce_loss"]),
-            ("mse_loss", -train_results["mse_loss"], -test_results["mse_loss"]),
-            ("correctness", train_results["correctness"], test_results["correctness"]),
-        ]
-
-        if compute_heavy_metrics:
-            attacks.extend(
-                [
+            if compute_heavy_metrics and metrics_config.merlin_morgan:
+                attacks.extend([
                     ("mm_ce", train_results["mm_ce"], test_results["mm_ce"]),
                     ("mm_mse", train_results["mm_mse"], test_results["mm_mse"]),
-                ]
-            )
+                ])
 
-        for prefix, train_sig, test_sig in attacks:
-            m = compute_roc_metrics_single_step(train_sig, test_sig)
-            for key, value in m.items():
-                metrics[f"attack/{prefix}/{key}"] = value
-    if compute_heavy_metrics:
+            for prefix, train_sig, test_sig in attacks:
+                m = compute_roc_metrics_single_step(train_sig, test_sig)
+                for key, value in m.items():
+                    metrics[f"attack/{prefix}/{key}"] = value
+
+    if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
 
     keys = list(metrics.keys())

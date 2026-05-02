@@ -3,16 +3,15 @@ import rsatoolbox
 import torch
 from matplotlib.patches import Rectangle
 
-from privacy_and_grokking.config import DatasetConfig
-from privacy_and_grokking.datasets import (
-    CanarySubset,
-    Datasets,
-    Maskings,
-    Normalization,
+from privacy_and_grokking.datasets.base import CanaryDataset
+from privacy_and_grokking.datasets.canaries import (
     SquareWatermarkCanaryConfig,
     UniformNoiseCanaryConfig,
-    generate_datasets,
 )
+from privacy_and_grokking.datasets.masking.uniform import UniformMaskingConfig
+from privacy_and_grokking.datasets.sets.base import Normalization
+from privacy_and_grokking.datasets.sets.cifar10 import CIFAR10Config
+from privacy_and_grokking.datasets.sets.mnist import MNISTConfig
 from privacy_and_grokking.logger import get_logger
 from privacy_and_grokking.path_keeper import get_path_keeper
 from privacy_and_grokking.visualize.masks import vis_masking_strategy
@@ -20,7 +19,7 @@ from privacy_and_grokking.visualize.masks import vis_masking_strategy
 logger = get_logger()
 
 
-def _samples_by_class(dataset: CanarySubset, canary: bool = False):
+def _samples_by_class(dataset: CanaryDataset, canary: bool = False):
     samples_by_class = {i: [] for i in range(dataset.num_classes)}
     indices = dataset.canary_indices if canary else dataset.subset_indices
     for idx in indices:
@@ -163,12 +162,15 @@ def _vis_rdm(
     plt.close(fig)
 
 
-def vis_dataset(name: Datasets, overwrite: bool = False):
+def vis_dataset(name: str, overwrite: bool = False):
     logger.info("Visualizing dataset", extra={"dataset": name})
     pk = get_path_keeper()
     pk.set_params({"model": f"DATASET_{name.upper()}"})
 
-    config = DatasetConfig(name=name, train_size=None, canary_share=0, canary_config=None, seed=1)
+    # A dummy mask is required by the config but won't be used for visualization
+    dummy_mask = UniformMaskingConfig(num_models=2, p=0.5, seed=1)
+
+    config = MNISTConfig(train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1) if name == "mnist" else CIFAR10Config(train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1)
     train, test = generate_datasets(config=config)
 
     # Class Distributions
@@ -211,12 +213,12 @@ def vis_dataset(name: Datasets, overwrite: bool = False):
     )
 
     # Watermark Samples per Class
-    config_watermark = DatasetConfig(
-        name=name,
-        train_size=None,
-        canary_share=0.01,
-        canary_config=SquareWatermarkCanaryConfig(square_size=3),
-        seed=2,
+    config_watermark = config.model_copy(
+        update={
+            "canary_share": 0.01,
+            "canary_config": SquareWatermarkCanaryConfig(square_size=3),
+            "seed": 2,
+        }
     )
     train_watermark, _ = generate_datasets(config=config_watermark)
     samples_by_class_watermark = _samples_by_class(dataset=train_watermark, canary=True)
@@ -230,12 +232,12 @@ def vis_dataset(name: Datasets, overwrite: bool = False):
     )
 
     # Noise Samples per Class
-    config_noise = DatasetConfig(
-        name=name,
-        train_size=None,
-        canary_share=0.01,
-        canary_config=UniformNoiseCanaryConfig(),
-        seed=2,
+    config_noise = config.model_copy(
+        update={
+            "canary_share": 0.01,
+            "canary_config": UniformNoiseCanaryConfig(),
+            "seed": 2,
+        }
     )
     train_noise, _ = generate_datasets(config=config_noise)
     samples_by_class_noise = _samples_by_class(dataset=train_noise, canary=True)
@@ -286,15 +288,21 @@ def vis_dataset(name: Datasets, overwrite: bool = False):
     _vis_rdm(name, images, postfix="_indices", overwrite=overwrite)
 
     # Masks
-    config.train_size = 2000
-    train_mask, _ = generate_datasets(config=config)
+    config_mask = config.model_copy(update={"train_size": 2000})
+    train_mask, _ = generate_datasets(config=config_mask)
     num_models_list = [2, 8, 64, 256, 512]
-    for masking_type in Maskings:
+    from privacy_and_grokking.datasets.masking import (
+        BalancedStratifiedMaskingConfig,
+        IndependentStratifiedMaskingConfig,
+        PartitionedStratifiedMaskingConfig,
+    )
+    masking_types = ["uniform", "independent_stratified", "partitioned_stratified", "balanced_stratified"]
+    for masking_type in masking_types:
         vis_masking_strategy(
             train_mask, masking_type, num_models_list=num_models_list, overwrite=overwrite
         )
 
 
 def visualize(overwrite: bool = False):
-    for dataset_name in list(Datasets):
+    for dataset_name in ["mnist", "cifar10"]:
         vis_dataset(dataset_name, overwrite=overwrite)
