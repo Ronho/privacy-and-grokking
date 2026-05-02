@@ -1,9 +1,7 @@
-from .model import (
-    DatasetConfig,
-    TrainConfig,
-)
+
+
+from privacy_and_grokking.config.model import TrainConfig
 
 __all__ = [
-    "DatasetConfig",
     "TrainConfig",
 ]

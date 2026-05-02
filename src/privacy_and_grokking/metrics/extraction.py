@@ -14,7 +14,7 @@ from privacy_and_grokking.datasets import (
     generate_datasets,
     mask_dataset,
 )
-from privacy_and_grokking.metrics import evaluate
+from privacy_and_grokking.metrics.evaluate import evaluate
 from privacy_and_grokking.utils import Logger, get_device, setup_mlflow
 
 
@@ -54,16 +54,16 @@ def _stratified_indices(dataset, n: int) -> list[int]:
 
 
 def _get_datasets(cfg: TrainConfig):
-    train, test = generate_datasets(cfg.dataset)
+    train, test = generate_datasets(cfg.data)
     masking = create_masking(
-        config=cfg.dataset_mask,
+        config=cfg.data.mask,
         num_samples=len(train),
         num_classes=train.num_classes,
     )
     train_subset = mask_dataset(
         masking,
         train,
-        cfg.dataset_mask_idx,
+        cfg.data.mask.model_index,
     )
     subsample_size = min(len(train_subset), len(test))  # type: ignore
     train_sub = Subset(
@@ -140,6 +140,11 @@ def _step_wise(run_id: str) -> None:
 
 
 def extraction_handler(exp_name: str, run_id: str) -> None:
+    """Re-evaluate all saved checkpoints for a given run and log metrics.
+
+    This is the post-training extraction entry point that loads each
+    checkpoint, runs the full evaluation suite, and stores results in MLflow.
+    """
     setup_mlflow(exp_name)
     with (
         Logger() as logger,

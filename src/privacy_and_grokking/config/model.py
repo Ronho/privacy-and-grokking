@@ -1,8 +1,8 @@
 from pydantic import BaseModel, ConfigDict
 
 from privacy_and_grokking.datasets import DataConfig
-from privacy_and_grokking.evaluation import MetricsConfig
 from privacy_and_grokking.loss import Loss, SelfContainedTwoSampleRegularizer
+from privacy_and_grokking.metrics import MetricsConfig
 from privacy_and_grokking.models import Model
 from privacy_and_grokking.optimizer import Optimizer
 from privacy_and_grokking.scheduler import Scheduler
