@@ -29,10 +29,12 @@ BASE_CONFIG = "MSE_SGD_DEFAULT.json"
 # ---------------------------------------------------------------------------
 # Search space definition
 #
-# Each entry is a regularizer template using the new nested format:
-#   { "weight": ..., "loss_reduction": ..., "regularizer": { "name": ..., "source": { ... } } }
+# Each entry is a regularizer template using the nested format:
+#   { "weight": ..., "regularizer": { "name": ..., "source": { ... } } }
 #
-# Use lists for values you want to sweep over; scalar values are kept fixed.
+# Top-level keys (e.g. weight) are merged with the inner "regularizer"
+# dict before validation. Use lists for values you want to sweep over;
+# scalar values are kept fixed.
 # The generator takes the cartesian product of all list-valued fields.
 # ---------------------------------------------------------------------------
 SEARCH_SPACE: list[dict] = [
@@ -41,7 +43,6 @@ SEARCH_SPACE: list[dict] = [
     # ===================================================================
     {
         "weight": [0.1, 1.0, 10.0],
-        "loss_reduction": [None, "mean", "max"],
         "regularizer": {
             "name": "per_sample_distance",
             "metric": ["l1", "l2", "huber"],
@@ -55,7 +56,6 @@ SEARCH_SPACE: list[dict] = [
     # Per-Sample Distance (PSD) — gaussian
     {
         "weight": [0.1, 1.0, 10.0],
-        "loss_reduction": [None, "mean", "max"],
         "regularizer": {
             "name": "per_sample_distance",
             "metric": ["l1", "l2", "huber"],
@@ -71,7 +71,6 @@ SEARCH_SPACE: list[dict] = [
     # ===================================================================
     {
         "weight": [0.1, 1.0, 10.0, 20.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "mmd",
             "bandwidth": [0.1, 0.5, 1.0],
@@ -85,7 +84,6 @@ SEARCH_SPACE: list[dict] = [
     # MMD — gaussian
     {
         "weight": [0.1, 1.0, 10.0, 20.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "mmd",
             "bandwidth": [0.1, 0.5, 1.0],
@@ -101,7 +99,6 @@ SEARCH_SPACE: list[dict] = [
     # ===================================================================
     {
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "overlap",
             "n_bins": 50,
@@ -116,7 +113,6 @@ SEARCH_SPACE: list[dict] = [
     # Overlap (fixed-bin histogram) — gaussian
     {
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "overlap",
             "n_bins": 50,
@@ -133,7 +129,6 @@ SEARCH_SPACE: list[dict] = [
     # ===================================================================
     {
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "overlap_kde",
             "n_points": 200,
@@ -147,7 +142,6 @@ SEARCH_SPACE: list[dict] = [
     # Overlap KDE — gaussian
     {
         "weight": [0.1, 1.0, 2.0, 10.0],
-        "loss_reduction": "mean",
         "regularizer": {
             "name": "overlap_kde",
             "n_points": 200,
@@ -245,10 +239,6 @@ def _regularizer_label(reg: dict) -> str:
             continue
         parts.append(f"{key}={value}")
 
-    # Add loss_reduction if non-default
-    if reg.get("loss_reduction") != "mean":
-        parts.append(f"loss_reduction={reg.get('loss_reduction')}")
-
     return "__".join(str(p) for p in parts)
 
 
@@ -269,11 +259,26 @@ def generate_search_configs() -> list[Path]:
     for template in SEARCH_SPACE:
         regularizer_configs = _expand_template(template)
         for reg_cfg in regularizer_configs:
+            # Flatten the nested template format into the flat format
+            # expected by the Pydantic discriminated union.
+            # Template format: {"weight": ..., "aggregation": ..., "regularizer": {"name": ..., "source": {...}}}
+            # Pydantic format: {"name": ..., "weight": ..., "aggregation": ..., "source": {...}}
+            flat_reg = {}
+            for key, value in reg_cfg.items():
+                if key == "regularizer":
+                    # Merge inner regularizer fields to top level
+                    flat_reg.update(value)
+                else:
+                    flat_reg[key] = value
+
+            # Drop None-valued fields (Pydantic will use defaults)
+            flat_reg = {k: v for k, v in flat_reg.items() if v is not None}
+
             # Build the full config by overriding the regularizer
             full = base.model_copy(deep=True)
             full.regularizer = None  # clear first, then re-validate with new data
             config_dict = full.model_dump()
-            config_dict["regularizer"] = reg_cfg
+            config_dict["regularizer"] = flat_reg
 
             # Validate through Pydantic
             validated = TrainConfig.model_validate(config_dict)
