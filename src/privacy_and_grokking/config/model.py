@@ -1,11 +1,11 @@
 from pydantic import BaseModel, ConfigDict
 
-from privacy_and_grokking.config.optimizer import Optimizer
-from privacy_and_grokking.config.scheduler import Scheduler
-from privacy_and_grokking.datasets import DatasetConfig, MaskingConfig
-from privacy_and_grokking.loss.loss import Loss
-from privacy_and_grokking.loss.regularizer import SelfContainedTwoSampleRegularizer
+from privacy_and_grokking.datasets import DataConfig
+from privacy_and_grokking.evaluation import MetricsConfig
+from privacy_and_grokking.loss import Loss, SelfContainedTwoSampleRegularizer
 from privacy_and_grokking.models import Model
+from privacy_and_grokking.optimizer import Optimizer
+from privacy_and_grokking.scheduler import Scheduler
 
 
 class TrainConfig(BaseModel):
@@ -18,14 +18,17 @@ class TrainConfig(BaseModel):
     regularizer: SelfContainedTwoSampleRegularizer | None = None
     optimizer: Optimizer
     scheduler: Scheduler
-    dataset: DatasetConfig
-    dataset_mask: MaskingConfig
-    dataset_mask_idx: int = 0
+    data: DataConfig
+    metrics: MetricsConfig = MetricsConfig()
 
     @property
     def name(self) -> str:
-        return f"{self.model.name.upper()}_{self.dataset.name.upper()}_{self.dataset_mask.name.upper()}_{self.optimizer.name.upper()}_{self.loss.name.upper()}"
+        return (
+            f"{self.model.name.upper()}_{self.data.name.upper()}_"
+            f"{self.data.mask.name.upper()}_{self.optimizer.name.upper()}_"
+            f"{self.loss.name.upper()}"
+        )
 
     @property
     def full_name(self) -> str:
-        return f"{self.name}_{self.dataset_mask_idx}"
+        return f"{self.name}_{self.data.mask.model_index}"

@@ -61,7 +61,7 @@ def train(
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
     if seed is not None:
         cfg.seed = seed
-    cfg.dataset_mask_idx = mask_index
+    cfg.data.mask.model_index = mask_index
     training(
         exp_name=exp_name,
         total_steps=total_steps,
@@ -171,7 +171,7 @@ def pipeline(
             cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
             if seed is not None:
                 cfg.seed = seed
-            cfg.dataset_mask_idx = mask_index
+            cfg.data.mask.model_index = mask_index
             logger.info("Running train step.")
         current_run_id = training(
             exp_name=exp_name,
