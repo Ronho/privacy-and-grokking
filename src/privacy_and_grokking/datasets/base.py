@@ -225,9 +225,7 @@ class DatasetConfig(BaseModel):
         """Build the dataset, apply canaries and subsetting, then apply masking."""
         container = self.data()
         train = self.apply_canary(container.train, container.num_classes)
-        print(f"------------- 1 {len(train)}")
         train = self.apply_mask(train, container.num_classes)
-        print(f"------------- 2 {len(train)}")
 
 
         return DataContainer(
