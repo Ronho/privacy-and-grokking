@@ -16,11 +16,8 @@ from privacy_and_grokking.config import (
 )
 from privacy_and_grokking.datasets import (
     GpuDataset,
-    create_masking,
-    generate_datasets,
-    mask_dataset,
 )
-from privacy_and_grokking.metrics import evaluate
+from privacy_and_grokking.metrics import MetricsConfig, evaluate
 from privacy_and_grokking.utils import (
     Logger,
     get_device,
@@ -126,54 +123,47 @@ def train_handle(
     mlflow.set_tag("restart_count", str(restart_index))
     mlflow.log_dict(get_git_changes(), f"git/restart_{restart_index}.json")
 
+    metrics_config: MetricsConfig = config.metrics
+    log_frequency = metrics_config.log_frequency
+    heavy_metrics_log_frequency = metrics_config.heavy_metrics_log_frequency
+
     device_name = get_device()
     device = torch.device(device_name)
     logger.info(f"Using device {device_name}", device=device_name)
 
     logger.info("Preparing dataset.")
     keep_on_gpu = torch.cuda.is_available()
-    train, test = generate_datasets(config=config.dataset)
-    masking = create_masking(
-        config=config.dataset_mask,
-        num_samples=len(train),
-        num_classes=train.num_classes,
-    )
-    train_subset = mask_dataset(masking, train, config.dataset_mask_idx)
+    data_container = config.data()
+    train_subset = data_container.train
+    test = data_container.test
 
     train_loader = torch.utils.data.DataLoader(
         GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
-        # pin_memory=pin_memory,
-        # num_workers=2,
-        # persistent_workers=True
     )
     eval_train_loader = torch.utils.data.DataLoader(
         GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
         batch_size=config.batch_size,
         shuffle=False,
-        # pin_memory=pin_memory,
-        # num_workers=0,
     )
     eval_test_loader = torch.utils.data.DataLoader(
         GpuDataset(test, device) if keep_on_gpu else test,
         batch_size=config.batch_size,
         shuffle=False,
-        # pin_memory=pin_memory,
-        # num_workers=0,
     )
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     logger.info("Preparing model.")
     model = config.model(
-        input_dim=train.input_shape,
-        num_classes=train.num_classes,
+        input_dim=data_container.input_shape,
+        num_classes=data_container.num_classes,
     )
     model.to(device)
 
     logger.info("Preparing optimizer and loss function.")
-    loss_fn = config.loss(num_classes=train.num_classes)
+    loss_fn = config.loss(num_classes=data_container.num_classes)
     optimizer = config.optimizer(params=model.parameters())
 
     regularizer_fn = None
@@ -182,8 +172,8 @@ def train_handle(
     if regularizer_cfg is not None:
         regularizer_fn = regularizer_cfg()
         reg_loss_fn = config.loss.model_copy(
-            update={"reduction": regularizer_cfg.loss_reduction}
-        )(num_classes=train.num_classes)
+            update={"reduction": "none"}
+        )(num_classes=data_container.num_classes)
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -231,10 +221,10 @@ def train_handle(
 
                 if (
                     (step < 50)
-                    or (step < LOG_FREQUENCY and step % 100 == 0)
-                    or (step % LOG_FREQUENCY == 0)
+                    or (step < log_frequency and step % 100 == 0)
+                    or (step % log_frequency == 0)
                 ):
-                    heavy_metrics = step % HEAVY_METRICS_LOG_FREQUENCY == 0
+                    heavy_metrics = step % heavy_metrics_log_frequency == 0
                     metrics = evaluate(
                         model=model,
                         step=step,
@@ -245,6 +235,7 @@ def train_handle(
                         test_loader=eval_test_loader,
                         compute_heavy_metrics=heavy_metrics,
                         last_step=False,
+                        metrics_config=metrics_config,
                     )
                     mlflow.log_metrics(metrics, step=step)
 
@@ -270,6 +261,10 @@ def train_handle(
                 reg_value = None
                 if regularizer_fn is not None:
                     train_losses_per_sample = reg_loss_fn(logits, y)
+                    # Collapse extra dims to get (B,) — e.g. MSE gives (B, C).
+                    if train_losses_per_sample.dim() > 1:
+                        extra = tuple(range(1, train_losses_per_sample.dim()))
+                        train_losses_per_sample = train_losses_per_sample.mean(dim=extra)
                     reg_value = regularizer_fn(train_losses_per_sample)
                     loss = task_loss + reg_value
 
@@ -309,6 +304,7 @@ def train_handle(
         test_loader=eval_test_loader,
         compute_heavy_metrics=heavy_metrics,
         last_step=False,
+        metrics_config=metrics_config,
     )
     save_model(model, optimizer, step)
 
