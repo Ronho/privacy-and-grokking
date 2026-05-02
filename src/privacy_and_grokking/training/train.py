@@ -269,20 +269,20 @@ def train_handle(
                     loss = task_loss + reg_value
 
                 loss.backward()
-
-                mlflow.log_metrics(
-                    {
-                        "train/task_loss": task_loss.item(),
-                        "train/total_loss": loss.item(),
-                        **({
-                            f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
-                        } if reg_value is not None else {}),
-                    },
-                    step=step,
-                )
-
                 optimizer.step()
                 scheduler.step()
+
+                if step % log_frequency == 0:
+                    mlflow.log_metrics(
+                        {
+                            "train/task_loss": task_loss.item(),
+                            "train/total_loss": loss.item(),
+                            **({
+                                f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
+                            } if reg_value is not None else {}),
+                        },
+                        step=step,
+                    )
 
                 step += 1
                 if prof is not None:
