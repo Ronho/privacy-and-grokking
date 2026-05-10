@@ -1,4 +1,5 @@
 import os
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -206,10 +207,11 @@ def pipeline(
 
 def _handle(line):
     line = line.strip()
-    if line:
-        with Logger() as logger:
-            logger.info("Processing command.", extra={"command": line})
-            os.system(line)
+    if not line:
+        return
+    with Logger() as logger:
+        logger.info("Processing command.", command=line)
+        subprocess.run(line, shell=True, stdin=subprocess.DEVNULL)
 
 
 @app.command()

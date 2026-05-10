@@ -328,7 +328,7 @@ def train(
     run_id = cfg.run_id if isinstance(cfg, RestartConfig) else None
     with (
         log_handler as logger,
-        mlflow.start_run(run_id=run_id, run_name=run_name, log_system_metrics=True) as mlflow_run,
+        mlflow.start_run(run_id=run_id, run_name=run_name, log_system_metrics=None) as mlflow_run,
     ):
         returned_run_id = mlflow_run.info.run_id
         try:
