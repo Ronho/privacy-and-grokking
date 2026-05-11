@@ -6,9 +6,7 @@ from .cnn import CNNConfig
 from .mlp import MLPConfig
 from .mlp_batchnorm import MLPBatchNormConfig
 
-Model = Annotated[
-    MLPConfig | MLPBatchNormConfig | CNNConfig, Field(discriminator="name")
-]
+Model = Annotated[MLPConfig | MLPBatchNormConfig | CNNConfig, Field(discriminator="name")]
 
 __all__ = [
     "CNNConfig",

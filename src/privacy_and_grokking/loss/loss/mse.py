@@ -12,9 +12,7 @@ class MSELossConfig(LossConfig):
     def __call__(self, **kwargs) -> LossType:
         num_classes: int | None = kwargs.get("num_classes")
         if num_classes is None:
-            raise ValueError(
-                "num_classes must be provided as a keyword argument to MSELossConfig"
-            )
+            raise ValueError("num_classes must be provided as a keyword argument to MSELossConfig")
         one_hot = torch.eye(num_classes, num_classes)
         reduction = self.reduction
 

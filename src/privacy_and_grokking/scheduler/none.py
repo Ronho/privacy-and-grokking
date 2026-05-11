@@ -13,5 +13,7 @@ class NoScheduler(torch.optim.lr_scheduler.LRScheduler):
 class NoSchedulerConfig(SchedulerConfig):
     name: Literal["None"] = "None"
 
-    def __call__(self, optimizer: torch.optim.Optimizer, **kwargs) -> torch.optim.lr_scheduler.LRScheduler:
+    def __call__(
+        self, optimizer: torch.optim.Optimizer, **kwargs
+    ) -> torch.optim.lr_scheduler.LRScheduler:
         return NoScheduler()

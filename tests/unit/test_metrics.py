@@ -19,7 +19,6 @@ from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_w
 from privacy_and_grokking.metrics.optimizer_params import get_optimizer_internals
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

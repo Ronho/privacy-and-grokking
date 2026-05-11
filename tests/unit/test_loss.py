@@ -44,7 +44,6 @@ class TestMSELoss:
         result = loss_fn(logits, labels)
         assert result.item() >= 0.0
 
-
     def test_missing_num_classes_raises(self):
         cfg = MSELossConfig(name="mse")
         with pytest.raises(ValueError, match="num_classes"):

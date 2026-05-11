@@ -44,7 +44,9 @@ from privacy_and_grokking.datasets.masking.uniform import (
 class FakeDataset(Dataset):
     """A simple in-memory dataset for testing."""
 
-    def __init__(self, num_samples: int, num_classes: int, input_shape: tuple[int, ...] = (1, 8, 8)):
+    def __init__(
+        self, num_samples: int, num_classes: int, input_shape: tuple[int, ...] = (1, 8, 8)
+    ):
         self.num_samples = num_samples
         self.num_classes = num_classes
         self.input_shape = input_shape
@@ -118,14 +120,18 @@ class TestMaskingBase:
 
 class TestUniformMasking:
     def test_output_shape(self):
-        masking = UniformMasking(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42)
+        masking = UniformMasking(
+            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42
+        )
         classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
         mask = masking(classes=classes)
         assert mask.shape == (NUM_SAMPLES, 3)
         assert mask.dtype == torch.bool
 
     def test_approximate_proportion(self):
-        masking = UniformMasking(num_samples=1000, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42)
+        masking = UniformMasking(
+            num_samples=1000, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
+        )
         classes = torch.arange(1000) % NUM_CLASSES
         mask = masking(classes=classes)
         # Each model should have approximately 50% of samples
@@ -134,7 +140,13 @@ class TestUniformMasking:
             assert 0.4 < proportion < 0.6
 
     def test_deterministic_with_seed(self):
-        kwargs = {"num_samples": NUM_SAMPLES, "num_classes": NUM_CLASSES, "num_models": 2, "p": 0.5, "seed": 123}
+        kwargs = {
+            "num_samples": NUM_SAMPLES,
+            "num_classes": NUM_CLASSES,
+            "num_models": 2,
+            "p": 0.5,
+            "seed": 123,
+        }
         classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
         mask1 = UniformMasking(**kwargs)(classes=classes)
         mask2 = UniformMasking(**kwargs)(classes=classes)
@@ -174,14 +186,22 @@ class TestIndependentStratifiedMasking:
                 assert selected == expected
 
     def test_deterministic_with_seed(self):
-        kwargs = {"num_samples": NUM_SAMPLES, "num_classes": NUM_CLASSES, "num_models": 2, "p": 0.5, "seed": 99}
+        kwargs = {
+            "num_samples": NUM_SAMPLES,
+            "num_classes": NUM_CLASSES,
+            "num_models": 2,
+            "p": 0.5,
+            "seed": 99,
+        }
         classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
         mask1 = IndependentStratifiedMasking(**kwargs)(classes=classes)
         mask2 = IndependentStratifiedMasking(**kwargs)(classes=classes)
         assert torch.equal(mask1, mask2)
 
     def test_config_creates_masking(self):
-        cfg = IndependentStratifiedMaskingConfig(name="independent_stratified", num_models=2, p=0.5, seed=42)
+        cfg = IndependentStratifiedMaskingConfig(
+            name="independent_stratified", num_models=2, p=0.5, seed=42
+        )
         masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
         assert isinstance(masking, IndependentStratifiedMasking)
 
@@ -219,14 +239,22 @@ class TestPartitionedStratifiedMasking:
         assert assigned.all()
 
     def test_deterministic_with_seed(self):
-        kwargs = {"num_samples": NUM_SAMPLES, "num_classes": NUM_CLASSES, "num_models": 2, "p": 0.5, "seed": 77}
+        kwargs = {
+            "num_samples": NUM_SAMPLES,
+            "num_classes": NUM_CLASSES,
+            "num_models": 2,
+            "p": 0.5,
+            "seed": 77,
+        }
         classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
         mask1 = PartitionedStratifiedMasking(**kwargs)(classes=classes)
         mask2 = PartitionedStratifiedMasking(**kwargs)(classes=classes)
         assert torch.equal(mask1, mask2)
 
     def test_config_creates_masking(self):
-        cfg = PartitionedStratifiedMaskingConfig(name="partitioned_stratified", num_models=2, p=0.5, seed=42)
+        cfg = PartitionedStratifiedMaskingConfig(
+            name="partitioned_stratified", num_models=2, p=0.5, seed=42
+        )
         masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
         assert isinstance(masking, PartitionedStratifiedMasking)
 
@@ -255,14 +283,22 @@ class TestBalancedStratifiedMasking:
             assert count == expected_per_model
 
     def test_deterministic_with_seed(self):
-        kwargs = {"num_samples": NUM_SAMPLES, "num_classes": NUM_CLASSES, "num_models": 2, "p": 0.5, "seed": 55}
+        kwargs = {
+            "num_samples": NUM_SAMPLES,
+            "num_classes": NUM_CLASSES,
+            "num_models": 2,
+            "p": 0.5,
+            "seed": 55,
+        }
         classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
         mask1 = BalancedStratifiedMasking(**kwargs)(classes=classes)
         mask2 = BalancedStratifiedMasking(**kwargs)(classes=classes)
         assert torch.equal(mask1, mask2)
 
     def test_config_creates_masking(self):
-        cfg = BalancedStratifiedMaskingConfig(name="balanced_stratified", num_models=2, p=0.5, seed=42)
+        cfg = BalancedStratifiedMaskingConfig(
+            name="balanced_stratified", num_models=2, p=0.5, seed=42
+        )
         masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
         assert isinstance(masking, BalancedStratifiedMasking)
 

@@ -171,9 +171,9 @@ def train_handle(
     regularizer_cfg = config.regularizer
     if regularizer_cfg is not None:
         regularizer_fn = regularizer_cfg()
-        reg_loss_fn = config.loss.model_copy(
-            update={"reduction": "none"}
-        )(num_classes=data_container.num_classes)
+        reg_loss_fn = config.loss.model_copy(update={"reduction": "none"})(
+            num_classes=data_container.num_classes
+        )
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
@@ -277,9 +277,13 @@ def train_handle(
                         {
                             "train/task_loss": task_loss.item(),
                             "train/total_loss": loss.item(),
-                            **({
-                                f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
-                            } if reg_value is not None else {}),
+                            **(
+                                {
+                                    f"train/regularizer/{regularizer_cfg.name}": reg_value.item(),
+                                }
+                                if reg_value is not None
+                                else {}
+                            ),
                         },
                         step=step,
                     )

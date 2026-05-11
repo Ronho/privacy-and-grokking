@@ -107,7 +107,9 @@ def visualization_multi_handler(
         )
 
         if aggregate:
-            visualizations = extract_visualizations(MULTI_VIZ_NAMES, include=include, exclude=exclude)
+            visualizations = extract_visualizations(
+                MULTI_VIZ_NAMES, include=include, exclude=exclude
+            )
             logger.info(
                 "Producing aggregated group figure.",
                 visualizations=sorted(visualizations),

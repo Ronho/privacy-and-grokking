@@ -37,21 +37,15 @@ class Masking(ABC):
         if seed is not None:
             self.rng.manual_seed(seed)
         else:
-            Logger.get().warning(
-                "No seed provided for masking, using non-deterministic behavior."
-            )
+            Logger.get().warning("No seed provided for masking, using non-deterministic behavior.")
 
     def __call__(self, classes: torch.Tensor | None = None) -> torch.Tensor:
         logger = Logger.get()
         if classes is None:
-            logger.warning(
-                "No classes provided for StratifiedMasking, using even distribution."
-            )
+            logger.warning("No classes provided for StratifiedMasking, using even distribution.")
             samples_per_class = self.num_samples // self.num_classes
             remainder = self.num_samples % self.num_classes
-            classes = torch.repeat_interleave(
-                torch.arange(self.num_classes), samples_per_class
-            )
+            classes = torch.repeat_interleave(torch.arange(self.num_classes), samples_per_class)
             if remainder > 0:
                 classes = torch.cat([classes, torch.arange(end=remainder)])
 

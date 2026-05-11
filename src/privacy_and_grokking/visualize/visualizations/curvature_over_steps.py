@@ -2,7 +2,11 @@ from matplotlib import pyplot as plt
 
 from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize.handler import DataHandler
-from privacy_and_grokking.visualize.visualizations.shared import STEP_LABEL, handle_missing_data, plot_with_band
+from privacy_and_grokking.visualize.visualizations.shared import (
+    STEP_LABEL,
+    handle_missing_data,
+    plot_with_band,
+)
 
 
 def curvature_over_steps(ax: plt.Axes, dh: DataHandler):

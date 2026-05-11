@@ -50,9 +50,7 @@ class BalancedStratifiedMasking(Masking):
             n_swaps = 5 * self.num_models
 
             for _ in range(n_swaps):
-                m1, m2 = torch.randint(
-                    0, self.num_models, (2,), generator=self.rng
-                ).tolist()
+                m1, m2 = torch.randint(0, self.num_models, (2,), generator=self.rng).tolist()
                 if m1 == m2:
                     continue
 
@@ -63,12 +61,8 @@ class BalancedStratifiedMasking(Masking):
                 only_2 = torch.nonzero(col2 & (~col1)).view(-1)
 
                 if len(only_1) > 0 and len(only_2) > 0:
-                    idx1 = only_1[
-                        torch.randint(len(only_1), (1,), generator=self.rng)
-                    ]
-                    idx2 = only_2[
-                        torch.randint(len(only_2), (1,), generator=self.rng)
-                    ]
+                    idx1 = only_1[torch.randint(len(only_1), (1,), generator=self.rng)]
+                    idx2 = only_2[torch.randint(len(only_2), (1,), generator=self.rng)]
 
                     global_idx1 = class_mask_rows[idx1]
                     global_idx2 = class_mask_rows[idx2]

@@ -36,7 +36,5 @@ class MLPBatchNorm(nn.Module):
 class MLPBatchNormConfig(ModelConfig):
     name: Literal["mlp_batchnorm"] = "mlp_batchnorm"
 
-    def _create(
-        self, input_dim: torch.Size, num_classes: int
-    ) -> nn.Module:
+    def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return MLPBatchNorm(input_dim, num_classes)

@@ -18,25 +18,19 @@ def _make_gaussian_source(std: float = 0.1, num_noisy_samples: int = 1):
 
 class TestMMDRegularizer:
     def test_returns_callable(self):
-        cfg = MMDRegularizerConfig(
-            name="mmd", source=_make_gaussian_source(), bandwidth=0.1
-        )
+        cfg = MMDRegularizerConfig(name="mmd", source=_make_gaussian_source(), bandwidth=0.1)
         reg_fn = cfg()
         assert callable(reg_fn)
 
     def test_output_is_scalar(self):
-        cfg = MMDRegularizerConfig(
-            name="mmd", source=_make_gaussian_source(), bandwidth=0.1
-        )
+        cfg = MMDRegularizerConfig(name="mmd", source=_make_gaussian_source(), bandwidth=0.1)
         reg_fn = cfg()
         train_losses = torch.randn(32).abs()
         result = reg_fn(train_losses)
         assert result.dim() == 0
 
     def test_output_is_non_negative(self):
-        cfg = MMDRegularizerConfig(
-            name="mmd", source=_make_gaussian_source(), bandwidth=0.1
-        )
+        cfg = MMDRegularizerConfig(name="mmd", source=_make_gaussian_source(), bandwidth=0.1)
         reg_fn = cfg()
         train_losses = torch.randn(32).abs()
         result = reg_fn(train_losses)
@@ -44,9 +38,7 @@ class TestMMDRegularizer:
 
     def test_identical_distributions_give_low_mmd(self):
         # With zero noise, train and val losses are identical -> MMD ≈ 0
-        cfg = MMDRegularizerConfig(
-            name="mmd", source=_make_gaussian_source(std=0.0), bandwidth=0.1
-        )
+        cfg = MMDRegularizerConfig(name="mmd", source=_make_gaussian_source(std=0.0), bandwidth=0.1)
         reg_fn = cfg()
         train_losses = torch.randn(32).abs()
         result = reg_fn(train_losses)

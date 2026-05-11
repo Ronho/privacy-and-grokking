@@ -457,7 +457,7 @@ def compute_js_distance_kde(
         device=dist_a.device,
         dtype=dist_a.dtype,
     )
-    dx = (grid[1] - grid[0])
+    dx = grid[1] - grid[0]
 
     # Gaussian KDE: p(x) = (1 / (N * σ * sqrt(2π))) Σ exp(-0.5 ((x - x_i)/σ)^2)
     inv_sqrt2pi = 1.0 / math.sqrt(2.0 * math.pi)
@@ -467,8 +467,8 @@ def compute_js_distance_kde(
     pb = torch.exp(-0.5 * diff_b.pow(2)).mean(dim=1) * (inv_sqrt2pi / sigma_b)
 
     # Convert continuous densities to PMFs over the grid for a discrete JSD.
-    p = (pa * dx)
-    q = (pb * dx)
+    p = pa * dx
+    q = pb * dx
     p = p / p.sum().clamp(min=1e-12)
     q = q / q.sum().clamp(min=1e-12)
     jsd = _jsd_from_pmfs(p, q).clamp(min=0.0)
@@ -496,7 +496,7 @@ def compute_mmd(
 
     x = dist_a.unsqueeze(1)  # (N,1)
     y = dist_b.unsqueeze(1)  # (M,1)
-    bw2 = 2.0 * bandwidth ** 2
+    bw2 = 2.0 * bandwidth**2
 
     k_xx = torch.exp(-torch.cdist(x, x, p=2).pow(2) / bw2)
     k_yy = torch.exp(-torch.cdist(y, y, p=2).pow(2) / bw2)

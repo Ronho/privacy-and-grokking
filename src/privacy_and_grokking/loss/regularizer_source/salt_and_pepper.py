@@ -7,6 +7,7 @@ from privacy_and_grokking.loss.regularizer_source.base import NoiseRegularizerSo
 
 class SaltAndPepperNoiseConfig(NoiseRegularizerSourceConfig):
     """Salt-and-pepper noise: randomly sets a fraction of elements to min or max."""
+
     name: Literal["salt_and_pepper"] = "salt_and_pepper"
     fraction: float | None = None
 
@@ -30,4 +31,5 @@ class SaltAndPepperNoiseConfig(NoiseRegularizerSourceConfig):
             values = torch.where(salt_mask, hi, lo)
             out = torch.where(noise_mask, values, expanded)
             return out.detach()
+
         return func

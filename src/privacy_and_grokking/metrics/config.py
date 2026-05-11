@@ -47,28 +47,32 @@ class MetricsConfig(BaseModel):
     @property
     def any_distribution_metric(self) -> bool:
         """Whether any distribution comparison metric is enabled."""
-        return any([
-            self.distribution_overlap,
-            self.distribution_overlap_adaptive,
-            self.distribution_overlap_kde,
-            self.soft_overlap,
-            self.kl_divergence,
-            self.kl_divergence_adaptive,
-            self.kl_divergence_kde,
-            self.js_distance,
-            self.js_distance_adaptive,
-            self.js_distance_kde,
-            self.mmd,
-        ])
+        return any(
+            [
+                self.distribution_overlap,
+                self.distribution_overlap_adaptive,
+                self.distribution_overlap_kde,
+                self.soft_overlap,
+                self.kl_divergence,
+                self.kl_divergence_adaptive,
+                self.kl_divergence_kde,
+                self.js_distance,
+                self.js_distance_adaptive,
+                self.js_distance_kde,
+                self.mmd,
+            ]
+        )
 
     @property
     def any_attack_metric(self) -> bool:
         """Whether any attack metric is enabled."""
-        return any([
-            self.attack_true_class_prob,
-            self.attack_true_class_logit,
-            self.attack_ce_loss,
-            self.attack_mse_loss,
-            self.attack_correctness,
-            self.merlin_morgan,
-        ])
+        return any(
+            [
+                self.attack_true_class_prob,
+                self.attack_true_class_logit,
+                self.attack_ce_loss,
+                self.attack_mse_loss,
+                self.attack_correctness,
+                self.merlin_morgan,
+            ]
+        )

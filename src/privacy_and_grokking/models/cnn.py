@@ -56,7 +56,5 @@ class CNN(nn.Module):
 class CNNConfig(ModelConfig):
     name: Literal["cnn"] = "cnn"
 
-    def _create(
-        self, input_dim: torch.Size, num_classes: int
-    ) -> nn.Module:
+    def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return CNN(input_dim, num_classes)

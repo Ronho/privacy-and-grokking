@@ -170,7 +170,13 @@ def vis_dataset(name: str, overwrite: bool = False):
     # A dummy mask is required by the config but won't be used for visualization
     dummy_mask = UniformMaskingConfig(num_models=2, p=0.5, seed=1)
 
-    config = MNISTConfig(train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1) if name == "mnist" else CIFAR10Config(train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1)
+    config = (
+        MNISTConfig(train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1)
+        if name == "mnist"
+        else CIFAR10Config(
+            train_size=None, canary_share=0, canary_config=None, mask=dummy_mask, seed=1
+        )
+    )
     train, test = generate_datasets(config=config)
 
     # Class Distributions
@@ -291,12 +297,13 @@ def vis_dataset(name: str, overwrite: bool = False):
     config_mask = config.model_copy(update={"train_size": 2000})
     train_mask, _ = generate_datasets(config=config_mask)
     num_models_list = [2, 8, 64, 256, 512]
-    from privacy_and_grokking.datasets.masking import (
-        BalancedStratifiedMaskingConfig,
-        IndependentStratifiedMaskingConfig,
-        PartitionedStratifiedMaskingConfig,
-    )
-    masking_types = ["uniform", "independent_stratified", "partitioned_stratified", "balanced_stratified"]
+
+    masking_types = [
+        "uniform",
+        "independent_stratified",
+        "partitioned_stratified",
+        "balanced_stratified",
+    ]
     for masking_type in masking_types:
         vis_masking_strategy(
             train_mask, masking_type, num_models_list=num_models_list, overwrite=overwrite

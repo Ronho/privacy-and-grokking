@@ -7,6 +7,7 @@ from privacy_and_grokking.loss.regularizer_source.base import NoiseRegularizerSo
 
 class GaussianNoiseConfig(NoiseRegularizerSourceConfig):
     """Additive Gaussian noise: x_noisy = x + N(0, std²)."""
+
     name: Literal["gaussian"] = "gaussian"
     mean: float = 0.0
     std: float = 1.0

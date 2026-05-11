@@ -16,12 +16,8 @@ class MNISTConfig(DatasetConfig):
     def __call__(self) -> DataContainer:
         transform = transforms.ToTensor()
         CACHE_PATH.mkdir(exist_ok=True)
-        train = datasets.MNIST(
-            root=CACHE_PATH, train=True, download=True, transform=transform
-        )
-        test = datasets.MNIST(
-            root=CACHE_PATH, train=False, download=True, transform=transform
-        )
+        train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
+        test = datasets.MNIST(root=CACHE_PATH, train=False, download=True, transform=transform)
         return DataContainer(
             train=train,
             test=test,

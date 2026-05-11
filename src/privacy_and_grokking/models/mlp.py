@@ -32,7 +32,5 @@ class MLP(nn.Module):
 class MLPConfig(ModelConfig):
     name: Literal["mlp"] = "mlp"
 
-    def _create(
-        self, input_dim: torch.Size, num_classes: int
-    ) -> nn.Module:
+    def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return MLP(input_dim, num_classes)

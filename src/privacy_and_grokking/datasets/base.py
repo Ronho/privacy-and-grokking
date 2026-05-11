@@ -153,9 +153,7 @@ class DatasetConfig(BaseModel):
                 return dataset
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices = self._compute_subset_indices(
-                labels, num_samples, num_classes, rng
-            )
+            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng)
             return CanaryDataset(
                 dataset=dataset,
                 subset_indices=subset_indices,
@@ -169,9 +167,7 @@ class DatasetConfig(BaseModel):
                 return dataset
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices = self._compute_subset_indices(
-                labels, num_samples, num_classes, rng
-            )
+            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng)
             return CanaryDataset(
                 dataset=dataset,
                 subset_indices=subset_indices,
@@ -197,7 +193,10 @@ class DatasetConfig(BaseModel):
             raw_lookup[cls] = class_indices[perm[amt:]]
 
         subset_indices = self._compute_subset_indices(
-            labels, num_samples, num_classes, rng,
+            labels,
+            num_samples,
+            num_classes,
+            rng,
             canary_lookup=canary_lookup,
             raw_lookup=raw_lookup,
             share=share,
@@ -226,7 +225,6 @@ class DatasetConfig(BaseModel):
         container = self.data()
         train = self.apply_canary(container.train, container.num_classes)
         train = self.apply_mask(train, container.num_classes)
-
 
         return DataContainer(
             train=train,  # type: ignore[arg-type]

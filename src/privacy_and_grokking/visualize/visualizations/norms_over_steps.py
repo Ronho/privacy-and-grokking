@@ -28,7 +28,9 @@ def _plot_norms_over_steps(ax: plt.Axes, dh: DataHandler, prefix: str, ylabel: s
         color = LAYER_COLORS[seen[base] % len(LAYER_COLORS)]
         linestyle = "--" if name.endswith(".bias") else "-"
         data = dh.get_metric_history(key)
-        plot_with_band(ax, data, color=color, label=name, linestyle=linestyle, linewidth=1, alpha=0.8)
+        plot_with_band(
+            ax, data, color=color, label=name, linestyle=linestyle, linewidth=1, alpha=0.8
+        )
 
     if total_key in all_keys:
         data = dh.get_metric_history(total_key)

@@ -153,9 +153,7 @@ def evaluate(
         if metrics_config.optimizer_internals:
             metrics.update(get_optimizer_internals(optimizer))
 
-        compute_mm = (
-            compute_heavy_metrics and metrics_config.merlin_morgan
-        )
+        compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
         train_results, train_activations, train_labels = _process_loader(
             model, train_loader, compute_mm=compute_mm, last_step=last_step
         )
@@ -179,45 +177,33 @@ def evaluate(
                 t = train_results[f"{loss_key}_loss"]
                 v = test_results[f"{loss_key}_loss"]
                 if metrics_config.distribution_overlap:
-                    metrics[f"loss/{loss_key}/overlap"] = (
-                        compute_distribution_overlap(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/overlap"] = compute_distribution_overlap(t, v)
                 if metrics_config.distribution_overlap_adaptive:
                     metrics[f"loss/{loss_key}/overlap_adaptive"] = (
                         compute_distribution_overlap_adaptive(t, v)
                     )
                 if metrics_config.distribution_overlap_kde:
-                    metrics[f"loss/{loss_key}/overlap_kde"] = (
-                        compute_distribution_overlap_kde(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/overlap_kde"] = compute_distribution_overlap_kde(t, v)
                 if metrics_config.soft_overlap:
-                    metrics[f"loss/{loss_key}/soft_overlap"] = (
-                        soft_distribution_overlap(t, v).item()
-                    )
+                    metrics[f"loss/{loss_key}/soft_overlap"] = soft_distribution_overlap(
+                        t, v
+                    ).item()
                 if metrics_config.kl_divergence:
-                    metrics[f"loss/{loss_key}/kl_divergence"] = (
-                        compute_kl_divergence(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/kl_divergence"] = compute_kl_divergence(t, v)
                 if metrics_config.kl_divergence_adaptive:
                     metrics[f"loss/{loss_key}/kl_divergence_adaptive"] = (
                         compute_kl_divergence_adaptive(t, v)
                     )
                 if metrics_config.kl_divergence_kde:
-                    metrics[f"loss/{loss_key}/kl_divergence_kde"] = (
-                        compute_kl_divergence_kde(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/kl_divergence_kde"] = compute_kl_divergence_kde(t, v)
                 if metrics_config.js_distance:
-                    metrics[f"loss/{loss_key}/js_distance"] = (
-                        compute_js_distance(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/js_distance"] = compute_js_distance(t, v)
                 if metrics_config.js_distance_adaptive:
-                    metrics[f"loss/{loss_key}/js_distance_adaptive"] = (
-                        compute_js_distance_adaptive(t, v)
+                    metrics[f"loss/{loss_key}/js_distance_adaptive"] = compute_js_distance_adaptive(
+                        t, v
                     )
                 if metrics_config.js_distance_kde:
-                    metrics[f"loss/{loss_key}/js_distance_kde"] = (
-                        compute_js_distance_kde(t, v)
-                    )
+                    metrics[f"loss/{loss_key}/js_distance_kde"] = compute_js_distance_kde(t, v)
                 if metrics_config.mmd:
                     metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)
 
@@ -232,41 +218,53 @@ def evaluate(
         if metrics_config.any_attack_metric:
             attacks = []
             if metrics_config.attack_true_class_prob:
-                attacks.append((
-                    "true_class_prob",
-                    train_results["true_class_prob"],
-                    test_results["true_class_prob"],
-                ))
+                attacks.append(
+                    (
+                        "true_class_prob",
+                        train_results["true_class_prob"],
+                        test_results["true_class_prob"],
+                    )
+                )
             if metrics_config.attack_true_class_logit:
-                attacks.append((
-                    "true_class_logit",
-                    train_results["true_class_logit"],
-                    test_results["true_class_logit"],
-                ))
+                attacks.append(
+                    (
+                        "true_class_logit",
+                        train_results["true_class_logit"],
+                        test_results["true_class_logit"],
+                    )
+                )
             if metrics_config.attack_ce_loss:
-                attacks.append((
-                    "ce_loss",
-                    -train_results["ce_loss"],
-                    -test_results["ce_loss"],
-                ))
+                attacks.append(
+                    (
+                        "ce_loss",
+                        -train_results["ce_loss"],
+                        -test_results["ce_loss"],
+                    )
+                )
             if metrics_config.attack_mse_loss:
-                attacks.append((
-                    "mse_loss",
-                    -train_results["mse_loss"],
-                    -test_results["mse_loss"],
-                ))
+                attacks.append(
+                    (
+                        "mse_loss",
+                        -train_results["mse_loss"],
+                        -test_results["mse_loss"],
+                    )
+                )
             if metrics_config.attack_correctness:
-                attacks.append((
-                    "correctness",
-                    train_results["correctness"],
-                    test_results["correctness"],
-                ))
+                attacks.append(
+                    (
+                        "correctness",
+                        train_results["correctness"],
+                        test_results["correctness"],
+                    )
+                )
 
             if compute_heavy_metrics and metrics_config.merlin_morgan:
-                attacks.extend([
-                    ("mm_ce", train_results["mm_ce"], test_results["mm_ce"]),
-                    ("mm_mse", train_results["mm_mse"], test_results["mm_mse"]),
-                ])
+                attacks.extend(
+                    [
+                        ("mm_ce", train_results["mm_ce"], test_results["mm_ce"]),
+                        ("mm_mse", train_results["mm_mse"], test_results["mm_mse"]),
+                    ]
+                )
 
             for prefix, train_sig, test_sig in attacks:
                 m = compute_roc_metrics_single_step(train_sig, test_sig)

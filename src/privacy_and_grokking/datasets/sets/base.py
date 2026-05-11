@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 
 CACHE_PATH = Path(__file__).parent.parent.parent.parent.parent.resolve() / "cache"
 
+
 @dataclass
 class Normalization:
     mean: list[float]
@@ -21,6 +22,7 @@ class DataContainer:
     num_classes: int
     input_shape: torch.Size
     normalization: Normalization
+
 
 class DatasetConfig(BaseModel):
     name: str
