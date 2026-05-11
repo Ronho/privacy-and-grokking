@@ -71,6 +71,9 @@ class TestMetricsConfig:
             kl_divergence=False,
             kl_divergence_adaptive=False,
             kl_divergence_kde=False,
+            js_distance=False,
+            js_distance_adaptive=False,
+            js_distance_kde=False,
             mmd=False,
         )
         assert cfg.any_distribution_metric is False
@@ -84,6 +87,9 @@ class TestMetricsConfig:
             kl_divergence=False,
             kl_divergence_adaptive=False,
             kl_divergence_kde=False,
+            js_distance=False,
+            js_distance_adaptive=False,
+            js_distance_kde=False,
             mmd=True,
         )
         assert cfg.any_distribution_metric is True

@@ -15,6 +15,9 @@ from privacy_and_grokking.metrics.distribution_overlap import (
     compute_distribution_overlap,
     compute_distribution_overlap_adaptive,
     compute_distribution_overlap_kde,
+    compute_js_distance,
+    compute_js_distance_adaptive,
+    compute_js_distance_kde,
     compute_kl_divergence,
     compute_kl_divergence_adaptive,
     compute_kl_divergence_kde,
@@ -202,6 +205,18 @@ def evaluate(
                 if metrics_config.kl_divergence_kde:
                     metrics[f"loss/{loss_key}/kl_divergence_kde"] = (
                         compute_kl_divergence_kde(t, v)
+                    )
+                if metrics_config.js_distance:
+                    metrics[f"loss/{loss_key}/js_distance"] = (
+                        compute_js_distance(t, v)
+                    )
+                if metrics_config.js_distance_adaptive:
+                    metrics[f"loss/{loss_key}/js_distance_adaptive"] = (
+                        compute_js_distance_adaptive(t, v)
+                    )
+                if metrics_config.js_distance_kde:
+                    metrics[f"loss/{loss_key}/js_distance_kde"] = (
+                        compute_js_distance_kde(t, v)
                     )
                 if metrics_config.mmd:
                     metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)

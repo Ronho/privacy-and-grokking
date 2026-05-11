@@ -28,6 +28,9 @@ class MetricsConfig(BaseModel):
     kl_divergence: bool = True
     kl_divergence_adaptive: bool = True
     kl_divergence_kde: bool = True
+    js_distance: bool = True
+    js_distance_adaptive: bool = True
+    js_distance_kde: bool = True
     mmd: bool = True
 
     # Attack / membership inference metrics
@@ -52,6 +55,9 @@ class MetricsConfig(BaseModel):
             self.kl_divergence,
             self.kl_divergence_adaptive,
             self.kl_divergence_kde,
+            self.js_distance,
+            self.js_distance_adaptive,
+            self.js_distance_kde,
             self.mmd,
         ])
 

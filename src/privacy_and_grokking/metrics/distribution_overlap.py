@@ -341,6 +341,141 @@ def compute_kl_divergence_kde(
 
 
 # ---------------------------------------------------------------------------
+# Jensen-Shannon distance
+# ---------------------------------------------------------------------------
+#
+# JSD(P||Q) = 0.5 * KL(P||M) + 0.5 * KL(Q||M),  where M = 0.5 * (P + Q)
+# JS distance = sqrt(JSD).  With natural log, JSD ∈ [0, ln(2)], so the
+# distance is bounded in [0, sqrt(ln(2)) ≈ 0.8326].  Unlike KL, it is
+# symmetric and always finite.
+
+
+def _jsd_from_pmfs(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+    """Jensen-Shannon divergence (in nats) between two PMFs on the same support."""
+    eps = 1e-12
+    m = 0.5 * (p + q)
+    kl_pm = (p * (p.clamp(min=eps) / m.clamp(min=eps)).log()).sum()
+    kl_qm = (q * (q.clamp(min=eps) / m.clamp(min=eps)).log()).sum()
+    return 0.5 * (kl_pm + kl_qm)
+
+
+def compute_js_distance(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    n_bins: int = 100,
+) -> float:
+    """Jensen-Shannon distance between two 1-D distributions via histograms.
+
+    Returns sqrt(JSD) in nats — symmetric, bounded in [0, sqrt(ln(2))].
+    """
+    dist_a = dist_a.flatten().float()
+    dist_b = dist_b.flatten().float()
+    dist_a = dist_a[torch.isfinite(dist_a)]
+    dist_b = dist_b[torch.isfinite(dist_b)]
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return 1.0
+
+    all_values = torch.cat([dist_a, dist_b])
+    lo, hi = float(all_values.min()), float(all_values.max())
+    if hi <= lo:
+        return 1.0
+
+    hist_a = torch.histc(dist_a, bins=n_bins, min=lo, max=hi)
+    hist_b = torch.histc(dist_b, bins=n_bins, min=lo, max=hi)
+    p = hist_a / hist_a.sum().clamp(min=1e-12)
+    q = hist_b / hist_b.sum().clamp(min=1e-12)
+    jsd = _jsd_from_pmfs(p, q).clamp(min=0.0)
+    return float(jsd.sqrt().item())
+
+
+def compute_js_distance_adaptive(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    max_bins: int = 100,
+) -> float:
+    """Jensen-Shannon distance with adaptive bin count."""
+    dist_a = dist_a.flatten().float()
+    dist_b = dist_b.flatten().float()
+    dist_a = dist_a[torch.isfinite(dist_a)]
+    dist_b = dist_b[torch.isfinite(dist_b)]
+    if dist_a.numel() == 0 or dist_b.numel() == 0:
+        return 0.0
+
+    n_bins = _adaptive_bins(dist_a.numel(), dist_b.numel(), max_bins)
+    all_values = torch.cat([dist_a, dist_b])
+    lo, hi = float(all_values.min()), float(all_values.max())
+    if hi <= lo:
+        return 0.0
+
+    hist_a = torch.histc(dist_a, bins=n_bins, min=lo, max=hi)
+    hist_b = torch.histc(dist_b, bins=n_bins, min=lo, max=hi)
+    p = hist_a / hist_a.sum().clamp(min=1e-12)
+    q = hist_b / hist_b.sum().clamp(min=1e-12)
+    jsd = _jsd_from_pmfs(p, q).clamp(min=0.0)
+    return float(jsd.sqrt().item())
+
+
+def _silverman_bandwidth(x: torch.Tensor) -> torch.Tensor:
+    """Silverman's rule-of-thumb bandwidth for 1-D Gaussian KDE, on tensors."""
+    n = x.numel()
+    std = x.std(unbiased=True)
+    # Standard 1-D Silverman: 1.06 * sigma * n^(-1/5)
+    bw = 1.06 * std * (n ** (-1.0 / 5.0))
+    return bw.clamp(min=1e-6)
+
+
+def compute_js_distance_kde(
+    dist_a: torch.Tensor,
+    dist_b: torch.Tensor,
+    n_points: int = 200,
+) -> float:
+    """Jensen-Shannon distance estimated via Gaussian KDE (pure PyTorch).
+
+    Bandwidths are computed via Silverman's rule directly on tensors, then
+    each KDE is evaluated on a shared grid spanning the union of both
+    samples (with 10% margin) so the densities live on the same support.
+    """
+    dist_a = dist_a.flatten().float()
+    dist_b = dist_b.flatten().float()
+    dist_a = dist_a[torch.isfinite(dist_a)]
+    dist_b = dist_b[torch.isfinite(dist_b)]
+    if dist_a.numel() < 2 or dist_b.numel() < 2:
+        return 0.0
+
+    sigma_a = _silverman_bandwidth(dist_a)
+    sigma_b = _silverman_bandwidth(dist_b)
+
+    lo = torch.minimum(dist_a.min(), dist_b.min())
+    hi = torch.maximum(dist_a.max(), dist_b.max())
+    if (hi - lo).item() <= 0:
+        return 0.0
+    margin = (hi - lo) * 0.1
+    grid = torch.linspace(
+        (lo - margin).item(),
+        (hi + margin).item(),
+        n_points,
+        device=dist_a.device,
+        dtype=dist_a.dtype,
+    )
+    dx = (grid[1] - grid[0])
+
+    # Gaussian KDE: p(x) = (1 / (N * σ * sqrt(2π))) Σ exp(-0.5 ((x - x_i)/σ)^2)
+    inv_sqrt2pi = 1.0 / math.sqrt(2.0 * math.pi)
+    diff_a = (grid.unsqueeze(1) - dist_a.unsqueeze(0)) / sigma_a
+    pa = torch.exp(-0.5 * diff_a.pow(2)).mean(dim=1) * (inv_sqrt2pi / sigma_a)
+    diff_b = (grid.unsqueeze(1) - dist_b.unsqueeze(0)) / sigma_b
+    pb = torch.exp(-0.5 * diff_b.pow(2)).mean(dim=1) * (inv_sqrt2pi / sigma_b)
+
+    # Convert continuous densities to PMFs over the grid for a discrete JSD.
+    p = (pa * dx)
+    q = (pb * dx)
+    p = p / p.sum().clamp(min=1e-12)
+    q = q / q.sum().clamp(min=1e-12)
+    jsd = _jsd_from_pmfs(p, q).clamp(min=0.0)
+    return float(jsd.sqrt().item())
+
+
+# ---------------------------------------------------------------------------
 # MMD
 # ---------------------------------------------------------------------------
 
