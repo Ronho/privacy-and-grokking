@@ -70,7 +70,10 @@ def _make_layers(cfg: list[int | str], in_channels: int, batch_norm: bool) -> nn
     c = in_channels
     for v in cfg:
         if v == "M":
-            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+            # ceil_mode keeps small feature maps from collapsing to 0x0 on
+            # inputs like MNIST 28x28, where 5 successive halvings would
+            # otherwise underflow.
+            layers.append(nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True))
         else:
             assert isinstance(v, int)
             layers.append(nn.Conv2d(c, v, kernel_size=3, padding=1, bias=not batch_norm))
