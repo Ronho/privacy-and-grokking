@@ -208,12 +208,13 @@ def evaluate(
                     metrics[f"loss/{loss_key}/mmd"] = compute_mmd(t, v)
 
         if metrics_config.accuracy:
-            metrics["train/accuracy"] = train_results["correctness"].sum() / len(
+            train_accuracy = train_results["correctness"].sum() / len(
                 train_results["correctness"]
             )
-            metrics["test/accuracy"] = test_results["correctness"].sum() / len(
-                test_results["correctness"]
-            )
+            test_accuracy = test_results["correctness"].sum() / len(test_results["correctness"])
+            metrics["train/accuracy"] = train_accuracy
+            metrics["test/accuracy"] = test_accuracy
+            metrics["generalization_gap"] = train_accuracy - test_accuracy
 
         if metrics_config.any_attack_metric:
             attacks = []
