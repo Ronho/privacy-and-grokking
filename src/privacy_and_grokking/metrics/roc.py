@@ -34,4 +34,11 @@ def compute_roc_metrics_single_step(
         pct = int(rate * 100)
         metrics[f"tpr-at-fpr/{pct}"] = tpr_at_rate
 
+    # Recall at the threshold the attacker would actually pick: the one that
+    # maximises Youden's J = TPR - FPR (best operating point on the ROC).
+    j_scores = tpr - fpr
+    best_idx = int(np.argmax(j_scores))
+    metrics["recall"] = float(tpr[best_idx])
+    metrics["recall_fpr"] = float(fpr[best_idx])
+
     return metrics

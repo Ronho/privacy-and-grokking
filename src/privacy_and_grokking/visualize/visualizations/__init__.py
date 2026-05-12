@@ -13,6 +13,9 @@ from privacy_and_grokking.visualize.visualizations.loss_components_over_steps im
 )
 from privacy_and_grokking.visualize.visualizations.loss_over_steps import loss_over_steps
 from privacy_and_grokking.visualize.visualizations.mia_auc_over_steps import mia_auc_over_steps
+from privacy_and_grokking.visualize.visualizations.mia_recall_over_steps import (
+    mia_recall_over_steps,
+)
 from privacy_and_grokking.visualize.visualizations.mia_tpr_at_fpr_over_steps import (
     mia_tpr_at_fpr_over_steps,
 )
@@ -33,6 +36,7 @@ SINGLE_AXIS_VISUALIZATIONS: dict[str, Callable[[plt.Axes, DataHandler], None]] =
     "loss_over_steps": loss_over_steps,
     "loss_components_over_steps": loss_components_over_steps,
     "mia_auc_over_steps": mia_auc_over_steps,
+    "mia_recall_over_steps": mia_recall_over_steps,
     "mia_tpr_at_fpr_over_steps_1": partial(mia_tpr_at_fpr_over_steps, fpr_pct=1),
     "mia_tpr_at_fpr_over_steps_5": partial(mia_tpr_at_fpr_over_steps, fpr_pct=5),
     "mia_tpr_at_fpr_over_steps_10": partial(mia_tpr_at_fpr_over_steps, fpr_pct=10),
