@@ -24,6 +24,7 @@ from privacy_and_grokking.metrics.distribution_overlap import (
     compute_mmd,
     soft_distribution_overlap,
 )
+from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
 from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_weight_norms
 from privacy_and_grokking.metrics.optimizer_params import get_optimizer_internals
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
@@ -34,7 +35,11 @@ MERLIN_MORGAN_NOISE_SCALE = 0.01
 
 
 def _process_loader(
-    model: nn.Module, loader: torch.utils.data.DataLoader, compute_mm: bool, last_step: bool
+    model: nn.Module,
+    loader: torch.utils.data.DataLoader,
+    compute_mm: bool,
+    last_step: bool,
+    collect_features: bool = False,
 ):
     device = get_device()
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
@@ -43,7 +48,9 @@ def _process_loader(
     buffers_accum: dict[str, list[torch.Tensor]] = {}
     label_list_accum: list[torch.Tensor] = []
     handles: list = []
-    if last_step:
+    capture_state = {"enabled": True}
+    _collect = last_step or collect_features
+    if _collect:
         for name, module in model.named_modules():
             if isinstance(module, nn.Linear):
                 key = name
@@ -51,7 +58,8 @@ def _process_loader(
 
                 def _make_hook(k: str):
                     def _hook(_module: nn.Module, _inp: tuple, output: torch.Tensor) -> None:
-                        buffers_accum[k].append(output.detach().cpu())
+                        if capture_state["enabled"]:
+                            buffers_accum[k].append(output.detach().cpu())
 
                     return _hook
 
@@ -60,6 +68,8 @@ def _process_loader(
     result = defaultdict(list)
 
     for x, y in loader:
+        if _collect:
+            label_list_accum.append(y.cpu())
         x, y = x.to(device), y.to(device)
         logit = model(x)
         prob = F.softmax(logit, dim=1)
@@ -97,7 +107,13 @@ def _process_loader(
                     * MERLIN_MORGAN_NOISE_SCALE
                 )
                 noisy_imgs = img.unsqueeze(0) + noise
-                noisy_output = model(noisy_imgs)
+                if _collect:
+                    capture_state["enabled"] = False
+                try:
+                    noisy_output = model(noisy_imgs)
+                finally:
+                    if _collect:
+                        capture_state["enabled"] = True
 
                 noisy_ce = ce_criterion(
                     noisy_output,
@@ -114,7 +130,7 @@ def _process_loader(
             result["mm_ce"].append(torch.stack(mm_ce_votes))
             result["mm_mse"].append(torch.stack(mm_mse_votes))
 
-    if last_step:
+    if _collect:
         for h in handles:
             h.remove()
         # Convert list of tensors to single tensor per layer
@@ -154,11 +170,14 @@ def evaluate(
             metrics.update(get_optimizer_internals(optimizer))
 
         compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
+        collect_features = compute_heavy_metrics and metrics_config.neural_collapse
         train_results, train_activations, train_labels = _process_loader(
-            model, train_loader, compute_mm=compute_mm, last_step=last_step
+            model, train_loader, compute_mm=compute_mm, last_step=last_step,
+            collect_features=collect_features,
         )
         test_results, test_activations, test_labels = _process_loader(
-            model, test_loader, compute_mm, last_step=last_step
+            model, test_loader, compute_mm=compute_mm, last_step=last_step,
+            collect_features=collect_features,
         )
 
         if metrics_config.loss_stats:
@@ -274,6 +293,60 @@ def evaluate(
 
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
+
+    if compute_heavy_metrics and metrics_config.neural_collapse and train_activations:
+        # Find the last linear layer's weight (classifier head).
+        last_linear_name = None
+        last_linear_weight = None
+        last_linear_bias = None
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear):
+                last_linear_name = name
+                last_linear_weight = module.weight.detach().cpu()
+                last_linear_bias = module.bias.detach().cpu() if module.bias is not None else None
+
+        layer_names = list(train_activations.keys())
+
+        # Determine the penultimate layer (input to the classifier).
+        # It's the layer right before the last linear in our hooks list.
+        if last_linear_name and last_linear_name in layer_names and len(layer_names) >= 2:
+            penultimate_idx = layer_names.index(last_linear_name) - 1
+            if penultimate_idx >= 0:
+                penultimate = layer_names[penultimate_idx]
+            else:
+                penultimate = layer_names[0]
+        elif len(layer_names) >= 2:
+            penultimate = layer_names[-2]
+        else:
+            penultimate = layer_names[0] if layer_names else None
+
+        if penultimate:
+            train_feats = train_activations[penultimate]
+            nc = compute_all_nc_metrics(
+                train_feats, train_labels.long(), last_linear_weight, last_linear_bias
+            )
+            metrics["nc/nc0/train"] = nc.nc0
+            metrics["nc/rnc1/train"] = nc.rnc1
+            metrics["nc/nc1/train"] = nc.nc1
+            metrics["nc/nc2/train"] = nc.nc2
+            metrics["nc/nc3/train"] = nc.nc3
+            metrics["nc/nc4/train"] = nc.nc4
+            metrics["nc/between_class_variance/train"] = nc.between_class_variance
+            metrics["nc/within_class_variance/train"] = nc.within_class_variance
+
+            if test_activations and penultimate in test_activations and len(test_labels) > 0:
+                test_feats = test_activations[penultimate]
+                nc_test = compute_all_nc_metrics(
+                    test_feats, test_labels.long(), last_linear_weight, last_linear_bias
+                )
+                metrics["nc/nc0/test"] = nc_test.nc0
+                metrics["nc/rnc1/test"] = nc_test.rnc1
+                metrics["nc/nc1/test"] = nc_test.nc1
+                metrics["nc/nc2/test"] = nc_test.nc2
+                metrics["nc/nc3/test"] = nc_test.nc3
+                metrics["nc/nc4/test"] = nc_test.nc4
+                metrics["nc/between_class_variance/test"] = nc_test.between_class_variance
+                metrics["nc/within_class_variance/test"] = nc_test.within_class_variance
 
     keys = list(metrics.keys())
     for key in keys:

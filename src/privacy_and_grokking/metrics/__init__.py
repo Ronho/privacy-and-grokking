@@ -1,5 +1,15 @@
 from privacy_and_grokking.metrics.config import MetricsConfig
 from privacy_and_grokking.metrics.evaluate import evaluate
+from privacy_and_grokking.metrics.neural_collapse import (
+    NeuralCollapseMetrics,
+    compute_all_nc_metrics,
+    compute_nc0,
+    compute_nc1,
+    compute_nc2,
+    compute_nc3,
+    compute_nc4,
+    compute_rnc1,
+)
 
 
 def extraction_handler(exp_name: str, run_id: str) -> None:
@@ -15,4 +25,16 @@ def extraction_handler(exp_name: str, run_id: str) -> None:
     _handler(exp_name, run_id)
 
 
-__all__ = ["MetricsConfig", "evaluate", "extraction_handler"]
+__all__ = [
+    "MetricsConfig",
+    "NeuralCollapseMetrics",
+    "compute_all_nc_metrics",
+    "compute_nc0",
+    "compute_nc1",
+    "compute_nc2",
+    "compute_nc3",
+    "compute_nc4",
+    "compute_rnc1",
+    "evaluate",
+    "extraction_handler",
+]

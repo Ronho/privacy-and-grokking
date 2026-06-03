@@ -19,6 +19,14 @@ from privacy_and_grokking.visualize.visualizations.mia_recall_over_steps import 
 from privacy_and_grokking.visualize.visualizations.mia_tpr_at_fpr_over_steps import (
     mia_tpr_at_fpr_over_steps,
 )
+from privacy_and_grokking.visualize.visualizations.neural_collapse_over_steps import (
+    neural_collapse_nc1_rnc1,
+    neural_collapse_nc2,
+    neural_collapse_nc3_nc4,
+    neural_collapse_over_steps,
+    neural_collapse_rnc1,
+    neural_collapse_variance,
+)
 from privacy_and_grokking.visualize.visualizations.norms_over_steps import (
     gradient_norms_over_steps,
     weight_norms_over_steps,
@@ -40,6 +48,12 @@ SINGLE_AXIS_VISUALIZATIONS: dict[str, Callable[[plt.Axes, DataHandler], None]] =
     "mia_tpr_at_fpr_over_steps_1": partial(mia_tpr_at_fpr_over_steps, fpr_pct=1),
     "mia_tpr_at_fpr_over_steps_5": partial(mia_tpr_at_fpr_over_steps, fpr_pct=5),
     "mia_tpr_at_fpr_over_steps_10": partial(mia_tpr_at_fpr_over_steps, fpr_pct=10),
+    "neural_collapse_over_steps": neural_collapse_over_steps,
+    "neural_collapse_nc1_rnc1": neural_collapse_nc1_rnc1,
+    "neural_collapse_rnc1": neural_collapse_rnc1,
+    "neural_collapse_nc2": neural_collapse_nc2,
+    "neural_collapse_nc3_nc4": neural_collapse_nc3_nc4,
+    "neural_collapse_variance": neural_collapse_variance,
     "training_trajectory": training_trajectory,
     "weight_norms_over_steps": weight_norms_over_steps,
 }

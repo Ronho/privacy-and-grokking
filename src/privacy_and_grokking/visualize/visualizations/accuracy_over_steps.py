@@ -30,6 +30,7 @@ def accuracy_over_steps(ax: plt.Axes, dh: DataHandler):
     if gap["steps"]:
         ax2 = ax.twinx()
         ax2.set_ylabel("Generalization Gap (Train − Test)")
+        ax2.set_ylim(0, 1)
         plot_with_band(
             ax2,
             gap,

@@ -216,8 +216,6 @@ def _single_image_handler(dh: DataHandler, plot_func, filename: str):
     try:
         fig, ax = plt.subplots(figsize=(6, 5))
         plot_func(ax, dh)
-        ax.set_yscale("linear")
-        ax.set_xscale("linear")
         ax.grid(True, alpha=0.3, which="major", axis="both")
         fig.suptitle(f"{run_name}\n{dh.run_id}", fontsize=10)
         fig.tight_layout()
@@ -262,8 +260,6 @@ def visualization_single(
                 for row_idx, (row_label, plot_func) in enumerate(rows):
                     ax = axes[row_idx][0]
                     plot_func(ax, dh)
-                    ax.set_yscale("linear")
-                    ax.set_xscale("linear")
                     ax.grid(True, alpha=0.3, which="major", axis="both")
                     ax.set_title(row_label, fontsize=8)
                 fig.suptitle(f"{run_name}\n{run_id}", fontsize=10)
@@ -326,8 +322,6 @@ def visualization_multi(
                     color="tab:red",
                     wrap=True,
                 )
-            ax.set_yscale("linear")
-            ax.set_xscale("linear")
             ax.grid(True, alpha=0.3, which="major", axis="both")
 
             # Column header on the top row: run name + run ID
@@ -422,8 +416,6 @@ def visualization_multi_groups(
                         color="tab:red",
                         wrap=True,
                     )
-                ax.set_yscale("linear")
-                ax.set_xscale("linear")
                 ax.grid(True, alpha=0.3, which="major", axis="both")
 
                 if row == 0:

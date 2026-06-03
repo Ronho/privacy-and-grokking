@@ -43,6 +43,7 @@ class MetricsConfig(BaseModel):
     # Heavy metrics (only computed at heavy_metrics_log_frequency)
     curvature: bool = True
     merlin_morgan: bool = True
+    neural_collapse: bool = True
 
     @property
     def any_distribution_metric(self) -> bool:
