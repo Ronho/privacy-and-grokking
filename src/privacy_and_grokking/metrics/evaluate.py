@@ -186,10 +186,10 @@ def evaluate(
             metrics["test/loss/mse/mean"] = test_results["mse_loss"].mean()
             metrics["test/loss/mse/std"] = test_results["mse_loss"].std()
 
-            metrics["train/loss/ce/mean"] = train_results["ce_loss"].mean()
-            metrics["train/loss/ce/std"] = train_results["ce_loss"].std()
-            metrics["test/loss/ce/mean"] = test_results["ce_loss"].mean()
-            metrics["test/loss/ce/std"] = test_results["ce_loss"].std()
+            metrics["train/loss/cross_entropy/mean"] = train_results["ce_loss"].mean()
+            metrics["train/loss/cross_entropy/std"] = train_results["ce_loss"].std()
+            metrics["test/loss/cross_entropy/mean"] = test_results["ce_loss"].mean()
+            metrics["test/loss/cross_entropy/std"] = test_results["ce_loss"].std()
 
         if metrics_config.any_distribution_metric:
             for loss_key in ("mse", "ce"):
