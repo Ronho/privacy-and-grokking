@@ -20,6 +20,8 @@ class MetricsConfig(BaseModel):
     gradient_norms: bool = True
     optimizer_internals: bool = True
     rnc1: bool = True
+    nhsic: bool = True
+    nhsic_max_samples: int = 2048
 
     # Distribution comparison metrics (between train/test losses)
     distribution_overlap: bool = True

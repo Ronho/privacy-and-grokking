@@ -40,6 +40,7 @@ def _process_loader(
     compute_mm: bool,
     last_step: bool,
     collect_features: bool = False,
+    collect_inputs: bool = False,
 ):
     device = get_device()
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
@@ -47,6 +48,7 @@ def _process_loader(
 
     buffers_accum: dict[str, list[torch.Tensor]] = {}
     label_list_accum: list[torch.Tensor] = []
+    input_list_accum: list[torch.Tensor] = []
     handles: list = []
     capture_state = {"enabled": True}
     _collect = last_step or collect_features
@@ -70,6 +72,8 @@ def _process_loader(
     for x, y in loader:
         if _collect:
             label_list_accum.append(y.cpu())
+        if collect_inputs:
+            input_list_accum.append(x.detach().cpu().reshape(x.size(0), -1))
         x, y = x.to(device), y.to(device)
         logit = model(x)
         prob = F.softmax(logit, dim=1)
@@ -140,9 +144,14 @@ def _process_loader(
         buffers = {}
         label_list = torch.tensor([])
 
+    if collect_inputs and input_list_accum:
+        input_list = torch.cat(input_list_accum, dim=0)
+    else:
+        input_list = torch.tensor([])
+
     result = {k: torch.cat(v, dim=0) for k, v in result.items()}
 
-    return result, buffers, label_list
+    return result, buffers, label_list, input_list
 
 
 def evaluate(
@@ -172,14 +181,19 @@ def evaluate(
             metrics.update(get_optimizer_internals(optimizer))
 
         compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
-        collect_features = (compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1
-        train_results, train_activations, train_labels = _process_loader(
-            model, train_loader, compute_mm=compute_mm, last_step=last_step,
-            collect_features=collect_features,
+        collect_features = (
+            (compute_heavy_metrics and metrics_config.neural_collapse)
+            or metrics_config.rnc1
+            or metrics_config.nhsic
         )
-        test_results, test_activations, test_labels = _process_loader(
+        collect_inputs = metrics_config.nhsic
+        train_results, train_activations, train_labels, train_inputs = _process_loader(
+            model, train_loader, compute_mm=compute_mm, last_step=last_step,
+            collect_features=collect_features, collect_inputs=collect_inputs,
+        )
+        test_results, test_activations, test_labels, test_inputs = _process_loader(
             model, test_loader, compute_mm=compute_mm, last_step=last_step,
-            collect_features=collect_features,
+            collect_features=collect_features, collect_inputs=collect_inputs,
         )
 
         if metrics_config.loss_stats:
@@ -296,7 +310,7 @@ def evaluate(
         if metrics_config.one_run_audit and in_canary_indices and out_canary_loader:
             from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
             in_canary_losses = train_results["ce_loss"][in_canary_indices]
-            out_results, _, _ = _process_loader(
+            out_results, _, _, _ = _process_loader(
                 model, out_canary_loader, compute_mm=False, last_step=False, collect_features=False
             )
             out_canary_losses = out_results["ce_loss"]
@@ -350,6 +364,7 @@ def evaluate(
             elif metrics_config.rnc1:
                 metrics["nc/rnc1/train"] = compute_rnc1(train_feats, train_labels.long())
 
+            test_feats = None
             if test_activations and penultimate in test_activations and len(test_labels) > 0:
                 test_feats = test_activations[penultimate]
                 if compute_heavy_metrics and metrics_config.neural_collapse:
@@ -366,6 +381,44 @@ def evaluate(
                     metrics["nc/within_class_variance/test"] = nc_test.within_class_variance
                 elif metrics_config.rnc1:
                     metrics["nc/rnc1/test"] = compute_rnc1(test_feats, test_labels.long())
+
+            # --- nHSIC metrics ---
+            if metrics_config.nhsic:
+                from privacy_and_grokking.metrics.nhsic import (
+                    nhsic_features_vs_inputs,
+                    nhsic_features_vs_labels,
+                )
+
+                max_samples = metrics_config.nhsic_max_samples
+
+                # Train split
+                nhsic_train = nhsic_features_vs_labels(
+                    train_feats, train_labels.long(), max_samples=max_samples,
+                )
+                for k, v in nhsic_train.items():
+                    metrics[f"nhsic/{k}/train"] = v
+
+                if len(train_inputs) > 0:
+                    nhsic_train_x = nhsic_features_vs_inputs(
+                        train_feats, train_inputs, max_samples=max_samples,
+                    )
+                    for k, v in nhsic_train_x.items():
+                        metrics[f"nhsic/{k}/train"] = v
+
+                # Test split
+                if test_feats is not None and len(test_labels) > 0:
+                    nhsic_test = nhsic_features_vs_labels(
+                        test_feats, test_labels.long(), max_samples=max_samples,
+                    )
+                    for k, v in nhsic_test.items():
+                        metrics[f"nhsic/{k}/test"] = v
+
+                    if len(test_inputs) > 0:
+                        nhsic_test_x = nhsic_features_vs_inputs(
+                            test_feats, test_inputs, max_samples=max_samples,
+                        )
+                        for k, v in nhsic_test_x.items():
+                            metrics[f"nhsic/{k}/test"] = v
 
     keys = list(metrics.keys())
     for key in keys:
