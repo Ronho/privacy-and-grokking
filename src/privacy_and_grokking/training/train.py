@@ -153,6 +153,50 @@ def train_handle(
         batch_size=config.batch_size,
         shuffle=False,
     )
+
+    in_canary_indices = []
+    out_canary_loader = None
+    if config.metrics.one_run_audit:
+        dataset_ptr = train_subset
+        if isinstance(dataset_ptr, torch.utils.data.Subset):
+            sub_idx = dataset_ptr.indices
+            inner = dataset_ptr.dataset
+            if hasattr(inner, "canary_indices"):
+                canary_set = set(inner.canary_indices.tolist())
+                for i, idx in enumerate(sub_idx):
+                    orig_idx = inner.subset_indices[idx]
+                    if orig_idx in canary_set:
+                        in_canary_indices.append(i)
+        elif hasattr(dataset_ptr, "canary_indices"):
+            canary_set = set(dataset_ptr.canary_indices.tolist())
+            for i, orig_idx in enumerate(dataset_ptr.subset_indices):
+                if orig_idx in canary_set:
+                    in_canary_indices.append(i)
+                    
+        if in_canary_indices and config.canary is not None:
+            n_out = len(in_canary_indices)
+            from privacy_and_grokking.datasets.canaries import create_canary_generator
+            canary_transform = create_canary_generator(config.canary, data_container.input_shape)
+            out_canaries_subset = torch.utils.data.Subset(test, range(min(n_out, len(test))))
+            
+            class OutCanaryDataset(torch.utils.data.Dataset):
+                def __init__(self, ds, transform):
+                    self.ds = ds
+                    self.transform = transform
+                def __len__(self):
+                    return len(self.ds)
+                def __getitem__(self, i):
+                    img, lbl = self.ds[i]
+                    img = self.transform(img)
+                    return img, lbl
+
+            out_ds = OutCanaryDataset(out_canaries_subset, canary_transform)
+            out_canary_loader = torch.utils.data.DataLoader(
+                GpuDataset(out_ds, device) if keep_on_gpu else out_ds,
+                batch_size=config.batch_size,
+                shuffle=False,
+            )
+
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
     logger.info("Preparing model.")
@@ -236,6 +280,8 @@ def train_handle(
                         compute_heavy_metrics=heavy_metrics,
                         last_step=False,
                         metrics_config=metrics_config,
+                        in_canary_indices=in_canary_indices,
+                        out_canary_loader=out_canary_loader,
                     )
                     mlflow.log_metrics(metrics, step=step)
 
@@ -309,6 +355,8 @@ def train_handle(
         compute_heavy_metrics=heavy_metrics,
         last_step=False,
         metrics_config=metrics_config,
+        in_canary_indices=in_canary_indices,
+        out_canary_loader=out_canary_loader,
     )
     save_model(model, optimizer, step)
 

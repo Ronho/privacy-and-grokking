@@ -19,6 +19,7 @@ class MetricsConfig(BaseModel):
     weight_norms: bool = True
     gradient_norms: bool = True
     optimizer_internals: bool = True
+    rnc1: bool = True
 
     # Distribution comparison metrics (between train/test losses)
     distribution_overlap: bool = True
@@ -44,6 +45,7 @@ class MetricsConfig(BaseModel):
     curvature: bool = True
     merlin_morgan: bool = True
     neural_collapse: bool = True
+    one_run_audit: bool = True
 
     @property
     def any_distribution_metric(self) -> bool:

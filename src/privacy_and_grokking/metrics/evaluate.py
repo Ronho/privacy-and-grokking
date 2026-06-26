@@ -24,7 +24,7 @@ from privacy_and_grokking.metrics.distribution_overlap import (
     compute_mmd,
     soft_distribution_overlap,
 )
-from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
+from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics, compute_rnc1
 from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_weight_norms
 from privacy_and_grokking.metrics.optimizer_params import get_optimizer_internals
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
@@ -156,6 +156,8 @@ def evaluate(
     compute_heavy_metrics: bool,
     last_step: bool,
     metrics_config: MetricsConfig | None = None,
+    in_canary_indices: list[int] | None = None,
+    out_canary_loader: torch.utils.data.DataLoader | None = None,
 ) -> dict[str, float]:
     if metrics_config is None:
         metrics_config = MetricsConfig()
@@ -170,7 +172,7 @@ def evaluate(
             metrics.update(get_optimizer_internals(optimizer))
 
         compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
-        collect_features = compute_heavy_metrics and metrics_config.neural_collapse
+        collect_features = (compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1
         train_results, train_activations, train_labels = _process_loader(
             model, train_loader, compute_mm=compute_mm, last_step=last_step,
             collect_features=collect_features,
@@ -291,10 +293,21 @@ def evaluate(
                 for key, value in m.items():
                     metrics[f"attack/{prefix}/{key}"] = value
 
+        if metrics_config.one_run_audit and in_canary_indices and out_canary_loader:
+            from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
+            in_canary_losses = train_results["ce_loss"][in_canary_indices]
+            out_results, _, _ = _process_loader(
+                model, out_canary_loader, compute_mm=False, last_step=False, collect_features=False
+            )
+            out_canary_losses = out_results["ce_loss"]
+            audit_metrics = compute_empirical_epsilon(in_canary_losses, out_canary_losses, step)
+            for k, v in audit_metrics.items():
+                metrics[f"audit/{k}"] = v
+
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
 
-    if compute_heavy_metrics and metrics_config.neural_collapse and train_activations:
+    if train_activations and ((compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1):
         # Find the last linear layer's weight (classifier head).
         last_linear_name = None
         last_linear_weight = None
@@ -322,31 +335,37 @@ def evaluate(
 
         if penultimate:
             train_feats = train_activations[penultimate]
-            nc = compute_all_nc_metrics(
-                train_feats, train_labels.long(), last_linear_weight, last_linear_bias
-            )
-            metrics["nc/nc0/train"] = nc.nc0
-            metrics["nc/rnc1/train"] = nc.rnc1
-            metrics["nc/nc1/train"] = nc.nc1
-            metrics["nc/nc2/train"] = nc.nc2
-            metrics["nc/nc3/train"] = nc.nc3
-            metrics["nc/nc4/train"] = nc.nc4
-            metrics["nc/between_class_variance/train"] = nc.between_class_variance
-            metrics["nc/within_class_variance/train"] = nc.within_class_variance
+            if compute_heavy_metrics and metrics_config.neural_collapse:
+                nc = compute_all_nc_metrics(
+                    train_feats, train_labels.long(), last_linear_weight, last_linear_bias
+                )
+                metrics["nc/nc0/train"] = nc.nc0
+                metrics["nc/rnc1/train"] = nc.rnc1
+                metrics["nc/nc1/train"] = nc.nc1
+                metrics["nc/nc2/train"] = nc.nc2
+                metrics["nc/nc3/train"] = nc.nc3
+                metrics["nc/nc4/train"] = nc.nc4
+                metrics["nc/between_class_variance/train"] = nc.between_class_variance
+                metrics["nc/within_class_variance/train"] = nc.within_class_variance
+            elif metrics_config.rnc1:
+                metrics["nc/rnc1/train"] = compute_rnc1(train_feats, train_labels.long())
 
             if test_activations and penultimate in test_activations and len(test_labels) > 0:
                 test_feats = test_activations[penultimate]
-                nc_test = compute_all_nc_metrics(
-                    test_feats, test_labels.long(), last_linear_weight, last_linear_bias
-                )
-                metrics["nc/nc0/test"] = nc_test.nc0
-                metrics["nc/rnc1/test"] = nc_test.rnc1
-                metrics["nc/nc1/test"] = nc_test.nc1
-                metrics["nc/nc2/test"] = nc_test.nc2
-                metrics["nc/nc3/test"] = nc_test.nc3
-                metrics["nc/nc4/test"] = nc_test.nc4
-                metrics["nc/between_class_variance/test"] = nc_test.between_class_variance
-                metrics["nc/within_class_variance/test"] = nc_test.within_class_variance
+                if compute_heavy_metrics and metrics_config.neural_collapse:
+                    nc_test = compute_all_nc_metrics(
+                        test_feats, test_labels.long(), last_linear_weight, last_linear_bias
+                    )
+                    metrics["nc/nc0/test"] = nc_test.nc0
+                    metrics["nc/rnc1/test"] = nc_test.rnc1
+                    metrics["nc/nc1/test"] = nc_test.nc1
+                    metrics["nc/nc2/test"] = nc_test.nc2
+                    metrics["nc/nc3/test"] = nc_test.nc3
+                    metrics["nc/nc4/test"] = nc_test.nc4
+                    metrics["nc/between_class_variance/test"] = nc_test.between_class_variance
+                    metrics["nc/within_class_variance/test"] = nc_test.within_class_variance
+                elif metrics_config.rnc1:
+                    metrics["nc/rnc1/test"] = compute_rnc1(test_feats, test_labels.long())
 
     keys = list(metrics.keys())
     for key in keys:
