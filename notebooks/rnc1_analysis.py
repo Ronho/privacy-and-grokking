@@ -1106,3 +1106,66 @@ out_path_roc = Path(__file__).parent / f"rnc1_roc_curves_{RUN_ID[:8]}_step{CHECK
 fig_roc.savefig(out_path_roc, dpi=150, bbox_inches="tight")
 print(f"ROC Curves plotted to: {out_path_roc}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Meta-Classifier (Empirically finding the Optimal MIA)
+# ---------------------------------------------------------------------------
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+
+print("\n--- Meta-Classifier (The Ultimate Optimal MIA) ---")
+print("Training ML models to distinguish Train vs Test using ALL 200 dimensions...")
+
+# Prepare dataset: Features = 200D vectors, Labels = 1 (Train), 0 (Test)
+# We sample an equal number of train and test points
+min_samples = min(len(train_f_normal), len(test_features))
+
+X_train_mia = np.concatenate([
+    train_f_normal[:min_samples].numpy(),
+    test_features.float()[:min_samples].numpy()
+])
+y_train_mia = np.concatenate([
+    np.ones(min_samples),
+    np.zeros(min_samples)
+])
+
+# Train/Test split specifically for evaluating the Meta-Classifier
+X_mia_tr, X_mia_te, y_mia_tr, y_mia_te = train_test_split(X_train_mia, y_train_mia, test_size=0.3, random_state=42)
+
+# 1. Logistic Regression (Finds optimal linear combination of all 200 dimensions)
+lr = LogisticRegression(max_iter=1000)
+lr.fit(X_mia_tr, y_mia_tr)
+lr_probs = lr.predict_proba(X_mia_te)[:, 1]
+
+# 2. Random Forest (Finds optimal non-linear boundaries across all dimensions/noise)
+rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1, random_state=42)
+rf.fit(X_mia_tr, y_mia_tr)
+rf_probs = rf.predict_proba(X_mia_te)[:, 1]
+
+fig_opt, ax_opt = plt.subplots(figsize=(8, 6))
+
+fpr_lr, tpr_lr, _ = roc_curve(y_mia_te, lr_probs)
+auc_lr = auc(fpr_lr, tpr_lr)
+ax_opt.plot(fpr_lr, tpr_lr, color='red', lw=2, label=f'Optimal Linear MIA (LR) (AUC = {auc_lr:.2f})')
+
+fpr_rf, tpr_rf, _ = roc_curve(y_mia_te, rf_probs)
+auc_rf = auc(fpr_rf, tpr_rf)
+ax_opt.plot(fpr_rf, tpr_rf, color='darkred', lw=2, label=f'Optimal Non-Linear MIA (RF) (AUC = {auc_rf:.2f})')
+
+ax_opt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
+ax_opt.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
+
+ax_opt.set_xlim([0.0, 1.0])
+ax_opt.set_ylim([0.0, 1.05])
+ax_opt.set_xlabel('False Positive Rate (FPR)')
+ax_opt.set_ylabel('True Positive Rate (TPR)')
+ax_opt.set_title(f"Optimal Meta-Classifier MIA (All 200 Dimensions)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+ax_opt.legend(loc="lower right")
+ax_opt.grid(True, linestyle=':', alpha=0.6)
+
+plt.tight_layout()
+out_path_opt = Path(__file__).parent / f"rnc1_optimal_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
+print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
+plt.show()
