@@ -1035,3 +1035,18 @@ if all_tr_multi and all_te_multi:
     global_multi_mia = evaluate_mia(np.concatenate(all_tr_multi), np.concatenate(all_te_multi))
     if global_multi_mia:
         print(f"Global Multi-Boundary MIA  -> Acc: {global_multi_mia['acc']:.1%} | TPR: {global_multi_mia['tpr']:.1%} | FPR: {global_multi_mia['fpr']:.1%}")
+
+# ---------------------------------------------------------------------------
+# Exact Match Verification (Proving the coordinates are identical)
+# ---------------------------------------------------------------------------
+print("\n--- Exact Match Verification ---")
+print("What percentage of Test samples sit on the EXACT coordinate as the Train Class Mean?")
+
+all_test_dists_200d = np.concatenate(list(test_dists.values())) if test_dists else np.array([])
+all_test_dists_9d = np.concatenate(list(test_dists_clean.values())) if test_dists_clean else np.array([])
+
+for eps in [0.5, 0.1, 1e-2, 1e-3, 1e-4, 1e-5]:
+    if len(all_test_dists_200d) > 0 and len(all_test_dists_9d) > 0:
+        pct_200d = np.mean(all_test_dists_200d < eps) * 100
+        pct_9d = np.mean(all_test_dists_9d < eps) * 100
+        print(f"Distance < {eps:.0e} : {pct_200d:5.2f}% of Test in 200D space | {pct_9d:5.2f}% of Test in 9D Subspace")
