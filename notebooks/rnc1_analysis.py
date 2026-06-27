@@ -333,16 +333,16 @@ for c in range(num_classes):
     ax = axes2[c]
     color = colors[c]
 
-    for dists, label, ls, alpha in [
-        (train_test_dists, "train+test", "-", 0.95),
-        (train_dists, "train", "-",  0.85),
-        (test_dists,  "test",  "--", 0.65),
-        (canary_dists, "canary", ":", 0.85),
+    for dists, label, ls, alpha, lw in [
+        (train_test_dists, "train+test", "-", 0.95, 2.5),
+        (train_dists, "train", "-.",  0.85, 1.8),
+        (test_dists,  "test",  "--", 0.65, 1.8),
+        (canary_dists, "canary", ":", 0.85, 1.8),
     ]:
         if c not in dists or len(dists[c]) < 2:
             continue
         kde = gaussian_kde(dists[c], bw_method="scott")
-        ax.plot(x_grid, kde(x_grid), linestyle=ls, color=color, alpha=alpha, label=label, lw=1.8)
+        ax.plot(x_grid, kde(x_grid), linestyle=ls, color=color, alpha=alpha, label=label, lw=lw)
         ax.fill_between(x_grid, kde(x_grid), alpha=alpha * 0.18, color=color)
 
     ax.set_title(f"Class {c}", fontsize=10)
@@ -354,7 +354,7 @@ for c in range(num_classes):
 
 fig2.suptitle(
     f"Distance to class mean (train-set means)\n"
-    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train(+test), dashed=test, dotted=canary",
+    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train+test, dashdot=train, dashed=test, dotted=canary",
     fontsize=12,
 )
 plt.tight_layout()
