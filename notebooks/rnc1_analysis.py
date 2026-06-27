@@ -925,3 +925,59 @@ out_path_clean = Path(__file__).parent / f"rnc1_dist_density_clean_{RUN_ID[:8]}_
 fig_clean.savefig(out_path_clean, dpi=150, bbox_inches="tight")
 print(f"Clean density plot saved to: {out_path_clean}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Advanced MIA: 9D Clean Subspace Distance & Orthogonal Noise
+# ---------------------------------------------------------------------------
+print("\n--- Advanced MIA Results ---")
+
+# 1. Evaluate MIA using the 9D Subspace Distances (Tiny Sphere)
+mia_9d_global = evaluate_mia(all_train_flat_clean, all_test_flat_clean)
+if mia_9d_global:
+    ff = mia_9d_global['fixed_fprs']
+    print(f"9D Subspace Distance MIA -> Acc: {mia_9d_global['acc']:.1%} | TPR: {mia_9d_global['tpr']:.1%} | FPR: {mia_9d_global['fpr']:.1%}")
+    print(f"                            TPR@1%FPR: {ff[0.01]['tpr']:.1%} | TPR@5%FPR: {ff[0.05]['tpr']:.1%} | TPR@10%FPR: {ff[0.10]['tpr']:.1%}")
+
+# 2. Evaluate MIA using Orthogonal Noise
+# Reconstruct features to calculate orthogonal distance
+train_recon = pca_collapse.inverse_transform(train_f_all_clean.numpy())
+test_recon  = pca_collapse.inverse_transform(test_f_clean.numpy())
+
+# The orthogonal noise is the Euclidean distance between original and reconstructed features
+train_ortho_noise = np.linalg.norm(train_features.float().numpy() - train_recon, axis=1)
+test_ortho_noise  = np.linalg.norm(test_features.float().numpy() - test_recon, axis=1)
+
+mia_ortho_global = evaluate_mia(train_ortho_noise, test_ortho_noise)
+if mia_ortho_global:
+    ff = mia_ortho_global['fixed_fprs']
+    print(f"Orthogonal Noise MIA     -> Acc: {mia_ortho_global['acc']:.1%} | TPR: {mia_ortho_global['tpr']:.1%} | FPR: {mia_ortho_global['fpr']:.1%}")
+    print(f"                            TPR@1%FPR: {ff[0.01]['tpr']:.1%} | TPR@5%FPR: {ff[0.05]['tpr']:.1%} | TPR@10%FPR: {ff[0.10]['tpr']:.1%}")
+
+# Plot the orthogonal noise distributions
+fig_ortho, ax_ortho = plt.subplots(figsize=(8, 5))
+
+# Filter out extreme outliers for cleaner plotting
+max_val = max(np.percentile(train_ortho_noise, 99), np.percentile(test_ortho_noise, 99))
+x_grid_o = np.linspace(0, max_val * 1.1, 400)
+
+kde_tr = gaussian_kde(train_ortho_noise, bw_method="scott")
+kde_te = gaussian_kde(test_ortho_noise, bw_method="scott")
+
+ax_ortho.plot(x_grid_o, kde_tr(x_grid_o), color="blue", label=f"Train (mean={np.mean(train_ortho_noise):.2f})", lw=2)
+ax_ortho.fill_between(x_grid_o, kde_tr(x_grid_o), alpha=0.2, color="blue")
+
+ax_ortho.plot(x_grid_o, kde_te(x_grid_o), color="orange", linestyle="--", label=f"Test (mean={np.mean(test_ortho_noise):.2f})", lw=2)
+ax_ortho.fill_between(x_grid_o, kde_te(x_grid_o), alpha=0.2, color="orange")
+
+ax_ortho.set_title(f"Orthogonal Noise Distribution (191 Dimensions)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=11)
+ax_ortho.set_xlabel("‖h - h_proj‖₂ (Orthogonal Distance)")
+ax_ortho.set_ylabel("Density")
+ax_ortho.legend(fontsize=10, frameon=False)
+ax_ortho.set_xlim(0, max_val * 1.1)
+ax_ortho.set_ylim(bottom=0)
+
+plt.tight_layout()
+out_path_ortho = Path(__file__).parent / f"rnc1_ortho_noise_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_ortho.savefig(out_path_ortho, dpi=150, bbox_inches="tight")
+print(f"Orthogonal Noise plot saved to: {out_path_ortho}")
+plt.show()
