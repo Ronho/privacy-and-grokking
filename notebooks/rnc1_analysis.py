@@ -1143,6 +1143,12 @@ rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1, random_sta
 rf.fit(X_mia_tr, y_mia_tr)
 rf_probs = rf.predict_proba(X_mia_te)[:, 1]
 
+# 3. Deep Neural Network (Universal Function Approximator for ultra-complex manifolds)
+from sklearn.neural_network import MLPClassifier
+dnn = MLPClassifier(hidden_layer_sizes=(256, 128, 64), max_iter=500, early_stopping=True, random_state=42)
+dnn.fit(X_mia_tr, y_mia_tr)
+dnn_probs = dnn.predict_proba(X_mia_te)[:, 1]
+
 fig_opt, ax_opt = plt.subplots(figsize=(8, 6))
 
 fpr_lr, tpr_lr, _ = roc_curve(y_mia_te, lr_probs)
@@ -1152,6 +1158,10 @@ ax_opt.plot(fpr_lr, tpr_lr, color='red', lw=2, label=f'Optimal Linear MIA (LR) (
 fpr_rf, tpr_rf, _ = roc_curve(y_mia_te, rf_probs)
 auc_rf = auc(fpr_rf, tpr_rf)
 ax_opt.plot(fpr_rf, tpr_rf, color='darkred', lw=2, label=f'Optimal Non-Linear MIA (RF) (AUC = {auc_rf:.2f})')
+
+fpr_dnn, tpr_dnn, _ = roc_curve(y_mia_te, dnn_probs)
+auc_dnn = auc(fpr_dnn, tpr_dnn)
+ax_opt.plot(fpr_dnn, tpr_dnn, color='purple', lw=2, label=f'Optimal Deep MIA (DNN) (AUC = {auc_dnn:.2f})')
 
 ax_opt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
 ax_opt.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
