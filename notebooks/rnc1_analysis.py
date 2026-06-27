@@ -406,6 +406,26 @@ def evaluate_mia(train_d, test_d):
             tpr_val = np.mean(train_d > bound_val)
         fixed_fpr_results[fpr_target] = {"bound": bound_val, "tpr": tpr_val}
     
+    # If standard deviation is effectively zero (e.g. overfitted train data),
+    # the gaussian intersection logic fails or returns unreliable intervals.
+    # We should only classify exactly the mean value as Train.
+    if std_train < 1e-5:
+        eps = 1e-4
+        bounds = (mu_train - eps, mu_train + eps)
+        train_preds = (train_d >= bounds[0]) & (train_d <= bounds[1])
+        test_preds = (test_d >= bounds[0]) & (test_d <= bounds[1])
+        
+        tpr = np.mean(train_preds)
+        fpr = np.mean(test_preds)
+        acc = (np.sum(train_preds) + np.sum(~test_preds)) / (len(train_d) + len(test_d))
+        return {
+            "mu_train": mu_train, "std_train": std_train,
+            "mu_test": mu_test, "std_test": std_test,
+            "bounds": bounds,
+            "tpr": tpr, "fpr": fpr, "acc": acc,
+            "fixed_fprs": fixed_fpr_results
+        }
+        
     roots = get_gaussian_intersection(mu_train, std_train, mu_test, std_test)
     if not roots:
         return None
