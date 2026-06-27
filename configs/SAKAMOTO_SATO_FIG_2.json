@@ -1,0 +1,33 @@
+{
+    "model": {
+        "name": "mlp-extended",
+        "initialization_scale": 8.0
+    },
+    "seed": 0,
+    "batch_size": 100,
+    "loss": {
+        "name": "mse"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "AdamW",
+        "lr": 0.001,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "data": {
+            "name": "mnist"
+        },
+        "mask": {
+            "name": "uniform",
+            "num_models": 256,
+            "p": 0.5,
+            "seed": 0,
+            "model_index": 0
+        },
+        "train_size": 1000,
+        "seed": 0
+    }
+}
