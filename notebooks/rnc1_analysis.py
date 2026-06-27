@@ -293,7 +293,10 @@ all_train_flat = np.concatenate(list(train_dists.values())) if train_dists else 
 all_test_flat = np.concatenate(list(test_dists.values())) if test_dists else np.array([])
 all_canary_flat = np.concatenate(list(canary_dists.values())) if canary_dists else np.array([])
 
+all_train_test_flat = np.concatenate([all_train_flat, all_test_flat]) if len(all_train_flat) > 0 or len(all_test_flat) > 0 else np.array([])
+
 for dists_flat, label, ls, color, alpha in [
+    (all_train_test_flat, "train+test", "-", "purple", 0.85),
     (all_train_flat, "train", "-",  "blue", 0.85),
     (all_test_flat,  "test",  "--", "orange", 0.65),
     (all_canary_flat, "canary", ":", "red", 0.85),
