@@ -680,3 +680,142 @@ fig_margin.savefig(out_path_margin, dpi=150, bbox_inches="tight")
 print(f"Margin plots saved to: {out_path_margin}")
 plt.show()
 
+
+# ---------------------------------------------------------------------------
+# Margin-based MIA
+# ---------------------------------------------------------------------------
+print("\n--- Margin-based Membership Inference Attack ---")
+
+def get_correct_side_margins(f, l, w, b, c_main, c_other):
+    mask_main = (l == c_main)
+    mask_other = (l == c_other)
+    
+    w_diff = w[c_main] - w[c_other]
+    b_diff = b[c_main] - b[c_other]
+    norm_w_diff = torch.norm(w_diff, p=2)
+    
+    def calc_m(f_sub):
+        return (torch.matmul(f_sub, w_diff) + b_diff) / norm_w_diff
+        
+    m_main = calc_m(f[mask_main]).numpy()
+    m_other = -calc_m(f[mask_other]).numpy() # invert so positive means deeper into correct territory
+    
+    return np.concatenate([m_main, m_other]) if len(m_main) > 0 or len(m_other) > 0 else np.array([])
+
+pairs_margin_mia = [(c, 0) for c in range(1, 10)]
+
+all_train_margin = []
+all_test_margin = []
+
+margin_mias = {}
+
+for c, c0 in pairs_margin_mia:
+    tr_m = get_correct_side_margins(train_f_normal, train_l_normal, w, b, c, c0)
+    te_m = get_correct_side_margins(test_features.float(), test_labels, w, b, c, c0)
+    
+    if len(tr_m) > 1 and len(te_m) > 1:
+        all_train_margin.append(tr_m)
+        all_test_margin.append(te_m)
+        margin_mias[c] = evaluate_mia(tr_m, te_m)
+    else:
+        margin_mias[c] = None
+
+all_train_margin_flat = np.concatenate(all_train_margin) if all_train_margin else np.array([])
+all_test_margin_flat = np.concatenate(all_test_margin) if all_test_margin else np.array([])
+
+global_margin_mia = evaluate_mia(all_train_margin_flat, all_test_margin_flat)
+
+if global_margin_mia:
+    b_bounds = global_margin_mia['bounds']
+    if b_bounds[0] is None:
+        b_str = f"x < {b_bounds[1]:.3f}"
+    elif b_bounds[1] is None:
+        b_str = f"x > {b_bounds[0]:.3f}"
+    else:
+        b_str = f"[{b_bounds[0]:.3f}, {b_bounds[1]:.3f}]" if b_bounds[0] < b_bounds[1] else f"x < {b_bounds[1]:.3f} OR x > {b_bounds[0]:.3f}"
+    print(f"Global Margin MIA -> Bounds: {b_str}  |  Acc: {global_margin_mia['acc']:.1%}  |  TPR: {global_margin_mia['tpr']:.1%}  |  FPR: {global_margin_mia['fpr']:.1%}")
+    ff = global_margin_mia['fixed_fprs']
+    print(f"Global Margin MIA (Fixed FPR) -> TPR@1%: {ff[0.01]['tpr']:.1%} | TPR@5%: {ff[0.05]['tpr']:.1%} | TPR@10%: {ff[0.10]['tpr']:.1%}")
+
+# Plot Margin MIA
+fig_margin_mia, axes_margin_mia = plt.subplots(2, 5, figsize=(18, 7))
+axes_margin_mia = axes_margin_mia.flatten()
+
+ax_g = axes_margin_mia[0]
+if global_margin_mia and len(all_train_margin_flat) > 1 and len(all_test_margin_flat) > 1:
+    x_min = min(all_train_margin_flat.min(), all_test_margin_flat.min()) - 0.5
+    x_max = max(all_train_margin_flat.max(), all_test_margin_flat.max()) + 0.5
+    x_grid = np.linspace(x_min, x_max, 500)
+    
+    kde_train = gaussian_kde(all_train_margin_flat, bw_method="scott")
+    kde_test = gaussian_kde(all_test_margin_flat, bw_method="scott")
+    ax_g.plot(x_grid, kde_train(x_grid), color="blue", label="train")
+    ax_g.plot(x_grid, kde_test(x_grid), color="orange", linestyle="--", label="test")
+    
+    b_bounds = global_margin_mia['bounds']
+    if b_bounds[0] is None:
+        ax_g.axvline(b_bounds[1], color='k', linestyle=':')
+        ax_g.axvspan(x_min, b_bounds[1], color='blue', alpha=0.1)
+    elif b_bounds[1] is None:
+        ax_g.axvline(b_bounds[0], color='k', linestyle=':')
+        ax_g.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
+    elif b_bounds[0] <= b_bounds[1]:
+        ax_g.axvline(b_bounds[0], color='k', linestyle=':')
+        ax_g.axvline(b_bounds[1], color='k', linestyle=':')
+        ax_g.axvspan(b_bounds[0], b_bounds[1], color='blue', alpha=0.1)
+    else:
+        ax_g.axvline(b_bounds[0], color='k', linestyle=':')
+        ax_g.axvline(b_bounds[1], color='k', linestyle=':')
+        ax_g.axvspan(x_min, b_bounds[1], color='blue', alpha=0.1)
+        ax_g.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
+    
+    ff = global_margin_mia['fixed_fprs']
+    ax_g.set_title(f"Global\nAcc: {global_margin_mia['acc']:.1%} | TPR: {global_margin_mia['tpr']:.1%} | FPR: {global_margin_mia['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
+    ax_g.legend(fontsize=8, frameon=False)
+
+for i, (c, c0) in enumerate(pairs_margin_mia):
+    ax = axes_margin_mia[i + 1]
+    mia_c = margin_mias.get(c)
+    if not mia_c:
+        continue
+        
+    tr_m = get_correct_side_margins(train_f_normal, train_l_normal, w, b, c, c0)
+    te_m = get_correct_side_margins(test_features.float(), test_labels, w, b, c, c0)
+    
+    if len(tr_m) > 1 and len(te_m) > 1:
+        x_min = min(tr_m.min(), te_m.min()) - 0.5
+        x_max = max(tr_m.max(), te_m.max()) + 0.5
+        x_grid = np.linspace(x_min, x_max, 500)
+        
+        kde_train = gaussian_kde(tr_m, bw_method="scott")
+        kde_test = gaussian_kde(te_m, bw_method="scott")
+        ax.plot(x_grid, kde_train(x_grid), color="blue")
+        ax.plot(x_grid, kde_test(x_grid), color="orange", linestyle="--")
+        
+        b_bounds = mia_c['bounds']
+        if b_bounds[0] is None:
+            ax.axvline(b_bounds[1], color='k', linestyle=':')
+            ax.axvspan(x_min, b_bounds[1], color='blue', alpha=0.1)
+        elif b_bounds[1] is None:
+            ax.axvline(b_bounds[0], color='k', linestyle=':')
+            ax.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
+        elif b_bounds[0] <= b_bounds[1]:
+            ax.axvline(b_bounds[0], color='k', linestyle=':')
+            ax.axvline(b_bounds[1], color='k', linestyle=':')
+            ax.axvspan(b_bounds[0], b_bounds[1], color='blue', alpha=0.1)
+        else:
+            ax.axvline(b_bounds[0], color='k', linestyle=':')
+            ax.axvline(b_bounds[1], color='k', linestyle=':')
+            ax.axvspan(x_min, b_bounds[1], color='blue', alpha=0.1)
+            ax.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
+            
+        ff = mia_c['fixed_fprs']
+        ax.set_title(f"Class {c} vs 0\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
+
+fig_margin_mia.suptitle(f"Margin MIA Decision Boundaries (Class C vs Class 0)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
+fig_margin_mia.tight_layout()
+
+out_path_margin_mia = Path(__file__).parent / f"rnc1_margin_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_margin_mia.savefig(out_path_margin_mia, dpi=150, bbox_inches="tight")
+print(f"Margin MIA plot saved to: {out_path_margin_mia}")
+plt.show()
