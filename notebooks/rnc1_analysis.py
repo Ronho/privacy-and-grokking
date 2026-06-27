@@ -106,6 +106,36 @@ test_features, test_labels = extract_features(test_dataset, model, device)
 print(f"  train_features: {train_features.shape}")
 print(f"  test_features : {test_features.shape}")
 
+def get_canary_mask(dataset) -> torch.Tensor:
+    if hasattr(dataset, "dataset") and hasattr(dataset.dataset, "canary_indices"):
+        canary_ds = dataset.dataset
+        indices = dataset.indices
+    elif hasattr(dataset, "canary_indices"):
+        canary_ds = dataset
+        indices = range(len(dataset))
+    else:
+        return torch.zeros(len(dataset), dtype=torch.bool)
+        
+    if len(canary_ds.canary_indices) == 0:
+        return torch.zeros(len(dataset), dtype=torch.bool)
+        
+    canary_set = set(canary_ds.canary_indices.tolist())
+    is_canary = []
+    for i in indices:
+        raw_idx = canary_ds.subset_indices[i]
+        raw_idx_val = raw_idx.item() if torch.is_tensor(raw_idx) else raw_idx
+        is_canary.append(int(raw_idx_val) in canary_set)
+    return torch.tensor(is_canary, dtype=torch.bool)
+
+canary_mask = get_canary_mask(train_dataset)
+train_f_normal = train_features[~canary_mask].float()
+train_l_normal = train_labels[~canary_mask]
+train_f_canary = train_features[canary_mask].float()
+train_l_canary = train_labels[canary_mask]
+
+print(f"  train_features_normal: {train_f_normal.shape}")
+print(f"  train_features_canary: {train_f_canary.shape}")
+
 # ---------------------------------------------------------------------------
 # RNC1
 # ---------------------------------------------------------------------------
@@ -220,8 +250,13 @@ from scipy.stats import gaussian_kde
 # Compute class means in the UNSCALED feature space using the TRAIN set
 class_means_unscaled = torch.zeros(num_classes, train_f.shape[1])
 for c in range(num_classes):
-    mask_c = train_labels == c
-    class_means_unscaled[c] = train_f[mask_c].mean(dim=0)
+    mask_c = train_l_normal == c
+    if mask_c.sum() > 0:
+        class_means_unscaled[c] = train_f_normal[mask_c].mean(dim=0)
+    else:
+        # fallback to all train if no normal samples for this class
+        mask_c_all = train_labels == c
+        class_means_unscaled[c] = train_f[mask_c_all].mean(dim=0)
 
 def distances_to_class_mean(
     features: torch.Tensor,
@@ -238,13 +273,49 @@ def distances_to_class_mean(
         dists[c] = diff.norm(dim=1).numpy()
     return dists
 
-train_dists = distances_to_class_mean(train_f,              train_labels, class_means_unscaled)
+train_dists = distances_to_class_mean(train_f_normal,       train_l_normal, class_means_unscaled)
 test_dists  = distances_to_class_mean(test_features.float(), test_labels,  class_means_unscaled)
+canary_dists = distances_to_class_mean(train_f_canary,      train_l_canary, class_means_unscaled)
 
-# Grid for KDE evaluation
-all_dist_values = np.concatenate(list(train_dists.values()) + list(test_dists.values()))
+# Combined grid for KDE evaluation
+all_dist_values = np.concatenate(
+    list(train_dists.values()) + list(test_dists.values()) + list(canary_dists.values())
+)
 x_min, x_max = 0.0, float(np.percentile(all_dist_values, 99.5))
 x_grid = np.linspace(x_min, x_max, 400)
+
+# ---------------------------------------------------------------------------
+# Combined density of distance-to-class-mean
+# ---------------------------------------------------------------------------
+fig_comb, ax_comb = plt.subplots(figsize=(8, 5))
+
+all_train_flat = np.concatenate(list(train_dists.values())) if train_dists else np.array([])
+all_test_flat = np.concatenate(list(test_dists.values())) if test_dists else np.array([])
+all_canary_flat = np.concatenate(list(canary_dists.values())) if canary_dists else np.array([])
+
+for dists_flat, label, ls, color, alpha in [
+    (all_train_flat, "train", "-",  "blue", 0.85),
+    (all_test_flat,  "test",  "--", "orange", 0.65),
+    (all_canary_flat, "canary", ":", "red", 0.85),
+]:
+    if len(dists_flat) < 2:
+        continue
+    kde = gaussian_kde(dists_flat, bw_method="scott")
+    ax_comb.plot(x_grid, kde(x_grid), linestyle=ls, color=color, alpha=alpha, label=label, lw=1.8)
+    ax_comb.fill_between(x_grid, kde(x_grid), alpha=alpha * 0.18, color=color)
+
+ax_comb.set_title(f"Combined Distance to Class Mean\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=11)
+ax_comb.set_xlabel("‖h − μ_c‖₂")
+ax_comb.set_ylabel("density")
+ax_comb.legend(fontsize=10, frameon=False)
+ax_comb.set_xlim(x_min, x_max)
+ax_comb.set_ylim(bottom=0)
+fig_comb.tight_layout()
+
+out_path_comb = Path(__file__).parent / f"rnc1_dist_density_combined_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_comb.savefig(out_path_comb, dpi=150, bbox_inches="tight")
+print(f"Combined density plot saved to: {out_path_comb}")
+plt.show()
 
 fig2, axes2 = plt.subplots(2, 5, figsize=(18, 7), sharey=False)
 axes2 = axes2.flatten()
@@ -256,6 +327,7 @@ for c in range(num_classes):
     for dists, label, ls, alpha in [
         (train_dists, "train", "-",  0.85),
         (test_dists,  "test",  "--", 0.65),
+        (canary_dists, "canary", ":", 0.85),
     ]:
         if c not in dists or len(dists[c]) < 2:
             continue
@@ -272,7 +344,7 @@ for c in range(num_classes):
 
 fig2.suptitle(
     f"Distance to class mean (train-set means)\n"
-    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train, dashed=test",
+    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train, dashed=test, dotted=canary",
     fontsize=12,
 )
 plt.tight_layout()
