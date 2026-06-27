@@ -277,6 +277,12 @@ train_dists = distances_to_class_mean(train_f_normal,       train_l_normal, clas
 test_dists  = distances_to_class_mean(test_features.float(), test_labels,  class_means_unscaled)
 canary_dists = distances_to_class_mean(train_f_canary,      train_l_canary, class_means_unscaled)
 
+train_test_dists = {}
+for c in range(num_classes):
+    train_c = train_dists.get(c, np.array([]))
+    test_c = test_dists.get(c, np.array([]))
+    train_test_dists[c] = np.concatenate([train_c, test_c]) if len(train_c) > 0 or len(test_c) > 0 else np.array([])
+
 # Combined grid for KDE evaluation
 all_dist_values = np.concatenate(
     list(train_dists.values()) + list(test_dists.values()) + list(canary_dists.values())
@@ -328,6 +334,7 @@ for c in range(num_classes):
     color = colors[c]
 
     for dists, label, ls, alpha in [
+        (train_test_dists, "train+test", "-", 0.95),
         (train_dists, "train", "-",  0.85),
         (test_dists,  "test",  "--", 0.65),
         (canary_dists, "canary", ":", 0.85),
@@ -347,7 +354,7 @@ for c in range(num_classes):
 
 fig2.suptitle(
     f"Distance to class mean (train-set means)\n"
-    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train, dashed=test, dotted=canary",
+    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train(+test), dashed=test, dotted=canary",
     fontsize=12,
 )
 plt.tight_layout()
