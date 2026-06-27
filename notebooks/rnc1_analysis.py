@@ -1145,7 +1145,16 @@ rf_probs = rf.predict_proba(X_mia_te)[:, 1]
 
 # 3. Deep Neural Network (Universal Function Approximator for ultra-complex manifolds)
 from sklearn.neural_network import MLPClassifier
-dnn = MLPClassifier(hidden_layer_sizes=(256, 128, 64), max_iter=500, early_stopping=True, random_state=42)
+# An ultra-sophisticated DNN: Wider, deeper, adaptive learning, no early stopping
+dnn = MLPClassifier(
+    hidden_layer_sizes=(512, 512, 256, 128), 
+    activation='relu',
+    solver='adam',
+    learning_rate='adaptive',
+    max_iter=2000, 
+    early_stopping=False, # Let it train to full convergence to find the most complex manifold possible
+    random_state=42
+)
 dnn.fit(X_mia_tr, y_mia_tr)
 dnn_probs = dnn.predict_proba(X_mia_te)[:, 1]
 
