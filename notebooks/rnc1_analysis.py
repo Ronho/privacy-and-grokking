@@ -1429,3 +1429,32 @@ out_path_dist = Path(__file__).parent / f"rnc1_dist_vs_nn_{RUN_ID[:8]}_step{CHEC
 fig_dist.savefig(out_path_dist, dpi=150, bbox_inches="tight")
 print(f"Distance distribution scatter plot saved to: {out_path_dist}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Theoretical Discriminator Limit (Ultimate Overfitter)
+# ---------------------------------------------------------------------------
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+
+print("\n--- Theoretical Discriminator Limit (Overfitted 1-NN) ---")
+print("Training an ultimate overfitted discriminator on ALL balanced data and evaluating on the SAME data...")
+
+# We use the balanced dataset (X_train_mia, y_train_mia) created earlier (200D space)
+# 1. Evaluate in 200D space
+nn_200d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+nn_200d.fit(X_train_mia, y_train_mia)
+preds_200d = nn_200d.predict(X_train_mia)
+acc_200d = accuracy_score(y_train_mia, preds_200d)
+
+# 2. Evaluate in 9D Subspace
+X_train_9d = np.concatenate([
+    train_f_clean[:min_samples].numpy(),
+    test_f_clean[:min_samples].numpy()
+])
+nn_9d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+nn_9d.fit(X_train_9d, y_train_mia)
+preds_9d = nn_9d.predict(X_train_9d)
+acc_9d = accuracy_score(y_train_mia, preds_9d)
+
+print(f"Absolute Overfitted Accuracy (200D Space): {acc_200d:.2%}")
+print(f"Absolute Overfitted Accuracy (9D Subspace):  {acc_9d:.2%}")
