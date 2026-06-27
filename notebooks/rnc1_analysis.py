@@ -1054,3 +1054,55 @@ for eps in [0.5, 0.1, 1e-2, 1e-3, 1e-4, 1e-5]:
         pct_te_200d = np.mean(all_test_dists_200d < eps) * 100
         pct_te_9d = np.mean(all_test_dists_9d < eps) * 100
         print(f"Distance < {eps:.0e} | TRAIN: {pct_tr_200d:6.2f}% in 200D, {pct_tr_9d:6.2f}% in 9D | TEST: {pct_te_200d:6.2f}% in 200D, {pct_te_9d:6.2f}% in 9D")
+
+# ---------------------------------------------------------------------------
+# ROC Curve (Visualizing TPR vs FPR)
+# ---------------------------------------------------------------------------
+from sklearn.metrics import roc_curve, auc
+
+print("\n--- Plotting ROC Curves ---")
+
+def plot_roc(ax, train_scores, test_scores, name, color, invert=False):
+    if len(train_scores) == 0 or len(test_scores) == 0:
+        return
+    
+    y_true = np.concatenate([np.ones(len(train_scores)), np.zeros(len(test_scores))])
+    y_scores = np.concatenate([np.array(train_scores), np.array(test_scores)])
+    
+    # If the metric is a distance (lower = more likely Train), we invert it so higher = Train
+    if invert:
+        y_scores = -y_scores
+        
+    fpr, tpr, _ = roc_curve(y_true, y_scores)
+    roc_auc = auc(fpr, tpr)
+    
+    ax.plot(fpr, tpr, color=color, lw=2, label=f'{name} (AUC = {roc_auc:.2f})')
+
+fig_roc, ax_roc = plt.subplots(figsize=(8, 6))
+
+# The MIAs we have built:
+plot_roc(ax_roc, all_train_margin_flat, all_test_margin_flat, "1D Margin", "purple", invert=False)
+plot_roc(ax_roc, all_train_flat_clean, all_test_flat_clean, "9D Subspace Distance", "blue", invert=True)
+plot_roc(ax_roc, train_ortho_noise, test_ortho_noise, "Orthogonal Noise", "orange", invert=True)
+
+if all_tr_multi and all_te_multi:
+    plot_roc(ax_roc, np.concatenate(all_tr_multi), np.concatenate(all_te_multi), "Multi-Boundary Margin", "green", invert=True)
+
+ax_roc.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
+
+# Highlight the low FPR region
+ax_roc.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
+
+ax_roc.set_xlim([0.0, 1.0])
+ax_roc.set_ylim([0.0, 1.05])
+ax_roc.set_xlabel('False Positive Rate (FPR)')
+ax_roc.set_ylabel('True Positive Rate (TPR)')
+ax_roc.set_title(f"ROC Curves for Membership Inference Attacks\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+ax_roc.legend(loc="lower right")
+ax_roc.grid(True, linestyle=':', alpha=0.6)
+
+plt.tight_layout()
+out_path_roc = Path(__file__).parent / f"rnc1_roc_curves_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_roc.savefig(out_path_roc, dpi=150, bbox_inches="tight")
+print(f"ROC Curves plotted to: {out_path_roc}")
+plt.show()
