@@ -1040,13 +1040,17 @@ if all_tr_multi and all_te_multi:
 # Exact Match Verification (Proving the coordinates are identical)
 # ---------------------------------------------------------------------------
 print("\n--- Exact Match Verification ---")
-print("What percentage of Test samples sit on the EXACT coordinate as the Train Class Mean?")
+print("What percentage of samples sit on the EXACT coordinate as the Train Class Mean?")
 
+all_train_dists_200d = np.concatenate(list(train_dists.values())) if train_dists else np.array([])
+all_train_dists_9d = np.concatenate(list(train_dists_clean.values())) if train_dists_clean else np.array([])
 all_test_dists_200d = np.concatenate(list(test_dists.values())) if test_dists else np.array([])
 all_test_dists_9d = np.concatenate(list(test_dists_clean.values())) if test_dists_clean else np.array([])
 
 for eps in [0.5, 0.1, 1e-2, 1e-3, 1e-4, 1e-5]:
-    if len(all_test_dists_200d) > 0 and len(all_test_dists_9d) > 0:
-        pct_200d = np.mean(all_test_dists_200d < eps) * 100
-        pct_9d = np.mean(all_test_dists_9d < eps) * 100
-        print(f"Distance < {eps:.0e} : {pct_200d:5.2f}% of Test in 200D space | {pct_9d:5.2f}% of Test in 9D Subspace")
+    if len(all_test_dists_200d) > 0 and len(all_test_dists_9d) > 0 and len(all_train_dists_200d) > 0 and len(all_train_dists_9d) > 0:
+        pct_tr_200d = np.mean(all_train_dists_200d < eps) * 100
+        pct_tr_9d = np.mean(all_train_dists_9d < eps) * 100
+        pct_te_200d = np.mean(all_test_dists_200d < eps) * 100
+        pct_te_9d = np.mean(all_test_dists_9d < eps) * 100
+        print(f"Distance < {eps:.0e} | TRAIN: {pct_tr_200d:6.2f}% in 200D, {pct_tr_9d:6.2f}% in 9D | TEST: {pct_te_200d:6.2f}% in 200D, {pct_te_9d:6.2f}% in 9D")
