@@ -11,9 +11,17 @@ from privacy_and_grokking.datasets.canaries.uniform_noise import (
     UniformNoiseCanary,
     UniformNoiseCanaryConfig,
 )
+from privacy_and_grokking.datasets.canaries.gaussian_noise import (
+    GaussianNoiseCanary,
+    GaussianNoiseCanaryConfig,
+)
+from privacy_and_grokking.datasets.canaries.label_noise import (
+    LabelNoiseCanary,
+    LabelNoiseCanaryConfig,
+)
 
 CanaryType = Annotated[
-    UniformNoiseCanaryConfig | SquareWatermarkCanaryConfig,
+    UniformNoiseCanaryConfig | SquareWatermarkCanaryConfig | GaussianNoiseCanaryConfig | LabelNoiseCanaryConfig,
     Field(discriminator="name"),
 ]
 
@@ -30,5 +38,9 @@ __all__ = [
     "SquareWatermarkCanaryConfig",
     "UniformNoiseCanary",
     "UniformNoiseCanaryConfig",
+    "GaussianNoiseCanary",
+    "GaussianNoiseCanaryConfig",
+    "LabelNoiseCanary",
+    "LabelNoiseCanaryConfig",
     "create_canary_generator",
 ]
