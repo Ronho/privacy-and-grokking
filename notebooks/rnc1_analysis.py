@@ -839,3 +839,89 @@ out_path_margin_mia = Path(__file__).parent / f"rnc1_margin_mia_{RUN_ID[:8]}_ste
 fig_margin_mia.savefig(out_path_margin_mia, dpi=150, bbox_inches="tight")
 print(f"Margin MIA plot saved to: {out_path_margin_mia}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Approach 3: Removing Orthogonal Noise (PCA on Class Means)
+# ---------------------------------------------------------------------------
+print("\n--- Removing Orthogonal Noise (PCA on Class Means) ---")
+
+# 1. Fit PCA ONLY on the class means to extract the C-1 Neural Collapse subspace
+pca_collapse = PCA(n_components=num_classes - 1, random_state=0)
+pca_collapse.fit(class_means_unscaled.numpy())
+
+# 2. Transform all features into this noise-free subspace
+train_f_clean = torch.tensor(pca_collapse.transform(train_f_normal.numpy()))
+test_f_clean  = torch.tensor(pca_collapse.transform(test_features.float().numpy()))
+canary_f_clean = torch.tensor(pca_collapse.transform(train_f_canary.numpy())) if len(train_f_canary) > 0 else torch.empty(0)
+train_f_all_clean = torch.tensor(pca_collapse.transform(train_features.float().numpy()))
+
+# Compute RNC1 on the cleaned features
+rnc1_train_clean = compute_rnc1(train_f_all_clean, train_labels)
+rnc1_test_clean  = compute_rnc1(test_f_clean,  test_labels)
+print(f"Clean RNC1 (train set) : {rnc1_train_clean:.6f}")
+print(f"Clean RNC1 (test set)  : {rnc1_test_clean:.6f}")
+
+# 3. Re-evaluate Distances to Class Mean in the clean subspace
+class_means_clean = torch.tensor(pca_collapse.transform(class_means_unscaled.numpy()))
+
+train_dists_clean = distances_to_class_mean(train_f_clean, train_l_normal, class_means_clean)
+test_dists_clean  = distances_to_class_mean(test_f_clean, test_labels, class_means_clean)
+canary_dists_clean = distances_to_class_mean(canary_f_clean, train_l_canary, class_means_clean)
+
+train_test_dists_clean = {}
+for c in range(num_classes):
+    tr_c = train_dists_clean.get(c, np.array([]))
+    te_c = test_dists_clean.get(c, np.array([]))
+    train_test_dists_clean[c] = np.concatenate([tr_c, te_c]) if len(tr_c) > 0 or len(te_c) > 0 else np.array([])
+
+all_train_flat_clean = np.concatenate(list(train_dists_clean.values())) if train_dists_clean else np.array([])
+all_test_flat_clean = np.concatenate(list(test_dists_clean.values())) if test_dists_clean else np.array([])
+all_dist_values_clean = np.concatenate([all_train_flat_clean, all_test_flat_clean])
+if len(all_dist_values_clean) > 0:
+    x_min_c, x_max_c = 0.0, float(np.percentile(all_dist_values_clean, 99.5))
+else:
+    x_min_c, x_max_c = 0.0, 1.0
+x_grid_c = np.linspace(x_min_c, x_max_c, 400)
+
+fig_clean, axes_clean = plt.subplots(2, 5, figsize=(18, 7), sharey=False)
+axes_clean = axes_clean.flatten()
+
+for c in range(num_classes):
+    ax = axes_clean[c]
+    color = colors[c]
+    
+    for dists, label, ls, alpha, lw in [
+        (train_test_dists_clean, "train+test", "-", 0.95, 2.5),
+        (train_dists_clean, "train", "-.",  0.85, 1.8),
+        (test_dists_clean,  "test",  "--", 0.65, 1.8),
+        (canary_dists_clean, "canary", ":", 0.85, 1.8),
+    ]:
+        if c not in dists or len(dists[c]) < 2:
+            continue
+        try:
+            kde = gaussian_kde(dists[c], bw_method="scott")
+            ax.plot(x_grid_c, kde(x_grid_c), linestyle=ls, color=color, alpha=alpha, label=label, lw=lw)
+            ax.fill_between(x_grid_c, kde(x_grid_c), alpha=alpha * 0.18, color=color)
+        except (np.linalg.LinAlgError, ValueError):
+            # If variance is effectively zero, KDE might fail. Plot a sharp spike.
+            mean_val = np.mean(dists[c])
+            ax.axvline(mean_val, color=color, linestyle=ls, alpha=alpha, label=label, lw=lw)
+
+    ax.set_title(f"Class {c}", fontsize=10)
+    ax.set_xlabel("‖h − μ_c‖₂ (Clean Subspace)")
+    ax.set_ylabel("density" if c % 5 == 0 else "")
+    ax.legend(fontsize=8, frameon=False)
+    ax.set_xlim(x_min_c, x_max_c)
+    ax.set_ylim(bottom=0)
+
+fig_clean.suptitle(
+    f"Distance to class mean (NOISE-FREE {num_classes-1}D SUBSPACE)\n"
+    f"Model {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}  |  solid=train+test, dashdot=train, dashed=test",
+    fontsize=12,
+)
+plt.tight_layout()
+
+out_path_clean = Path(__file__).parent / f"rnc1_dist_density_clean_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_clean.savefig(out_path_clean, dpi=150, bbox_inches="tight")
+print(f"Clean density plot saved to: {out_path_clean}")
+plt.show()
