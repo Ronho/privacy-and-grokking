@@ -1247,3 +1247,63 @@ median_tr = np.median(nn_dist_train)
 median_te = np.median(nn_dist_test)
 print(f"Median Train-to-Train Distance: {median_tr:.4f}")
 print(f"Median Test-to-Train Distance:  {median_te:.4f}")
+
+# ---------------------------------------------------------------------------
+# Hypersphere Expansion Analysis (TPR & FPR vs. Radius)
+# ---------------------------------------------------------------------------
+print("\n--- Hypersphere Expansion Analysis ---")
+print("Plotting TPR and FPR vs. Hypersphere Radius around Train Class Means (9D Subspace)...")
+
+fig_hyper, axes_hyper = plt.subplots(2, 5, figsize=(20, 8), sharey=True)
+axes_hyper = axes_hyper.flatten()
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    # We use the 9D clean subspace as it perfectly represents the classifier's view
+    f_tr = train_f_clean[mask_tr].numpy()
+    f_te = test_f_clean[mask_te].numpy()
+    
+    if len(f_tr) == 0 or len(f_te) == 0:
+        continue
+        
+    mean_tr = np.mean(f_tr, axis=0)
+    
+    dist_tr = np.linalg.norm(f_tr - mean_tr, axis=1)
+    dist_te = np.linalg.norm(f_te - mean_tr, axis=1)
+    
+    # Sort all unique distances to act as our expanding hypersphere radii
+    all_radii = np.sort(np.unique(np.concatenate([dist_tr, dist_te])))
+    
+    # Calculate TPR and FPR at each expanding radius
+    tprs = np.searchsorted(np.sort(dist_tr), all_radii, side='right') / len(dist_tr)
+    fprs = np.searchsorted(np.sort(dist_te), all_radii, side='right') / len(dist_te)
+    
+    ax = axes_hyper[c]
+    ax.plot(all_radii, tprs, color='blue', lw=2, label='TPR (Train Enclosed)')
+    ax.plot(all_radii, fprs, color='orange', lw=2, label='FPR (Test Enclosed)')
+    
+    # Fill the area where the Test data perfectly overlaps the Train data
+    ax.fill_between(all_radii, 0, fprs, color='orange', alpha=0.3, label='Inseparable Overlap')
+    
+    # Zoom the x-axis to the microscopic region where the Train data sits
+    max_radius = np.percentile(dist_tr, 95)
+    if max_radius > 0:
+        ax.set_xlim([0, max_radius * 1.5])
+        
+    ax.set_title(f"Class {c}")
+    ax.set_xlabel("Radius (L2 Dist to Mean)")
+    if c == 0 or c == 5:
+        ax.set_ylabel("Percentage Enclosed")
+    ax.grid(True, linestyle=':', alpha=0.6)
+    
+    if c == 0:
+        ax.legend(loc='lower right')
+
+fig_hyper.suptitle(f"Hypersphere Expansion: TPR & FPR vs Radius (9D Subspace)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
+plt.tight_layout()
+out_path_hyper = Path(__file__).parent / f"rnc1_hypersphere_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_hyper.savefig(out_path_hyper, dpi=150, bbox_inches="tight")
+print(f"Hypersphere Expansion plot saved to: {out_path_hyper}")
+plt.show()
