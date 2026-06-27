@@ -981,3 +981,57 @@ out_path_ortho = Path(__file__).parent / f"rnc1_ortho_noise_{RUN_ID[:8]}_step{CH
 fig_ortho.savefig(out_path_ortho, dpi=150, bbox_inches="tight")
 print(f"Orthogonal Noise plot saved to: {out_path_ortho}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Multi-Boundary Margin MIA (All C-1 boundaries)
+# ---------------------------------------------------------------------------
+print("\n--- Multi-Boundary Margin MIA (Per-Class) ---")
+
+all_tr_multi = []
+all_te_multi = []
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr]
+    f_te = test_features.float()[mask_te]
+    
+    if len(f_tr) < 2 or len(f_te) < 2:
+        continue
+        
+    # Calculate margins to all other classes k != c
+    def get_all_margins(f_sub, class_c):
+        margins = []
+        for k in range(num_classes):
+            if k == class_c:
+                continue
+            w_diff = w[class_c] - w[k]
+            b_diff = b[class_c] - b[k]
+            norm_w = torch.norm(w_diff, p=2)
+            m = (torch.matmul(f_sub, w_diff) + b_diff) / norm_w
+            margins.append(m.unsqueeze(1))
+        return torch.cat(margins, dim=1).numpy() # Shape: (N, 9)
+        
+    tr_margins = get_all_margins(f_tr, c)
+    te_margins = get_all_margins(f_te, c)
+    
+    # Exact class mean of the margins on Train data
+    tr_margin_mean = np.mean(tr_margins, axis=0)
+    
+    # Distance to the exact Train mean margins
+    # If a sample is exactly at the class mean for ALL boundaries, this distance is ~0.
+    tr_margin_dist = np.linalg.norm(tr_margins - tr_margin_mean, axis=1)
+    te_margin_dist = np.linalg.norm(te_margins - tr_margin_mean, axis=1)
+    
+    all_tr_multi.append(tr_margin_dist)
+    all_te_multi.append(te_margin_dist)
+    
+    mia_result = evaluate_mia(tr_margin_dist, te_margin_dist)
+    if mia_result:
+        print(f"Class {c} Multi-Boundary MIA -> Acc: {mia_result['acc']:.1%} | TPR: {mia_result['tpr']:.1%} | FPR: {mia_result['fpr']:.1%}")
+
+if all_tr_multi and all_te_multi:
+    global_multi_mia = evaluate_mia(np.concatenate(all_tr_multi), np.concatenate(all_te_multi))
+    if global_multi_mia:
+        print(f"Global Multi-Boundary MIA  -> Acc: {global_multi_mia['acc']:.1%} | TPR: {global_multi_mia['tpr']:.1%} | FPR: {global_multi_mia['fpr']:.1%}")
