@@ -1458,3 +1458,79 @@ acc_9d = accuracy_score(y_train_mia, preds_9d)
 
 print(f"Absolute Overfitted Accuracy (200D Space): {acc_200d:.2%}")
 print(f"Absolute Overfitted Accuracy (9D Subspace):  {acc_9d:.2%}")
+
+# ---------------------------------------------------------------------------
+# KNN Accuracy vs. n_neighbors (The Bayes Error Collapse)
+# ---------------------------------------------------------------------------
+print("\n--- KNN Accuracy vs. n_neighbors ---")
+print("Plotting how accuracy collapses to the Bayes Error limit as we increase n_neighbors...")
+
+n_range = np.arange(1, 51, 2) # 1, 3, 5, ..., 49
+
+fig_knn, axes_knn = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
+
+# Helper function to compute accuracy for different n and e
+def compute_knn_accuracies(features, labels, n_range, e_limit=None):
+    nbrs = NearestNeighbors(n_neighbors=max(n_range), algorithm='auto').fit(features)
+    distances, indices = nbrs.kneighbors(features)
+    
+    accs = []
+    for n in n_range:
+        n_dist = distances[:, :n]
+        n_idx = indices[:, :n]
+        
+        preds = []
+        for i in range(len(features)):
+            valid_idx = n_idx[i]
+            if e_limit is not None:
+                mask = n_dist[i] <= e_limit
+                valid_idx = valid_idx[mask]
+                
+            if len(valid_idx) == 0:
+                pred = labels[i]
+            else:
+                neighbor_labels = labels[valid_idx]
+                pred = np.bincount(neighbor_labels.astype(int)).argmax()
+            preds.append(pred)
+            
+        acc = accuracy_score(labels, preds)
+        accs.append(acc)
+    return accs
+
+# Use a small 'e' based on the Train-to-Train median calculated earlier
+e_small = median_tr * 2.0 
+
+# 1. Evaluate 200D
+accs_200d_std = compute_knn_accuracies(X_train_mia, y_train_mia, n_range, e_limit=None)
+accs_200d_lim = compute_knn_accuracies(X_train_mia, y_train_mia, n_range, e_limit=e_small)
+
+axes_knn[0].plot(n_range, accs_200d_std, marker='o', label='Standard KNN', color='blue')
+axes_knn[0].plot(n_range, accs_200d_lim, marker='s', label=f'Radius Limited KNN (e={e_small:.4f})', color='orange')
+axes_knn[0].set_title("200D Space")
+axes_knn[0].set_xlabel("n_neighbors")
+axes_knn[0].set_ylabel("Overfitted Accuracy (Evaluating on Training Data)")
+axes_knn[0].grid(True, linestyle=':', alpha=0.6)
+axes_knn[0].legend()
+
+# 2. Evaluate 9D
+# Recalculate a small 'e' for 9D
+nbrs_9d_tr = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(train_f_clean.numpy())
+dist_9d_tr, _ = nbrs_9d_tr.kneighbors(train_f_clean.numpy())
+e_small_9d = np.median(dist_9d_tr[:, 1]) * 2.0
+
+accs_9d_std = compute_knn_accuracies(X_train_9d, y_train_mia, n_range, e_limit=None)
+accs_9d_lim = compute_knn_accuracies(X_train_9d, y_train_mia, n_range, e_limit=e_small_9d)
+
+axes_knn[1].plot(n_range, accs_9d_std, marker='o', label='Standard KNN', color='blue')
+axes_knn[1].plot(n_range, accs_9d_lim, marker='s', label=f'Radius Limited KNN (e={e_small_9d:.4f})', color='orange')
+axes_knn[1].set_title("9D Subspace")
+axes_knn[1].set_xlabel("n_neighbors")
+axes_knn[1].grid(True, linestyle=':', alpha=0.6)
+axes_knn[1].legend()
+
+fig_knn.suptitle(f"The Bayes Error Collapse: Accuracy vs. n_neighbors\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
+plt.tight_layout()
+out_path_knn = Path(__file__).parent / f"rnc1_knn_collapse_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_knn.savefig(out_path_knn, dpi=150, bbox_inches="tight")
+print(f"KNN Collapse plot saved to: {out_path_knn}")
+plt.show()
