@@ -533,3 +533,58 @@ fig_mia.savefig(out_path_mia, dpi=150, bbox_inches="tight")
 print(f"MIA plot saved to: {out_path_mia}")
 plt.show()
 
+
+# ---------------------------------------------------------------------------
+# MIA: Idealized Gaussians Plot
+# ---------------------------------------------------------------------------
+def plot_idealized_gaussian(ax, mu, std, color, label, linestyle="-"):
+    if std > 0:
+        x = np.linspace(mu - 4*std, mu + 4*std, 500)
+        y = np.exp(-0.5 * ((x - mu) / std)**2) / (std * np.sqrt(2 * np.pi))
+        ax.plot(x, y, color=color, label=label, linestyle=linestyle)
+
+fig_gauss, axes_gauss = plt.subplots(2, 6, figsize=(22, 7))
+axes_gauss = axes_gauss.flatten()
+
+# Plot Global MIA Gaussians
+ax_g = axes_gauss[0]
+if global_mia:
+    plot_idealized_gaussian(ax_g, global_mia['mu_train'], global_mia['std_train'], "blue", "train")
+    plot_idealized_gaussian(ax_g, global_mia['mu_test'], global_mia['std_test'], "orange", "test", "--")
+    
+    b = global_mia['bounds']
+    if b[0] is not None:
+        ax_g.axvline(b[0], color='k', linestyle=':')
+    if b[1] is not None:
+        ax_g.axvline(b[1], color='k', linestyle=':')
+        
+    ax_g.set_title(f"Global Idealized\n$\\mu_T$={global_mia['mu_train']:.2f}, $\\mu_V$={global_mia['mu_test']:.2f}", fontsize=10)
+    ax_g.legend(fontsize=8, frameon=False)
+
+for c in range(num_classes):
+    ax = axes_gauss[c + 1]
+    mia_c = class_mias.get(c)
+    if not mia_c:
+        continue
+    
+    plot_idealized_gaussian(ax, mia_c['mu_train'], mia_c['std_train'], "blue", "train")
+    plot_idealized_gaussian(ax, mia_c['mu_test'], mia_c['std_test'], "orange", "test", "--")
+    
+    b = mia_c['bounds']
+    if b[0] is not None:
+        ax.axvline(b[0], color='k', linestyle=':')
+    if b[1] is not None:
+        ax.axvline(b[1], color='k', linestyle=':')
+        
+    ax.set_title(f"Class {c}\n$\\mu_T$={mia_c['mu_train']:.2f}, $\\mu_V$={mia_c['mu_test']:.2f}", fontsize=10)
+
+axes_gauss[-1].axis('off')
+
+fig_gauss.suptitle(f"MIA Idealized Gaussian Distributions\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
+fig_gauss.tight_layout()
+
+out_path_gauss = Path(__file__).parent / f"rnc1_mia_gaussians_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_gauss.savefig(out_path_gauss, dpi=150, bbox_inches="tight")
+print(f"MIA Gaussians plot saved to: {out_path_gauss}")
+plt.show()
+
