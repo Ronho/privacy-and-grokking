@@ -1307,3 +1307,125 @@ out_path_hyper = Path(__file__).parent / f"rnc1_hypersphere_{RUN_ID[:8]}_step{CH
 fig_hyper.savefig(out_path_hyper, dpi=150, bbox_inches="tight")
 print(f"Hypersphere Expansion plot saved to: {out_path_hyper}")
 plt.show()
+# ---------------------------------------------------------------------------
+# Hypersphere Expansion Analysis (200D Raw Space)
+# ---------------------------------------------------------------------------
+print("\n--- Hypersphere Expansion Analysis (200D) ---")
+print("Plotting TPR and FPR vs. Hypersphere Radius around Train Class Means (200D Space)...")
+
+fig_hyper200, axes_hyper200 = plt.subplots(2, 5, figsize=(20, 8), sharey=True)
+axes_hyper200 = axes_hyper200.flatten()
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr].numpy()
+    f_te = test_features.float()[mask_te].numpy()
+    
+    if len(f_tr) == 0 or len(f_te) == 0:
+        continue
+        
+    mean_tr = np.mean(f_tr, axis=0)
+    
+    dist_tr = np.linalg.norm(f_tr - mean_tr, axis=1)
+    dist_te = np.linalg.norm(f_te - mean_tr, axis=1)
+    
+    all_radii = np.sort(np.unique(np.concatenate([dist_tr, dist_te])))
+    tprs = np.searchsorted(np.sort(dist_tr), all_radii, side='right') / len(dist_tr)
+    fprs = np.searchsorted(np.sort(dist_te), all_radii, side='right') / len(dist_te)
+    
+    ax = axes_hyper200[c]
+    ax.plot(all_radii, tprs, color='blue', lw=2, label='TPR (Train Enclosed)')
+    ax.plot(all_radii, fprs, color='orange', lw=2, label='FPR (Test Enclosed)')
+    ax.fill_between(all_radii, 0, fprs, color='orange', alpha=0.3, label='Inseparable Overlap')
+    
+    max_radius = np.percentile(dist_tr, 95)
+    if max_radius > 0:
+        ax.set_xlim([0, max_radius * 1.5])
+        
+    ax.set_title(f"Class {c}")
+    ax.set_xlabel("Radius (L2 Dist to Mean)")
+    if c == 0 or c == 5:
+        ax.set_ylabel("Percentage Enclosed")
+    ax.grid(True, linestyle=':', alpha=0.6)
+    
+    if c == 0:
+        ax.legend(loc='lower right')
+
+fig_hyper200.suptitle(f"Hypersphere Expansion: TPR & FPR vs Radius (200D Space)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
+plt.tight_layout()
+out_path_hyper200 = Path(__file__).parent / f"rnc1_hypersphere_200d_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_hyper200.savefig(out_path_hyper200, dpi=150, bbox_inches="tight")
+print(f"Hypersphere Expansion (200D) plot saved to: {out_path_hyper200}")
+plt.show()
+
+# ---------------------------------------------------------------------------
+# Test Data Distribution: Dist to Mean vs. Dist to Nearest Train (200D)
+# ---------------------------------------------------------------------------
+print("\n--- Test Data Distribution Analysis ---")
+print("Plotting Distance to Train Mean vs. Distance to Nearest Train Point...")
+
+fig_dist, axes_dist = plt.subplots(2, 5, figsize=(20, 8), sharex=True, sharey=True)
+axes_dist = axes_dist.flatten()
+
+from sklearn.neighbors import NearestNeighbors
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr].numpy()
+    f_te = test_features.float()[mask_te].numpy()
+    
+    if len(f_tr) < 2 or len(f_te) == 0:
+        continue
+        
+    mean_tr = np.mean(f_tr, axis=0)
+    
+    # X-axis: Distance to Mean
+    dist_mean_te = np.linalg.norm(f_te - mean_tr, axis=1)
+    
+    # Y-axis: Distance to Nearest Train point
+    nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(f_tr)
+    distances_te, _ = nbrs.kneighbors(f_te)
+    dist_nn_te = distances_te[:, 0]
+    
+    ax = axes_dist[c]
+    
+    # Plot Train points for comparison! 
+    # X: Dist to mean. Y: Dist to nearest OTHER train point.
+    dist_mean_tr = np.linalg.norm(f_tr - mean_tr, axis=1)
+    distances_tr, _ = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(f_tr).kneighbors(f_tr)
+    dist_nn_tr = distances_tr[:, 1]
+    
+    # We plot Train first so Test is overlaid on top
+    ax.scatter(dist_mean_tr, dist_nn_tr, color='blue', alpha=0.3, s=8, label='Train Points')
+    ax.scatter(dist_mean_te, dist_nn_te, color='orange', alpha=0.3, s=8, label='Test Points')
+    
+    # Reference line y = x (Distance to NN == Distance to Mean)
+    max_val = max(np.max(dist_mean_te), np.max(dist_nn_te))
+    ax.plot([0, max_val], [0, max_val], color='gray', linestyle='--', label='y = x')
+    
+    ax.set_title(f"Class {c}")
+    if c > 4:
+        ax.set_xlabel("Dist to Class Mean")
+    if c == 0 or c == 5:
+        ax.set_ylabel("Dist to Nearest Train Pt")
+    ax.grid(True, linestyle=':', alpha=0.6)
+    
+    # Zoom in to the cluster where Train points exist
+    max_train_dist = np.percentile(dist_mean_tr, 99)
+    if max_train_dist > 0:
+        ax.set_xlim([0, max_train_dist * 2])
+        ax.set_ylim([0, np.max(dist_nn_tr) * 2])
+    
+    if c == 0:
+        ax.legend(loc='upper left')
+
+fig_dist.suptitle(f"Microscopic Distribution: Dist to Mean vs Dist to Nearest Train Point (200D Space)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
+plt.tight_layout()
+out_path_dist = Path(__file__).parent / f"rnc1_dist_vs_nn_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_dist.savefig(out_path_dist, dpi=150, bbox_inches="tight")
+print(f"Distance distribution scatter plot saved to: {out_path_dist}")
+plt.show()
