@@ -1608,8 +1608,86 @@ for c in range(num_classes):
         
     print(f"Class {c}: Distance to true mean | Test only: {dist_te:.4f} | Combined: {dist_comb:.4f}")
 
-if diffs_test_only:
     print(f"Average Distance (Test only) : {np.nanmean(diffs_test_only):.4f}")
 if diffs_combined:
     print(f"Average Distance (Combined)  : {np.nanmean(diffs_combined):.4f}")
 
+# ---------------------------------------------------------------------------
+# Outlier MIA (Train Canaries vs Test Canaries)
+# ---------------------------------------------------------------------------
+print("\n--- Outlier MIA (Train Canaries vs Test Canaries) ---")
+
+from privacy_and_grokking.datasets.canaries.uniform_noise import UniformNoiseCanary
+
+if len(train_f_canary) > 0:
+    print("Generating new unseen Test Canaries (uniform noise) to evaluate outlier MIA...")
+    
+    # Instantiate the noise generator
+    noise_generator = UniformNoiseCanary(dim=(1, 28, 28))
+    
+    test_canary_features_list = []
+    test_canary_labels_list = []
+    
+    # Use a subset of test data to get random seeds that are DIFFERENT from train data
+    subset_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    
+    with torch.no_grad():
+        for imgs, lbls in subset_loader:
+            # Apply uniform noise canary. The hash-based seed ensures different noise than train.
+            noisy_imgs = torch.stack([noise_generator(img) for img in imgs]).to(device)
+            
+            # Forward pass through MLP
+            y = torch.flatten(noisy_imgs, 1)
+            y = F.relu(model.fc1(y))
+            y = F.relu(model.fc2(y))
+            y = F.relu(model.fc3(y))
+            
+            test_canary_features_list.append(y.cpu())
+            test_canary_labels_list.append(lbls.cpu())
+            
+            if sum(len(b) for b in test_canary_features_list) >= len(train_f_canary):
+                break
+                
+    test_f_canary = torch.cat(test_canary_features_list)
+    test_l_canary = torch.cat(test_canary_labels_list)
+    
+    # Project to 9D clean subspace
+    test_f_canary_clean = torch.tensor(pca_collapse.transform(test_f_canary.numpy()))
+    
+    # Calculate distance to true class means in 9D space
+    test_canary_dists_clean = distances_to_class_mean(test_f_canary_clean, test_l_canary, class_means_clean)
+    
+    # We already have train canary distances from earlier: canary_dists_clean
+    all_train_canary_flat = np.concatenate(list(canary_dists_clean.values())) if canary_dists_clean else np.array([])
+    all_test_canary_flat = np.concatenate(list(test_canary_dists_clean.values())) if test_canary_dists_clean else np.array([])
+    
+    if len(all_train_canary_flat) > 0 and len(all_test_canary_flat) > 0:
+        outlier_mia_global = evaluate_mia(all_train_canary_flat, all_test_canary_flat)
+        if outlier_mia_global:
+            ff = outlier_mia_global['fixed_fprs']
+            print(f"Global Outlier MIA (9D Distance) -> Acc: {outlier_mia_global['acc']:.1%} | TPR: {outlier_mia_global['tpr']:.1%} | FPR: {outlier_mia_global['fpr']:.1%}")
+            print(f"                                    TPR@1%FPR: {ff[0.01]['tpr']:.1%} | TPR@5%FPR: {ff[0.05]['tpr']:.1%} | TPR@10%FPR: {ff[0.10]['tpr']:.1%}")
+    
+        fig_outlier_roc, ax_outlier_roc = plt.subplots(figsize=(8, 6))
+        
+        # invert=True because lower distance = more likely Train
+        plot_roc(ax_outlier_roc, all_train_canary_flat, all_test_canary_flat, "Outlier MIA (Train Canary vs Test Canary)", "red", invert=True)
+        
+        ax_outlier_roc.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
+        ax_outlier_roc.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
+        
+        ax_outlier_roc.set_xlim([0.0, 1.0])
+        ax_outlier_roc.set_ylim([0.0, 1.05])
+        ax_outlier_roc.set_xlabel('False Positive Rate (FPR)')
+        ax_outlier_roc.set_ylabel('True Positive Rate (TPR)')
+        ax_outlier_roc.set_title(f"Outlier MIA: ROC Curve (Distinguishing Memorized vs Unseen Outliers)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+        ax_outlier_roc.legend(loc="lower right")
+        ax_outlier_roc.grid(True, linestyle=':', alpha=0.6)
+        
+        plt.tight_layout()
+        out_path_outlier_roc = Path(__file__).parent / f"rnc1_outlier_mia_roc_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+        fig_outlier_roc.savefig(out_path_outlier_roc, dpi=150, bbox_inches="tight")
+        print(f"Outlier MIA ROC plotted to: {out_path_outlier_roc}")
+        plt.show()
+else:
+    print("Skipping Outlier MIA: No canaries were injected during training for this model.")
