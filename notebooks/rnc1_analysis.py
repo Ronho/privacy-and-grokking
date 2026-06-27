@@ -133,8 +133,30 @@ train_l_normal = train_labels[~canary_mask]
 train_f_canary = train_features[canary_mask].float()
 train_l_canary = train_labels[canary_mask]
 
+# --- Generate Test Canaries ---
+from privacy_and_grokking.datasets.canaries.uniform_noise import UniformNoiseCanary
+from torch.utils.data import DataLoader
+test_f_canary = torch.empty(0)
+test_l_canary = torch.empty(0)
+if len(train_f_canary) > 0:
+    print("Generating unseen test canaries for evaluation...")
+    noise_gen = UniformNoiseCanary(dim=(1, 28, 28))
+    tcf_list, tcl_list = [], []
+    sub_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    with torch.no_grad():
+        for imgs, lbls in sub_loader:
+            noisy_imgs = torch.stack([noise_gen(img) for img in imgs]).to(device)
+            y = F.relu(model.fc3(F.relu(model.fc2(F.relu(model.fc1(torch.flatten(noisy_imgs, 1)))))))
+            tcf_list.append(y.cpu())
+            tcl_list.append(lbls.cpu())
+            if sum(len(b) for b in tcf_list) >= len(train_f_canary): break
+    test_f_canary = torch.cat(tcf_list)
+    test_l_canary = torch.cat(tcl_list)
+
 print(f"  train_features_normal: {train_f_normal.shape}")
 print(f"  train_features_canary: {train_f_canary.shape}")
+if len(train_f_canary) > 0:
+    print(f"  test_features_canary:  {test_f_canary.shape}")
 
 # ---------------------------------------------------------------------------
 # RNC1
@@ -276,6 +298,7 @@ def distances_to_class_mean(
 train_dists = distances_to_class_mean(train_f_normal,       train_l_normal, class_means_unscaled)
 test_dists  = distances_to_class_mean(test_features.float(), test_labels,  class_means_unscaled)
 canary_dists = distances_to_class_mean(train_f_canary,      train_l_canary, class_means_unscaled)
+test_canary_dists = distances_to_class_mean(test_f_canary, test_l_canary, class_means_unscaled)
 
 train_test_dists = {}
 for c in range(num_classes):
@@ -285,7 +308,7 @@ for c in range(num_classes):
 
 # Combined grid for KDE evaluation
 all_dist_values = np.concatenate(
-    list(train_dists.values()) + list(test_dists.values()) + list(canary_dists.values())
+    list(train_dists.values()) + list(test_dists.values()) + list(canary_dists.values()) + list(test_canary_dists.values())
 )
 x_min, x_max = 0.0, float(np.percentile(all_dist_values, 99.5))
 x_grid = np.linspace(x_min, x_max, 400)
@@ -300,12 +323,14 @@ all_test_flat = np.concatenate(list(test_dists.values())) if test_dists else np.
 all_canary_flat = np.concatenate(list(canary_dists.values())) if canary_dists else np.array([])
 
 all_train_test_flat = np.concatenate([all_train_flat, all_test_flat]) if len(all_train_flat) > 0 or len(all_test_flat) > 0 else np.array([])
+all_test_canary_flat = np.concatenate(list(test_canary_dists.values())) if test_canary_dists else np.array([])
 
 for dists_flat, label, ls, color, alpha in [
     (all_train_test_flat, "train+test", "-", "purple", 0.85),
     (all_train_flat, "train", "-",  "blue", 0.85),
     (all_test_flat,  "test",  "--", "orange", 0.65),
-    (all_canary_flat, "canary", ":", "red", 0.85),
+    (all_canary_flat, "train_canary", ":", "red", 0.85),
+    (all_test_canary_flat, "test_canary", ":", "brown", 0.85),
 ]:
     if len(dists_flat) < 2:
         continue
@@ -333,17 +358,18 @@ for c in range(num_classes):
     ax = axes2[c]
     color = colors[c]
 
-    for dists, label, ls, alpha, lw in [
-        (train_test_dists, "train+test", "-", 0.95, 2.5),
-        (train_dists, "train", "-.",  0.85, 1.8),
-        (test_dists,  "test",  "--", 0.65, 1.8),
-        (canary_dists, "canary", ":", 0.85, 1.8),
+    for dists, label, ls, alpha, lw, c_color in [
+        (train_test_dists, "train+test", "-", 0.95, 2.5, color),
+        (train_dists, "train", "-.",  0.85, 1.8, color),
+        (test_dists,  "test",  "--", 0.65, 1.8, color),
+        (canary_dists, "train_canary", ":", 0.85, 1.8, color),
+        (test_canary_dists, "test_canary", ":", 0.85, 1.8, "brown"),
     ]:
         if c not in dists or len(dists[c]) < 2:
             continue
         kde = gaussian_kde(dists[c], bw_method="scott")
-        ax.plot(x_grid, kde(x_grid), linestyle=ls, color=color, alpha=alpha, label=label, lw=lw)
-        ax.fill_between(x_grid, kde(x_grid), alpha=alpha * 0.18, color=color)
+        ax.plot(x_grid, kde(x_grid), linestyle=ls, color=c_color, alpha=alpha, label=label, lw=lw)
+        ax.fill_between(x_grid, kde(x_grid), alpha=alpha * 0.18, color=c_color)
 
     ax.set_title(f"Class {c}", fontsize=10)
     ax.set_xlabel("‖h − μ_c‖₂")
@@ -867,6 +893,8 @@ class_means_clean = torch.tensor(pca_collapse.transform(class_means_unscaled.num
 train_dists_clean = distances_to_class_mean(train_f_clean, train_l_normal, class_means_clean)
 test_dists_clean  = distances_to_class_mean(test_f_clean, test_labels, class_means_clean)
 canary_dists_clean = distances_to_class_mean(canary_f_clean, train_l_canary, class_means_clean)
+test_f_canary_clean = torch.tensor(pca_collapse.transform(test_f_canary.numpy())) if len(test_f_canary) > 0 else torch.empty(0)
+test_canary_dists_clean = distances_to_class_mean(test_f_canary_clean, test_l_canary, class_means_clean)
 
 train_test_dists_clean = {}
 for c in range(num_classes):
@@ -890,22 +918,23 @@ for c in range(num_classes):
     ax = axes_clean[c]
     color = colors[c]
     
-    for dists, label, ls, alpha, lw in [
-        (train_test_dists_clean, "train+test", "-", 0.95, 2.5),
-        (train_dists_clean, "train", "-.",  0.85, 1.8),
-        (test_dists_clean,  "test",  "--", 0.65, 1.8),
-        (canary_dists_clean, "canary", ":", 0.85, 1.8),
+    for dists, label, ls, alpha, lw, c_color in [
+        (train_test_dists_clean, "train+test", "-", 0.95, 2.5, color),
+        (train_dists_clean, "train", "-.",  0.85, 1.8, color),
+        (test_dists_clean,  "test",  "--", 0.65, 1.8, color),
+        (canary_dists_clean, "train_canary", ":", 0.85, 1.8, color),
+        (test_canary_dists_clean, "test_canary", ":", 0.85, 1.8, "brown"),
     ]:
         if c not in dists or len(dists[c]) < 2:
             continue
         try:
             kde = gaussian_kde(dists[c], bw_method="scott")
-            ax.plot(x_grid_c, kde(x_grid_c), linestyle=ls, color=color, alpha=alpha, label=label, lw=lw)
-            ax.fill_between(x_grid_c, kde(x_grid_c), alpha=alpha * 0.18, color=color)
+            ax.plot(x_grid_c, kde(x_grid_c), linestyle=ls, color=c_color, alpha=alpha, label=label, lw=lw)
+            ax.fill_between(x_grid_c, kde(x_grid_c), alpha=alpha * 0.18, color=c_color)
         except (np.linalg.LinAlgError, ValueError):
             # If variance is effectively zero, KDE might fail. Plot a sharp spike.
             mean_val = np.mean(dists[c])
-            ax.axvline(mean_val, color=color, linestyle=ls, alpha=alpha, label=label, lw=lw)
+            ax.axvline(mean_val, color=c_color, linestyle=ls, alpha=alpha, label=label, lw=lw)
 
     ax.set_title(f"Class {c}", fontsize=10)
     ax.set_xlabel("‖h − μ_c‖₂ (Clean Subspace)")
@@ -1620,43 +1649,6 @@ print("\n--- Outlier MIA (Train Canaries vs Test Canaries) ---")
 from privacy_and_grokking.datasets.canaries.uniform_noise import UniformNoiseCanary
 
 if len(train_f_canary) > 0:
-    print("Generating new unseen Test Canaries (uniform noise) to evaluate outlier MIA...")
-    
-    # Instantiate the noise generator
-    noise_generator = UniformNoiseCanary(dim=(1, 28, 28))
-    
-    test_canary_features_list = []
-    test_canary_labels_list = []
-    
-    # Use a subset of test data to get random seeds that are DIFFERENT from train data
-    subset_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
-    
-    with torch.no_grad():
-        for imgs, lbls in subset_loader:
-            # Apply uniform noise canary. The hash-based seed ensures different noise than train.
-            noisy_imgs = torch.stack([noise_generator(img) for img in imgs]).to(device)
-            
-            # Forward pass through MLP
-            y = torch.flatten(noisy_imgs, 1)
-            y = F.relu(model.fc1(y))
-            y = F.relu(model.fc2(y))
-            y = F.relu(model.fc3(y))
-            
-            test_canary_features_list.append(y.cpu())
-            test_canary_labels_list.append(lbls.cpu())
-            
-            if sum(len(b) for b in test_canary_features_list) >= len(train_f_canary):
-                break
-                
-    test_f_canary = torch.cat(test_canary_features_list)
-    test_l_canary = torch.cat(test_canary_labels_list)
-    
-    # Project to 9D clean subspace
-    test_f_canary_clean = torch.tensor(pca_collapse.transform(test_f_canary.numpy()))
-    
-    # Calculate distance to true class means in 9D space
-    test_canary_dists_clean = distances_to_class_mean(test_f_canary_clean, test_l_canary, class_means_clean)
-    
     # We already have train canary distances from earlier: canary_dists_clean
     all_train_canary_flat = np.concatenate(list(canary_dists_clean.values())) if canary_dists_clean else np.array([])
     all_test_canary_flat = np.concatenate(list(test_canary_dists_clean.values())) if test_canary_dists_clean else np.array([])
