@@ -395,6 +395,17 @@ def evaluate_mia(train_d, test_d):
     mu_train, std_train = np.mean(train_d), np.std(train_d)
     mu_test, std_test = np.mean(test_d), np.std(test_d)
     
+    target_fprs = [0.01, 0.05, 0.10]
+    fixed_fpr_results = {}
+    for fpr_target in target_fprs:
+        if mu_train < mu_test:
+            bound_val = np.percentile(test_d, fpr_target * 100)
+            tpr_val = np.mean(train_d < bound_val)
+        else:
+            bound_val = np.percentile(test_d, 100 - fpr_target * 100)
+            tpr_val = np.mean(train_d > bound_val)
+        fixed_fpr_results[fpr_target] = {"bound": bound_val, "tpr": tpr_val}
+    
     roots = get_gaussian_intersection(mu_train, std_train, mu_test, std_test)
     if not roots:
         return None
@@ -433,7 +444,8 @@ def evaluate_mia(train_d, test_d):
         "mu_train": mu_train, "std_train": std_train,
         "mu_test": mu_test, "std_test": std_test,
         "bounds": bounds,
-        "tpr": tpr, "fpr": fpr, "acc": acc
+        "tpr": tpr, "fpr": fpr, "acc": acc,
+        "fixed_fprs": fixed_fpr_results
     }
 
 # Global MIA
@@ -455,7 +467,9 @@ if global_mia:
         b_str = f"x > {b[0]:.3f}"
     else:
         b_str = f"[{b[0]:.3f}, {b[1]:.3f}]" if b[0] < b[1] else f"x < {b[1]:.3f} OR x > {b[0]:.3f}"
-    print(f"Global MIA Bounds: {b_str}  |  Acc: {global_mia['acc']:.1%}  |  TPR: {global_mia['tpr']:.1%}  |  FPR: {global_mia['fpr']:.1%}")
+    print(f"Global MIA (Intersection) -> Bounds: {b_str}  |  Acc: {global_mia['acc']:.1%}  |  TPR: {global_mia['tpr']:.1%}  |  FPR: {global_mia['fpr']:.1%}")
+    ff = global_mia['fixed_fprs']
+    print(f"Global MIA (Fixed FPR)    -> TPR@1%FPR: {ff[0.01]['tpr']:.1%}  |  TPR@5%FPR: {ff[0.05]['tpr']:.1%}  |  TPR@10%FPR: {ff[0.10]['tpr']:.1%}")
 
 # Plot MIA
 fig_mia, axes_mia = plt.subplots(2, 6, figsize=(22, 7))
@@ -486,7 +500,8 @@ if global_mia:
         ax_g.axvspan(x_min, b[1], color='blue', alpha=0.1)
         ax_g.axvspan(b[0], x_max, color='blue', alpha=0.1)
     
-    ax_g.set_title(f"Global\nAcc: {global_mia['acc']:.1%} | TPR: {global_mia['tpr']:.1%} | FPR: {global_mia['fpr']:.1%}", fontsize=10)
+    ff = global_mia['fixed_fprs']
+    ax_g.set_title(f"Global\nAcc: {global_mia['acc']:.1%} | TPR: {global_mia['tpr']:.1%} | FPR: {global_mia['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
     ax_g.legend(fontsize=8, frameon=False)
 
 for c in range(num_classes):
@@ -520,7 +535,8 @@ for c in range(num_classes):
             ax.axvspan(x_min, b[1], color='blue', alpha=0.1)
             ax.axvspan(b[0], x_max, color='blue', alpha=0.1)
             
-        ax.set_title(f"Class {c}\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}", fontsize=10)
+        ff = mia_c['fixed_fprs']
+        ax.set_title(f"Class {c}\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
 
 # Hide the last unused subplot
 axes_mia[-1].axis('off')
