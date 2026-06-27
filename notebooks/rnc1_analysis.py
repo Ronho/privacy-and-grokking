@@ -604,3 +604,79 @@ fig_gauss.savefig(out_path_gauss, dpi=150, bbox_inches="tight")
 print(f"MIA Gaussians plot saved to: {out_path_gauss}")
 plt.show()
 
+
+# ---------------------------------------------------------------------------
+# Margin Density Plots (Decision Boundaries)
+# ---------------------------------------------------------------------------
+w = model.fc4.weight.detach().cpu()
+b = model.fc4.bias.detach().cpu()
+
+pairs_to_plot = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
+fig_margin, axes_margin = plt.subplots(len(pairs_to_plot), 2, figsize=(16, 3.5 * len(pairs_to_plot)), sharex=False)
+
+def plot_margin_violin(ax, f, l, w, b, c_pos, c_neg):
+    mask_pos = (l == c_pos)
+    mask_neg = (l == c_neg)
+    
+    w_diff = w[c_pos] - w[c_neg]
+    b_diff = b[c_pos] - b[c_neg]
+    norm_w_diff = torch.norm(w_diff, p=2)
+    
+    def get_margins(f_subset):
+        return (torch.matmul(f_subset, w_diff) + b_diff) / norm_w_diff
+
+    margins_pos = get_margins(f[mask_pos]).numpy()
+    margins_neg = get_margins(f[mask_neg]).numpy()
+    
+    if len(margins_pos) < 2 or len(margins_neg) < 2:
+        return
+        
+    x_min = min(margins_pos.min(), margins_neg.min()) - 0.5
+    x_max = max(margins_pos.max(), margins_neg.max()) + 0.5
+    x_grid = np.linspace(x_min, x_max, 500)
+    
+    kde_pos = gaussian_kde(margins_pos, bw_method="scott")
+    kde_neg = gaussian_kde(margins_neg, bw_method="scott")
+    
+    y_pos = kde_pos(x_grid)
+    y_neg = -kde_neg(x_grid)
+    
+    ax.fill_between(x_grid, 0, y_pos, color="steelblue", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_pos}")
+    ax.fill_between(x_grid, 0, y_neg, color="peru", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_neg}")
+    
+    # Draw individual example lines
+    step = max(1, len(margins_pos) // 50)
+    for m in np.sort(margins_pos)[::step]:
+        ax.plot([m, m], [0, kde_pos(m)[0]], color="black", linewidth=0.3, alpha=0.5)
+    step = max(1, len(margins_neg) // 50)
+    for m in np.sort(margins_neg)[::step]:
+        ax.plot([m, m], [0, -kde_neg(m)[0]], color="black", linewidth=0.3, alpha=0.5)
+        
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.axvline(0, color="black", linewidth=1.5)
+    
+    ax.set_yticks([])
+    ax.set_xlabel(f"Signed distance to decision boundary (class {c_pos} vs. class {c_neg})")
+    ax.set_ylabel("Density")
+    ax.legend(fontsize=8, frameon=True)
+    ax.grid(True, axis='x', linestyle='-', alpha=0.5)
+
+for i, (c1, c2) in enumerate(pairs_to_plot):
+    ax_tr = axes_margin[i, 0]
+    ax_te = axes_margin[i, 1]
+    
+    plot_margin_violin(ax_tr, train_f_normal, train_l_normal, w, b, c1, c2)
+    plot_margin_violin(ax_te, test_features.float(), test_labels, w, b, c1, c2)
+    
+    if i == 0:
+        ax_tr.set_title("Train Examples", fontsize=12)
+        ax_te.set_title("Unseen Examples", fontsize=12)
+
+fig_margin.suptitle(f"Margins of individual examples (Decision Boundaries)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_margin.tight_layout()
+
+out_path_margin = Path(__file__).parent / f"rnc1_margin_plots_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_margin.savefig(out_path_margin, dpi=150, bbox_inches="tight")
+print(f"Margin plots saved to: {out_path_margin}")
+plt.show()
+
