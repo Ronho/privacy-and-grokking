@@ -770,7 +770,7 @@ if global_margin_mia and len(all_train_margin_flat) > 1 and len(all_test_margin_
         ax_g.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
     
     ff = global_margin_mia['fixed_fprs']
-    ax_g.set_title(f"Global\nAcc: {global_margin_mia['acc']:.1%} | TPR: {global_margin_mia['tpr']:.1%} | FPR: {global_margin_mia['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
+    ax_g.set_title(f"Global\n$\\mu_T$={global_margin_mia['mu_train']:.2f} ($\\sigma_T$={global_margin_mia['std_train']:.2f}) | $\\mu_V$={global_margin_mia['mu_test']:.2f} ($\\sigma_V$={global_margin_mia['std_test']:.2f})\nAcc: {global_margin_mia['acc']:.1%} | TPR: {global_margin_mia['tpr']:.1%} | FPR: {global_margin_mia['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=8)
     ax_g.legend(fontsize=8, frameon=False)
 
 for i, (c, c0) in enumerate(pairs_margin_mia):
@@ -810,7 +810,7 @@ for i, (c, c0) in enumerate(pairs_margin_mia):
             ax.axvspan(b_bounds[0], x_max, color='blue', alpha=0.1)
             
         ff = mia_c['fixed_fprs']
-        ax.set_title(f"Class {c} vs 0\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=9)
+        ax.set_title(f"Class {c} vs 0\n$\\mu_T$={mia_c['mu_train']:.2f} ($\\sigma_T$={mia_c['std_train']:.2f}) | $\\mu_V$={mia_c['mu_test']:.2f} ($\\sigma_V$={mia_c['std_test']:.2f})\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}\nTPR @ 1%: {ff[0.01]['tpr']:.1%} | 5%: {ff[0.05]['tpr']:.1%} | 10%: {ff[0.10]['tpr']:.1%}", fontsize=8)
 
 fig_margin_mia.suptitle(f"Margin MIA Decision Boundaries (Class C vs Class 0)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
 fig_margin_mia.tight_layout()
