@@ -1555,3 +1555,61 @@ out_path_knn = Path(__file__).parent / f"rnc1_knn_collapse_{RUN_ID[:8]}_step{CHE
 fig_knn.savefig(out_path_knn, dpi=150, bbox_inches="tight")
 print(f"KNN Collapse plot saved to: {out_path_knn}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Estimating True Train Mean via PDF Maximum (Mode Extraction)
+# ---------------------------------------------------------------------------
+print("\n--- Extracting True Train Mean via PDF Maximum ---")
+from scipy.stats import gaussian_kde
+
+diffs_test_only = []
+diffs_combined = []
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    y_tr = train_f_normal[mask_tr]
+    y_te = test_features.float()[mask_te]
+    
+    if len(y_tr) < 2 or len(y_te) < 2:
+        continue
+        
+    y_comb = torch.cat([y_tr, y_te], dim=0)
+    
+    # 9D features (for stable KDE)
+    x_tr = train_f_clean[mask_tr].numpy()
+    x_te = test_f_clean[mask_te].numpy()
+    x_comb = np.concatenate([x_tr, x_te], axis=0)
+    
+    true_mean = class_means_unscaled[c]
+    
+    # 1. Test data only
+    try:
+        kde_te = gaussian_kde(x_te.T, bw_method="scott")
+        densities_te = kde_te(x_te.T)
+        idx_max_te = np.argmax(densities_te)
+        est_mean_te = y_te[idx_max_te]
+        dist_te = torch.norm(est_mean_te - true_mean).item()
+        diffs_test_only.append(dist_te)
+    except Exception as e:
+        dist_te = float('nan')
+        
+    # 2. Combined data
+    try:
+        kde_comb = gaussian_kde(x_comb.T, bw_method="scott")
+        densities_comb = kde_comb(x_comb.T)
+        idx_max_comb = np.argmax(densities_comb)
+        est_mean_comb = y_comb[idx_max_comb]
+        dist_comb = torch.norm(est_mean_comb - true_mean).item()
+        diffs_combined.append(dist_comb)
+    except Exception as e:
+        dist_comb = float('nan')
+        
+    print(f"Class {c}: Distance to true mean | Test only: {dist_te:.4f} | Combined: {dist_comb:.4f}")
+
+if diffs_test_only:
+    print(f"Average Distance (Test only) : {np.nanmean(diffs_test_only):.4f}")
+if diffs_combined:
+    print(f"Average Distance (Combined)  : {np.nanmean(diffs_combined):.4f}")
+
