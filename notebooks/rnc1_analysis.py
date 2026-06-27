@@ -363,3 +363,173 @@ out_path2 = Path(__file__).parent / f"rnc1_dist_density_{RUN_ID[:8]}_step{CHECKP
 plt.savefig(out_path2, dpi=150, bbox_inches="tight")
 print(f"Density plot saved to: {out_path2}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Membership Inference Attack (MIA)
+# ---------------------------------------------------------------------------
+
+def get_gaussian_intersection(mu1, std1, mu2, std2):
+    """Finds the intersection points of two Gaussians."""
+    a = 1.0 / (2*std1**2) - 1.0 / (2*std2**2)
+    b = mu2 / (std2**2) - mu1 / (std1**2)
+    c = mu1**2 / (2*std1**2) - mu2**2 / (2*std2**2) - np.log(std2/std1)
+    
+    if np.abs(a) < 1e-9:
+        if np.abs(b) < 1e-9:
+            return []
+        return [-c / b]
+        
+    delta = b**2 - 4*a*c
+    if delta < 0:
+        return []
+    
+    r1 = (-b - np.sqrt(delta)) / (2*a)
+    r2 = (-b + np.sqrt(delta)) / (2*a)
+    return sorted([r1, r2])
+
+def evaluate_mia(train_d, test_d):
+    """Evaluates MIA on a set of train and test distances."""
+    if len(train_d) < 2 or len(test_d) < 2:
+        return None
+    
+    mu_train, std_train = np.mean(train_d), np.std(train_d)
+    mu_test, std_test = np.mean(test_d), np.std(test_d)
+    
+    roots = get_gaussian_intersection(mu_train, std_train, mu_test, std_test)
+    if not roots:
+        return None
+        
+    if len(roots) == 1:
+        bound = roots[0]
+        p_train_left = np.exp(-0.5 * ((bound - 1 - mu_train)/std_train)**2) / std_train
+        p_test_left = np.exp(-0.5 * ((bound - 1 - mu_test)/std_test)**2) / std_test
+        if p_train_left > p_test_left:
+            bounds = (None, bound)
+            train_preds = train_d < bound
+            test_preds = test_d < bound
+        else:
+            bounds = (bound, None)
+            train_preds = train_d > bound
+            test_preds = test_d > bound
+    else:
+        r1, r2 = roots
+        midpoint = (r1 + r2) / 2
+        p_train_mid = np.exp(-0.5 * ((midpoint - mu_train)/std_train)**2) / std_train
+        p_test_mid = np.exp(-0.5 * ((midpoint - mu_test)/std_test)**2) / std_test
+        
+        if p_train_mid > p_test_mid:
+            bounds = (r1, r2)
+            train_preds = (train_d >= r1) & (train_d <= r2)
+            test_preds = (test_d >= r1) & (test_d <= r2)
+        else:
+            bounds = (r2, r1) # flipped to indicate outside
+            train_preds = (train_d < r1) | (train_d > r2)
+            test_preds = (test_d < r1) | (test_d > r2)
+        
+    tpr = np.mean(train_preds)
+    fpr = np.mean(test_preds)
+    acc = (np.sum(train_preds) + np.sum(~test_preds)) / (len(train_d) + len(test_d))
+    return {
+        "mu_train": mu_train, "std_train": std_train,
+        "mu_test": mu_test, "std_test": std_test,
+        "bounds": bounds,
+        "tpr": tpr, "fpr": fpr, "acc": acc
+    }
+
+# Global MIA
+global_mia = evaluate_mia(all_train_flat, all_test_flat)
+
+# Per-class MIA
+class_mias = {}
+for c in range(num_classes):
+    train_c = train_dists.get(c, np.array([]))
+    test_c = test_dists.get(c, np.array([]))
+    class_mias[c] = evaluate_mia(train_c, test_c)
+
+print("\n--- Membership Inference Attack ---")
+if global_mia:
+    b = global_mia['bounds']
+    if b[0] is None:
+        b_str = f"x < {b[1]:.3f}"
+    elif b[1] is None:
+        b_str = f"x > {b[0]:.3f}"
+    else:
+        b_str = f"[{b[0]:.3f}, {b[1]:.3f}]" if b[0] < b[1] else f"x < {b[1]:.3f} OR x > {b[0]:.3f}"
+    print(f"Global MIA Bounds: {b_str}  |  Acc: {global_mia['acc']:.1%}  |  TPR: {global_mia['tpr']:.1%}  |  FPR: {global_mia['fpr']:.1%}")
+
+# Plot MIA
+fig_mia, axes_mia = plt.subplots(2, 6, figsize=(22, 7))
+axes_mia = axes_mia.flatten()
+
+# Plot Global MIA
+ax_g = axes_mia[0]
+if global_mia:
+    kde_train = gaussian_kde(all_train_flat, bw_method="scott")
+    kde_test = gaussian_kde(all_test_flat, bw_method="scott")
+    ax_g.plot(x_grid, kde_train(x_grid), color="blue", label="train")
+    ax_g.plot(x_grid, kde_test(x_grid), color="orange", linestyle="--", label="test")
+    
+    b = global_mia['bounds']
+    if b[0] is None:
+        ax_g.axvline(b[1], color='k', linestyle=':')
+        ax_g.axvspan(x_min, b[1], color='blue', alpha=0.1)
+    elif b[1] is None:
+        ax_g.axvline(b[0], color='k', linestyle=':')
+        ax_g.axvspan(b[0], x_max, color='blue', alpha=0.1)
+    elif b[0] <= b[1]:
+        ax_g.axvline(b[0], color='k', linestyle=':')
+        ax_g.axvline(b[1], color='k', linestyle=':')
+        ax_g.axvspan(b[0], b[1], color='blue', alpha=0.1)
+    else:
+        ax_g.axvline(b[0], color='k', linestyle=':')
+        ax_g.axvline(b[1], color='k', linestyle=':')
+        ax_g.axvspan(x_min, b[1], color='blue', alpha=0.1)
+        ax_g.axvspan(b[0], x_max, color='blue', alpha=0.1)
+    
+    ax_g.set_title(f"Global\nAcc: {global_mia['acc']:.1%} | TPR: {global_mia['tpr']:.1%}", fontsize=10)
+    ax_g.legend(fontsize=8, frameon=False)
+
+for c in range(num_classes):
+    ax = axes_mia[c + 1]
+    mia_c = class_mias.get(c)
+    if not mia_c:
+        continue
+    
+    train_c = train_dists.get(c, np.array([]))
+    test_c = test_dists.get(c, np.array([]))
+    if len(train_c) > 1 and len(test_c) > 1:
+        kde_train = gaussian_kde(train_c, bw_method="scott")
+        kde_test = gaussian_kde(test_c, bw_method="scott")
+        ax.plot(x_grid, kde_train(x_grid), color="blue")
+        ax.plot(x_grid, kde_test(x_grid), color="orange", linestyle="--")
+        
+        b = mia_c['bounds']
+        if b[0] is None:
+            ax.axvline(b[1], color='k', linestyle=':')
+            ax.axvspan(x_min, b[1], color='blue', alpha=0.1)
+        elif b[1] is None:
+            ax.axvline(b[0], color='k', linestyle=':')
+            ax.axvspan(b[0], x_max, color='blue', alpha=0.1)
+        elif b[0] <= b[1]:
+            ax.axvline(b[0], color='k', linestyle=':')
+            ax.axvline(b[1], color='k', linestyle=':')
+            ax.axvspan(b[0], b[1], color='blue', alpha=0.1)
+        else:
+            ax.axvline(b[0], color='k', linestyle=':')
+            ax.axvline(b[1], color='k', linestyle=':')
+            ax.axvspan(x_min, b[1], color='blue', alpha=0.1)
+            ax.axvspan(b[0], x_max, color='blue', alpha=0.1)
+            
+        ax.set_title(f"Class {c}\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%}", fontsize=10)
+
+# Hide the last unused subplot
+axes_mia[-1].axis('off')
+
+fig_mia.suptitle(f"MIA Decision Boundaries (Equal Priors Gaussian Intersection)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
+fig_mia.tight_layout()
+
+out_path_mia = Path(__file__).parent / f"rnc1_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_mia.savefig(out_path_mia, dpi=150, bbox_inches="tight")
+print(f"MIA plot saved to: {out_path_mia}")
+plt.show()
+
