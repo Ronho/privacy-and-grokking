@@ -486,7 +486,7 @@ if global_mia:
         ax_g.axvspan(x_min, b[1], color='blue', alpha=0.1)
         ax_g.axvspan(b[0], x_max, color='blue', alpha=0.1)
     
-    ax_g.set_title(f"Global\nAcc: {global_mia['acc']:.1%} | TPR: {global_mia['tpr']:.1%}", fontsize=10)
+    ax_g.set_title(f"Global\nAcc: {global_mia['acc']:.1%} | TPR: {global_mia['tpr']:.1%} | FPR: {global_mia['fpr']:.1%}", fontsize=10)
     ax_g.legend(fontsize=8, frameon=False)
 
 for c in range(num_classes):
@@ -520,7 +520,7 @@ for c in range(num_classes):
             ax.axvspan(x_min, b[1], color='blue', alpha=0.1)
             ax.axvspan(b[0], x_max, color='blue', alpha=0.1)
             
-        ax.set_title(f"Class {c}\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%}", fontsize=10)
+        ax.set_title(f"Class {c}\nAcc: {mia_c['acc']:.1%} | TPR: {mia_c['tpr']:.1%} | FPR: {mia_c['fpr']:.1%}", fontsize=10)
 
 # Hide the last unused subplot
 axes_mia[-1].axis('off')
@@ -558,7 +558,7 @@ if global_mia:
     if b[1] is not None:
         ax_g.axvline(b[1], color='k', linestyle=':')
         
-    ax_g.set_title(f"Global Idealized\n$\\mu_T$={global_mia['mu_train']:.2f}, $\\mu_V$={global_mia['mu_test']:.2f}", fontsize=10)
+    ax_g.set_title(f"Global Idealized\n$\\mu_T$={global_mia['mu_train']:.2f}, $\\mu_V$={global_mia['mu_test']:.2f} | FPR: {global_mia['fpr']:.1%}", fontsize=10)
     ax_g.legend(fontsize=8, frameon=False)
 
 for c in range(num_classes):
@@ -576,7 +576,7 @@ for c in range(num_classes):
     if b[1] is not None:
         ax.axvline(b[1], color='k', linestyle=':')
         
-    ax.set_title(f"Class {c}\n$\\mu_T$={mia_c['mu_train']:.2f}, $\\mu_V$={mia_c['mu_test']:.2f}", fontsize=10)
+    ax.set_title(f"Class {c}\n$\\mu_T$={mia_c['mu_train']:.2f}, $\\mu_V$={mia_c['mu_test']:.2f} | FPR: {mia_c['fpr']:.1%}", fontsize=10)
 
 axes_gauss[-1].axis('off')
 
