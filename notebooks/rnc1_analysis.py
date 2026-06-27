@@ -1188,3 +1188,62 @@ out_path_opt = Path(__file__).parent / f"rnc1_optimal_mia_{RUN_ID[:8]}_step{CHEC
 fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
 print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
 plt.show()
+
+# ---------------------------------------------------------------------------
+# Nearest Neighbor Overlap Analysis
+# ---------------------------------------------------------------------------
+from sklearn.neighbors import NearestNeighbors
+
+print("\n--- Nearest Neighbor Overlap Analysis ---")
+print("Calculating microscopic distances between Train and Test points...")
+
+nn_dist_train = []
+nn_dist_test = []
+
+# We calculate this per-class to only compare points of the same class
+for c in range(num_classes):
+    f_tr_c = train_f_normal[train_l_normal == c].numpy()
+    f_te_c = test_features.float()[test_labels == c].numpy()
+    
+    if len(f_tr_c) < 2 or len(f_te_c) == 0:
+        continue
+        
+    # Fit NearestNeighbors on the Train data of class c
+    nbrs = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(f_tr_c)
+    
+    # 1. Train-to-Train distance (distance to nearest OTHER train point)
+    # We use n_neighbors=2 because the 1st neighbor is always the point itself (distance=0)
+    distances_tr, _ = nbrs.kneighbors(f_tr_c)
+    nn_dist_train.extend(distances_tr[:, 1])
+    
+    # 2. Test-to-Train distance (distance to the nearest Train point)
+    # n_neighbors=1 is fine here because the Test point is not in the Train set
+    distances_te, _ = nbrs.kneighbors(f_te_c, n_neighbors=1)
+    nn_dist_test.extend(distances_te[:, 0])
+
+nn_dist_train = np.array(nn_dist_train)
+nn_dist_test = np.array(nn_dist_test)
+
+# Plot the histograms
+fig_nn, ax_nn = plt.subplots(figsize=(8, 6))
+
+ax_nn.hist(nn_dist_train, bins=50, alpha=0.5, density=True, label='Train-to-Train Nearest Neighbor', color='blue')
+ax_nn.hist(nn_dist_test, bins=50, alpha=0.5, density=True, label='Test-to-Train Nearest Neighbor', color='orange')
+
+ax_nn.set_xlabel('L2 Distance (in 200D Space)')
+ax_nn.set_ylabel('Density')
+ax_nn.set_title(f"Microscopic Overlap Analysis (Nearest Neighbor Distances)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+ax_nn.legend()
+ax_nn.grid(True, linestyle=':', alpha=0.6)
+
+plt.tight_layout()
+out_path_nn = Path(__file__).parent / f"rnc1_nn_overlap_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_nn.savefig(out_path_nn, dpi=150, bbox_inches="tight")
+print(f"Nearest Neighbor plot saved to: {out_path_nn}")
+plt.show()
+
+# Calculate the overlap metric
+median_tr = np.median(nn_dist_train)
+median_te = np.median(nn_dist_test)
+print(f"Median Train-to-Train Distance: {median_tr:.4f}")
+print(f"Median Test-to-Train Distance:  {median_te:.4f}")
