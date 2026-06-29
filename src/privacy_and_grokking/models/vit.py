@@ -1,12 +1,3 @@
-"""CIFAR-sized Vision Transformer (Dosovitskiy et al., 2020).
-
-The original ViT was trained on 224x224 ImageNet images with patch size 16,
-giving 196 tokens. For 32x32 CIFAR that would leave only 4 tokens, so we use
-the common CIFAR adaptation: patch size 4 (an 8x8 = 64 token grid) plus a
-small embedding dimension and depth. Defaults roughly match a "ViT-Tiny/4"
-sized for CIFAR-10 — about 1M parameters, comparable to ResNet-20 / VGG-11.
-"""
-
 from typing import Literal
 
 import torch
@@ -14,6 +5,7 @@ import torch.nn as nn
 
 from privacy_and_grokking.models.base import ModelConfig
 
+# Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/transformer.py
 
 class PatchEmbed(nn.Module):
     def __init__(self, in_channels: int, embed_dim: int, patch_size: int):
@@ -26,46 +18,14 @@ class PatchEmbed(nn.Module):
         return x.flatten(2).transpose(1, 2)
 
 
-class TransformerBlock(nn.Module):
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        mlp_ratio: float,
-        dropout: float,
-    ):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
-        self.norm2 = nn.LayerNorm(embed_dim)
-        hidden = int(embed_dim * mlp_ratio)
-        self.mlp = nn.Sequential(
-            nn.Linear(embed_dim, hidden),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, embed_dim),
-            nn.Dropout(dropout),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.norm1(x)
-        attn_out, _ = self.attn(h, h, h, need_weights=False)
-        x = x + attn_out
-        x = x + self.mlp(self.norm2(x))
-        return x
-
-
 class ViT(nn.Module):
     def __init__(
         self,
         input_dim: torch.Size,
         num_classes: int,
         patch_size: int = 4,
-        embed_dim: int = 192,
-        depth: int = 6,
+        embed_dim: int = 128,
         num_heads: int = 3,
-        mlp_ratio: float = 2.0,
-        dropout: float = 0.0,
     ):
         super().__init__()
         c, h, w = input_dim
@@ -74,53 +34,37 @@ class ViT(nn.Module):
         num_patches = (h // patch_size) * (w // patch_size)
 
         self.patch_embed = PatchEmbed(c, embed_dim, patch_size)
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        
+        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-        self.dropout = nn.Dropout(dropout)
-
-        self.blocks = nn.Sequential(
-            *[TransformerBlock(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(depth)]
+        
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=num_heads,
+            dim_feedforward=embed_dim * 2,
+            dropout=0.0,
+            batch_first=True,
         )
-        self.norm = nn.LayerNorm(embed_dim)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
         self.head = nn.Linear(embed_dim, num_classes)
-
-        nn.init.trunc_normal_(self.pos_embed, std=0.02)
-        nn.init.trunc_normal_(self.cls_token, std=0.02)
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(m: nn.Module) -> None:
-        if isinstance(m, nn.Linear):
-            nn.init.trunc_normal_(m.weight, std=0.02)
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.ones_(m.weight)
-            nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b = x.shape[0]
         tokens = self.patch_embed(x)
-        cls = self.cls_token.expand(b, -1, -1)
-        x = torch.cat([cls, tokens], dim=1) + self.pos_embed
-        x = self.dropout(x)
-        x = self.blocks(x)
-        x = self.norm(x)
-        return self.head(x[:, 0])
-
-    @property
-    def last_layer(self):
-        return self.head
+        
+        cls_tokens = self.cls_token.expand(b, -1, -1)
+        x = torch.cat([cls_tokens, tokens], dim=1)
+        x = x + self.pos_embed[:, :x.size(1), :]
+        
+        z = self.encoder(x)
+        return self.head(z[:, 0])
 
 
 class ViTConfig(ModelConfig):
     name: Literal["vit"] = "vit"
     patch_size: int = 4
-    embed_dim: int = 192
-    depth: int = 6
+    embed_dim: int = 128
     num_heads: int = 3
-    mlp_ratio: float = 2.0
-    dropout: float = 0.0
 
     def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return ViT(
@@ -128,8 +72,12 @@ class ViTConfig(ModelConfig):
             num_classes,
             patch_size=self.patch_size,
             embed_dim=self.embed_dim,
-            depth=self.depth,
             num_heads=self.num_heads,
-            mlp_ratio=self.mlp_ratio,
-            dropout=self.dropout,
         )
+
+    def _apply_initialization_scale(self, model: nn.Module, scale: float) -> None:
+        for name, m in model.named_modules():
+            if name.endswith(("linear1", "linear2", "head")):
+                m.weight.data = m.weight.data * scale
+                if m.bias is not None:
+                    m.bias.data = m.bias.data * scale
