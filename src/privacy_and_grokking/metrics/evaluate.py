@@ -57,11 +57,13 @@ def _process_loader(
             if isinstance(module, nn.Linear):
                 key = name
                 buffers_accum[key] = []
+                buffers_accum[f"{key}.input"] = []
 
                 def _make_hook(k: str):
                     def _hook(_module: nn.Module, _inp: tuple, output: torch.Tensor) -> None:
                         if capture_state["enabled"]:
                             buffers_accum[k].append(output.detach().cpu())
+                            buffers_accum[f"{k}.input"].append(_inp[0].detach().cpu())
 
                     return _hook
 
@@ -332,23 +334,32 @@ def evaluate(
                 last_linear_weight = module.weight.detach().cpu()
                 last_linear_bias = module.bias.detach().cpu() if module.bias is not None else None
 
-        layer_names = list(train_activations.keys())
-
         # Determine the penultimate layer (input to the classifier).
-        # It's the layer right before the last linear in our hooks list.
-        if last_linear_name and last_linear_name in layer_names and len(layer_names) >= 2:
-            penultimate_idx = layer_names.index(last_linear_name) - 1
-            if penultimate_idx >= 0:
-                penultimate = layer_names[penultimate_idx]
-            else:
-                penultimate = layer_names[0]
-        elif len(layer_names) >= 2:
-            penultimate = layer_names[-2]
+        # We prefer the exact input to the last linear layer if available.
+        penultimate = None
+        train_feats = None
+        if last_linear_name and f"{last_linear_name}.input" in train_activations:
+            train_feats = train_activations[f"{last_linear_name}.input"]
         else:
-            penultimate = layer_names[0] if layer_names else None
+            layer_names = [k for k in list(train_activations.keys()) if not str(k).endswith(".input")]
+            if last_linear_name and last_linear_name in layer_names and len(layer_names) >= 2:
+                penultimate_idx = layer_names.index(last_linear_name) - 1
+                if penultimate_idx >= 0:
+                    penultimate = layer_names[penultimate_idx]
+                else:
+                    penultimate = layer_names[0]
+            elif len(layer_names) >= 2:
+                penultimate = layer_names[-2]
+            else:
+                penultimate = layer_names[0] if layer_names else None
+            
+            if penultimate:
+                train_feats = train_activations[penultimate]
 
-        if penultimate:
-            train_feats = train_activations[penultimate]
+        if train_feats is not None:
+            if train_feats.ndim > 2:
+                train_feats = train_feats.reshape(train_feats.size(0), -1)
+
             if compute_heavy_metrics and metrics_config.neural_collapse:
                 nc = compute_all_nc_metrics(
                     train_feats, train_labels.long(), last_linear_weight, last_linear_bias
@@ -365,8 +376,16 @@ def evaluate(
                 metrics["nc/rnc1/train"] = compute_rnc1(train_feats, train_labels.long())
 
             test_feats = None
-            if test_activations and penultimate in test_activations and len(test_labels) > 0:
-                test_feats = test_activations[penultimate]
+            if test_activations and len(test_labels) > 0:
+                if last_linear_name and f"{last_linear_name}.input" in test_activations:
+                    test_feats = test_activations[f"{last_linear_name}.input"]
+                elif penultimate and penultimate in test_activations:
+                    test_feats = test_activations[penultimate]
+                
+                if test_feats is not None and test_feats.ndim > 2:
+                    test_feats = test_feats.reshape(test_feats.size(0), -1)
+
+            if test_feats is not None:
                 if compute_heavy_metrics and metrics_config.neural_collapse:
                     nc_test = compute_all_nc_metrics(
                         test_feats, test_labels.long(), last_linear_weight, last_linear_bias
