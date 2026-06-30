@@ -14,9 +14,11 @@ class ModelConfig(BaseModel):
 
     def _apply_initialization_scale(self, model: nn.Module, scale: float) -> None:
         with torch.no_grad():
-            for name, param in model.named_parameters():
-                if name.startswith("linear"):
-                    param.data *= scale
+            for module in model.modules():
+                if isinstance(module, nn.Linear):
+                    module.weight.data *= scale
+                    if module.bias is not None:
+                        module.bias.data *= scale
 
     def __call__(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         model = self._create(input_dim, num_classes)
