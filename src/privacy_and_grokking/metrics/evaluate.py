@@ -138,7 +138,7 @@ def _process_loader(
         for h in handles:
             h.remove()
         # Convert list of tensors to single tensor per layer
-        buffers = {k: torch.cat(v, dim=0) for k, v in buffers_accum.items()}
+        buffers = {k: torch.cat(v, dim=0) for k, v in buffers_accum.items() if len(v) > 0}
         label_list = torch.cat(label_list_accum, dim=0)
     else:
         buffers = {}
