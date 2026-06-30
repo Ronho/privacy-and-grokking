@@ -25,7 +25,7 @@ class ViT(nn.Module):
         num_classes: int,
         patch_size: int = 4,
         embed_dim: int = 128,
-        num_heads: int = 3,
+        num_heads: int = 4,
     ):
         super().__init__()
         c, h, w = input_dim
@@ -64,7 +64,7 @@ class ViTConfig(ModelConfig):
     name: Literal["vit"] = "vit"
     patch_size: int = 4
     embed_dim: int = 128
-    num_heads: int = 3
+    num_heads: int = 4
 
     def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return ViT(
