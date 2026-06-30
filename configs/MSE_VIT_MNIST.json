@@ -1,29 +1,22 @@
 {
     "model": {
-        "name": "mlp"
+        "name": "vit",
+        "embed_dim": 128,
+        "num_heads": 4,
+        "initialization_scale": 8.0
     },
     "seed": 0,
-    "batch_size": 200,
+    "batch_size": 100,
     "loss": {
         "name": "mse"
-    },
-    "regularizer": {
-        "name": "mmd",
-        "weight": 0.1,
-        "bandwidth": 0.1,
-        "source": {
-            "name": "salt_and_pepper",
-            "fraction": 0.25,
-            "num_noisy_samples": 1
-        }
     },
     "scheduler": {
         "name": "None"
     },
     "optimizer": {
         "name": "AdamW",
-        "weight_decay": 0.01,
-        "lr": 0.001
+        "lr": 0.001,
+        "weight_decay": 0.01
     },
     "data": {
         "data": {
@@ -33,10 +26,10 @@
             "name": "uniform",
             "num_models": 256,
             "p": 0.5,
-            "seed": 1,
+            "seed": 0,
             "model_index": 0
         },
         "train_size": 1000,
-        "seed": 1
+        "seed": 0
     }
 }

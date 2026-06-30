@@ -1,20 +1,20 @@
 {
     "model": {
-        "name": "mlp"
+        "name": "mlp-extended",
+        "initialization_scale": 8.0
     },
     "seed": 0,
-    "batch_size": 200,
+    "batch_size": 100,
     "loss": {
-        "name": "cross_entropy"
+        "name": "mse"
     },
     "scheduler": {
-        "name": "CosineAnnealingLR",
-        "min_lr": 1e-05
+        "name": "None"
     },
     "optimizer": {
         "name": "AdamW",
-        "weight_decay": 0.01,
-        "lr": 0.001
+        "lr": 0.001,
+        "weight_decay": 0.01
     },
     "data": {
         "data": {
@@ -24,10 +24,10 @@
             "name": "uniform",
             "num_models": 256,
             "p": 0.5,
-            "seed": 1,
+            "seed": 0,
             "model_index": 0
         },
         "train_size": 1000,
-        "seed": 1
+        "seed": 0
     }
 }
