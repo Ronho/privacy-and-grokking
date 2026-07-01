@@ -79,20 +79,20 @@ def _process_loader(
         x, y = x.to(device), y.to(device)
         logit = model(x)
         prob = F.softmax(logit, dim=1)
-        result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)))
-        result["max_logit"].append(logit.max(dim=1, keepdim=True).values)
-        result["min_logit"].append(logit.min(dim=1, keepdim=True).values)
-        result["true_class_prob"].append(prob.gather(1, y.view(-1, 1)))
-        result["max_prob"].append(prob.max(dim=1, keepdim=True).values)
-        result["min_prob"].append(prob.min(dim=1, keepdim=True).values)
-        result["ce_loss"].append(ce_criterion(logit, y))
+        result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)).cpu())
+        result["max_logit"].append(logit.max(dim=1, keepdim=True).values.cpu())
+        result["min_logit"].append(logit.min(dim=1, keepdim=True).values.cpu())
+        result["true_class_prob"].append(prob.gather(1, y.view(-1, 1)).cpu())
+        result["max_prob"].append(prob.max(dim=1, keepdim=True).values.cpu())
+        result["min_prob"].append(prob.min(dim=1, keepdim=True).values.cpu())
+        result["ce_loss"].append(ce_criterion(logit, y).cpu())
         result["mse_loss"].append(
             mse_criterion(
                 logit,
                 F.one_hot(y, num_classes=logit.size(1)).float(),
-            ).gather(1, y.view(-1, 1))
+            ).gather(1, y.view(-1, 1)).cpu()
         )
-        result["correctness"].append((logit.argmax(dim=1) == y).float())
+        result["correctness"].append((logit.argmax(dim=1) == y).float().cpu())
 
         if compute_mm:
             mm_ce_votes = []
@@ -133,8 +133,8 @@ def _process_loader(
                 mm_ce_votes.append((noisy_ce > ce_loss_i).float().mean())
                 mm_mse_votes.append((noisy_mse > mse_loss_i).float().mean())
 
-            result["mm_ce"].append(torch.stack(mm_ce_votes))
-            result["mm_mse"].append(torch.stack(mm_mse_votes))
+            result["mm_ce"].append(torch.stack(mm_ce_votes).cpu())
+            result["mm_mse"].append(torch.stack(mm_mse_votes).cpu())
 
     if _collect:
         for h in handles:
