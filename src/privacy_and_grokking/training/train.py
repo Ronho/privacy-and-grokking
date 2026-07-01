@@ -137,19 +137,24 @@ def train_handle(
     train_subset = data_container.train
     test = data_container.test
 
+    def maybe_gpu_dataset(dataset):
+        if keep_on_gpu and len(dataset) < 5000:
+            return GpuDataset(dataset, device)
+        return dataset
+
     train_loader = torch.utils.data.DataLoader(
-        GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
+        maybe_gpu_dataset(train_subset),
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
     )
     eval_train_loader = torch.utils.data.DataLoader(
-        GpuDataset(train_subset, device) if keep_on_gpu else train_subset,
+        maybe_gpu_dataset(train_subset),
         batch_size=config.batch_size,
         shuffle=False,
     )
     eval_test_loader = torch.utils.data.DataLoader(
-        GpuDataset(test, device) if keep_on_gpu else test,
+        maybe_gpu_dataset(test),
         batch_size=config.batch_size,
         shuffle=False,
     )
@@ -192,7 +197,7 @@ def train_handle(
 
             out_ds = OutCanaryDataset(out_canaries_subset, canary_transform)
             out_canary_loader = torch.utils.data.DataLoader(
-                GpuDataset(out_ds, device) if keep_on_gpu else out_ds,
+                maybe_gpu_dataset(out_ds),
                 batch_size=config.batch_size,
                 shuffle=False,
             )
@@ -297,8 +302,7 @@ def train_handle(
                 if step % checkpoint_frequency == 0:
                     save_model(model, optimizer, step)
 
-                if not keep_on_gpu:
-                    x, y = x.to(device), y.to(device)
+                x, y = x.to(device), y.to(device)
                 optimizer.zero_grad()
                 logits = model(x)
                 task_loss = loss_fn(logits, y)
