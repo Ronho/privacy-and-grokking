@@ -101,8 +101,8 @@ def _process_loader(
             for i in range(x.size(0)):
                 img = x[i]
                 label = y[i]
-                ce_loss_i = result["ce_loss"][-1][i]
-                mse_loss_i = result["mse_loss"][-1][i]
+                ce_loss_i = result["ce_loss"][-1][i].to(device)
+                mse_loss_i = result["mse_loss"][-1][i].to(device)
                 label_oh = F.one_hot(label, num_classes=logit.size(1)).float()
 
                 noise = (
