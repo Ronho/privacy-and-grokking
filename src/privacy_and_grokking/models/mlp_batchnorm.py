@@ -17,19 +17,22 @@ class MLPBatchNorm(nn.Module):
         self.bn2 = nn.BatchNorm1d(200)
         self.fc3 = nn.Linear(200, num_classes)
 
-    def forward(self, input):
+    def forward(
+        self, input, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         y = torch.flatten(input, 1)
         y = self.fc1(y)
         y = self.bn1(y)
         y = F.relu(y)
         y = self.fc2(y)
         y = self.bn2(y)
-        y = F.relu(y)
-        y = self.fc3(y)
+        z = F.relu(y)
+        y = self.fc3(z)
+        if verbose:
+            return y, z
         return y
 
-    @property
-    def last_layer(self):
+    def classifier(self) -> nn.Module:
         return self.fc3
 
 

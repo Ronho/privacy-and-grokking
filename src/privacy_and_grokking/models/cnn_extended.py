@@ -7,6 +7,7 @@ from privacy_and_grokking.models.base import ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/toy_cnn.py
 
+
 class CNNExtended(nn.Module):
     """An extended CNN model based on toy_cnn from collapse-dynamics."""
 
@@ -18,7 +19,7 @@ class CNNExtended(nn.Module):
         super().__init__()
         c, h, w = input_dim
         self.activation = nn.ReLU()
-            
+
         num_channel_scale = 1 if c == 1 else 2
 
         self.conv1 = nn.Conv2d(
@@ -43,14 +44,21 @@ class CNNExtended(nn.Module):
         self.linear1 = nn.Linear(32 * num_channel_scale * out_h * out_w, 128)
         self.linear2 = nn.Linear(128, num_classes)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         x = self.activation(self.conv1(x))
         x = self.activation(self.conv2(x))
         x = self.pool(x)
         x = torch.flatten(x, start_dim=1)
-        x = self.activation(self.linear1(x))
-        out = self.linear2(x)
+        z = self.activation(self.linear1(x))
+        out = self.linear2(z)
+        if verbose:
+            return out, z
         return out
+
+    def classifier(self) -> nn.Module:
+        return self.linear2
 
 
 class CNNExtendedConfig(ModelConfig):

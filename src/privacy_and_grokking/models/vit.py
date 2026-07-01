@@ -7,6 +7,7 @@ from privacy_and_grokking.models.base import ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/transformer.py
 
+
 class PatchEmbed(nn.Module):
     def __init__(self, in_channels: int, embed_dim: int, patch_size: int):
         super().__init__()
@@ -34,10 +35,10 @@ class ViT(nn.Module):
         num_patches = (h // patch_size) * (w // patch_size)
 
         self.patch_embed = PatchEmbed(c, embed_dim, patch_size)
-        
+
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-        
+
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
             nhead=num_heads,
@@ -48,16 +49,24 @@ class ViT(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
         self.head = nn.Linear(embed_dim, num_classes)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         b = x.shape[0]
         tokens = self.patch_embed(x)
-        
+
         cls_tokens = self.cls_token.expand(b, -1, -1)
         x = torch.cat([cls_tokens, tokens], dim=1)
-        x = x + self.pos_embed[:, :x.size(1), :]
-        
+        x = x + self.pos_embed[:, : x.size(1), :]
+
         z = self.encoder(x)
-        return self.head(z[:, 0])
+        out = self.head(z[:, 0])
+        if verbose:
+            return out, z[:, 0]
+        return out
+
+    def classifier(self) -> nn.Module:
+        return self.head
 
 
 class ViTConfig(ModelConfig):

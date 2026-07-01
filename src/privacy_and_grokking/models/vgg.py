@@ -112,14 +112,16 @@ class VGG(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, verbose: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         out = self.features(x)
         out = torch.nn.functional.adaptive_avg_pool2d(out, 1)
-        out = torch.flatten(out, 1)
-        return self.fc(out)
+        z = torch.flatten(out, 1)
+        out = self.fc(z)
+        if verbose:
+            return out, z
+        return out
 
-    @property
-    def last_layer(self):
+    def classifier(self) -> nn.Module:
         return self.fc
 
 

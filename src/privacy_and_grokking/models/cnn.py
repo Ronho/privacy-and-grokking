@@ -35,7 +35,9 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear(conv_output_size, 200)
         self.fc2 = nn.Linear(200, num_classes)
 
-    def forward(self, input):
+    def forward(
+        self, input, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         y = self.conv1(input)
         y = F.relu(y)
         y = F.max_pool2d(y, 2, 2)
@@ -44,12 +46,13 @@ class CNN(nn.Module):
         y = F.max_pool2d(y, 2, 2)
         y = torch.flatten(y, 1)
         y = self.fc1(y)
-        y = F.relu(y)
-        y = self.fc2(y)
+        z = F.relu(y)
+        y = self.fc2(z)
+        if verbose:
+            return y, z
         return y
 
-    @property
-    def last_layer(self):
+    def classifier(self) -> nn.Module:
         return self.fc2
 
 

@@ -6,6 +6,7 @@ from privacy_and_grokking.models.base import ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/resnet.py
 
+
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -60,8 +61,8 @@ class ResNet(nn.Module):
     ) -> None:
         super().__init__()
         c, h, w = input_dim
-        
-        # ResNet18  
+
+        # ResNet18
         block = BasicBlock
         dim_out = 512
         num_blocks = [2, 2, 2, 2]
@@ -121,17 +122,23 @@ class ResNet(nn.Module):
 
     def forward(
         self,
-        x: Tensor
-    ) -> Tensor:
+        x: Tensor,
+        verbose: bool = False,
+    ) -> Tensor | tuple[Tensor, Tensor]:
         x = nn.functional.relu(self.bn1(self.conv1(x)))
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.pool(x)
-        x = torch.flatten(x, 1)
-        out = self.linear(x)
+        z = torch.flatten(x, 1)
+        out = self.linear(z)
+        if verbose:
+            return out, z
         return out
+
+    def classifier(self) -> nn.Module:
+        return self.linear
 
 
 class ResNetConfig(ModelConfig):

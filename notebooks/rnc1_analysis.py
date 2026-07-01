@@ -29,8 +29,8 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "9c95201d8ada4c0db02da91615c5c984"
-CHECKPOINT_STEP = 100_000
+RUN_ID = "ac91f9e60af1478a894d7b3432e1aec9"
+CHECKPOINT_STEP = 150_000
 ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "7" #"6"
 CHECKPOINT_PATH = (
     ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
@@ -88,11 +88,8 @@ def extract_features(
         for imgs, lbls in loader:
             imgs = imgs.to(device)
             # MLP forward up to the last layer input
-            y = torch.flatten(imgs, 1)
-            y = F.relu(model.fc1(y))
-            y = F.relu(model.fc2(y))
-            y = F.relu(model.fc3(y))
-            features_list.append(y.cpu())
+            y, z = model(imgs, verbose=True)
+            features_list.append(z.cpu())
             labels_list.append(lbls.cpu() if isinstance(lbls, torch.Tensor) else torch.tensor(lbls))
 
     return torch.cat(features_list), torch.cat(labels_list)
@@ -146,8 +143,8 @@ if len(train_f_canary) > 0:
     with torch.no_grad():
         for imgs, lbls in sub_loader:
             noisy_imgs = torch.stack([noise_gen(img) for img in imgs]).to(device)
-            y = F.relu(model.fc3(F.relu(model.fc2(F.relu(model.fc1(torch.flatten(noisy_imgs, 1)))))))
-            tcf_list.append(y.cpu())
+            y, z = model(noisy_imgs, verbose=True)
+            tcf_list.append(z.cpu())
             tcl_list.append(lbls.cpu())
             if sum(len(b) for b in tcf_list) >= len(train_f_canary): break
     test_f_canary = torch.cat(tcf_list)
@@ -654,8 +651,8 @@ plt.show()
 # ---------------------------------------------------------------------------
 # Margin Density Plots (Decision Boundaries)
 # ---------------------------------------------------------------------------
-w = model.fc4.weight.detach().cpu()
-b = model.fc4.bias.detach().cpu()
+w = model.classifier().weight.detach().cpu()
+b = model.classifier().bias.detach().cpu()
 
 pairs_to_plot = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
 fig_margin, axes_margin = plt.subplots(len(pairs_to_plot), 2, figsize=(16, 3.5 * len(pairs_to_plot)), sharex=False)
