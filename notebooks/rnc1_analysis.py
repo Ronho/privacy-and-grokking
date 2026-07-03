@@ -36,6 +36,8 @@ CHECKPOINT_PATH = (
     ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
 )
 CONFIG_PATH = ARTIFACT_BASE / RUN_ID / "artifacts" / "training_config.json"
+OUT_DIR = Path(__file__).parent / f"{RUN_ID[:8]}_step{CHECKPOINT_STEP}"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Load config and build datasets
