@@ -170,59 +170,60 @@ print("\n--- Representation Scale Analysis ---")
 train_norms = train_f_normal.norm(dim=1).numpy()
 test_norms = test_features.float().norm(dim=1).numpy()
 
-fig_norm, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-ax1.hist(train_norms, bins=50, alpha=0.7, density=True, color='blue')
-ax1.set_xlabel('L2 Norm of Train Representation (Scale)')
-ax1.set_ylabel('Density')
-ax1.set_title("Train Scale Distribution")
-ax1.grid(True, linestyle=':', alpha=0.6)
-
-ax2.hist(test_norms, bins=50, alpha=0.7, density=True, color='orange')
-ax2.set_xlabel('L2 Norm of Test Representation (Scale)')
-ax2.set_ylabel('Density')
-ax2.set_title("Test Scale Distribution")
-ax2.grid(True, linestyle=':', alpha=0.6)
-
-fig_norm.suptitle(f"Representation Scale Distribution\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
-plt.tight_layout()
-out_path_norm = Path(__file__).parent / f"rnc1_scale_dist_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
-fig_norm.savefig(out_path_norm, dpi=150, bbox_inches="tight")
-print(f"Scale distribution plot saved to: {out_path_norm}")
-plt.show()
-
 from scipy.stats import shapiro, skew, kurtosis
-def analyze_dist(name, data):
-    if len(data) == 0: return
-    
-    mean_val = np.mean(data)
+
+def get_dist_text(data):
+    if len(data) < 3: return "N/A"
     std_val = np.std(data)
-    
-    print(f"\n{name} Scale Distribution:")
-    print(f"  Mean: {mean_val:.4f}, Std: {std_val:.4f}")
-    
     if std_val < 1e-5:
-        print("  Distribution Type: Dirac Delta (all values are practically identical)")
-        return
-        
-    # Shapiro-Wilk test requires N <= 5000 for accurate p-value, so we sample if needed
+        return f"μ={np.mean(data):.2f}, σ~0 (Dirac Delta)"
+    
     sample_data = data if len(data) <= 5000 else np.random.choice(data, 5000, replace=False)
     s, p = shapiro(sample_data)
     sk = skew(data)
-    ku = kurtosis(data)
     
-    print(f"  Skewness: {sk:.4f}, Kurtosis: {ku:.4f}")
     if p > 0.05:
-        print(f"  Shapiro-Wilk: p={p:.4f} -> Likely normal distribution")
+        dist_type = "Normal"
     else:
-        if sk > 1.0:
-            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal, highly right-skewed (potentially Log-Normal or Chi-Square)")
-        elif sk < -1.0:
-            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal, highly left-skewed")
-        else:
-            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal distribution")
+        dist_type = "Right-Skewed" if sk > 1.0 else ("Left-Skewed" if sk < -1.0 else "Non-Normal")
+    return f"μ={np.mean(data):.2f}, σ={std_val:.2f} | {dist_type} (p={p:.4f})"
 
-analyze_dist("Train", train_norms)
-analyze_dist("Test", test_norms)
+fig_norm, axes = plt.subplots(2, 5, figsize=(20, 8))
+axes = axes.flatten()
+
+for c in range(num_classes):
+    ax = axes[c]
+    
+    c_train_norms = train_f_normal[train_l_normal == c].norm(dim=1).numpy()
+    c_test_norms = test_features.float()[test_labels == c].norm(dim=1).numpy()
+    
+    if len(c_train_norms) > 0:
+        ax.hist(c_train_norms, bins=30, alpha=0.5, density=True, color='blue', label='Train')
+    if len(c_test_norms) > 0:
+        ax.hist(c_test_norms, bins=30, alpha=0.5, density=True, color='orange', label='Test')
+    
+    txt_train = "Train: " + get_dist_text(c_train_norms)
+    txt_test = "Test:  " + get_dist_text(c_test_norms)
+    
+    props = dict(boxstyle='round', facecolor='white', alpha=0.7)
+    info_str = f"{txt_train}\n{txt_test}"
+    ax.text(0.05, 0.95, info_str, transform=ax.transAxes, fontsize=8,
+            verticalalignment='top', bbox=props)
+            
+    ax.set_title(f"Class {c}")
+    if c >= 5:
+        ax.set_xlabel('L2 Norm (Scale)')
+    if c == 0 or c == 5:
+        ax.set_ylabel('Density')
+    if c == 0:
+        ax.legend(loc='lower right', fontsize=8)
+
+fig_norm.suptitle(f"Per-Class Representation Scale Distribution\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=14)
+plt.tight_layout()
+out_path_norm = Path(__file__).parent / f"rnc1_scale_dist_per_class_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_norm.savefig(out_path_norm, dpi=150, bbox_inches="tight")
+print(f"Per-Class Scale distribution plot saved to: {out_path_norm}")
+plt.show()
 
 # ---------------------------------------------------------------------------
 # Class means on the TRAIN set (in the scaled feature space, as per RNC1 def)
