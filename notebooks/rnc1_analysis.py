@@ -222,7 +222,7 @@ for c in range(num_classes):
 
 fig_norm.suptitle(f"Per-Class Representation Scale Distribution\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=14)
 plt.tight_layout()
-out_path_norm = Path(__file__).parent / f"rnc1_scale_dist_per_class_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_norm = OUT_DIR / "rnc1_scale_dist_per_class.png"
 fig_norm.savefig(out_path_norm, dpi=150, bbox_inches="tight")
 print(f"Per-Class Scale distribution plot saved to: {out_path_norm}")
 plt.show()
@@ -320,7 +320,7 @@ fig.suptitle(
 )
 plt.tight_layout()
 
-out_path = Path(__file__).parent / f"rnc1_analysis_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path = OUT_DIR / "rnc1_analysis.png"
 plt.savefig(out_path, dpi=150, bbox_inches="tight")
 print(f"\nPlot saved to: {out_path}")
 plt.show()
@@ -407,7 +407,7 @@ ax_comb.set_xlim(x_min, x_max)
 ax_comb.set_ylim(bottom=0)
 fig_comb.tight_layout()
 
-out_path_comb = Path(__file__).parent / f"rnc1_dist_density_combined_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_comb = OUT_DIR / "rnc1_dist_density_combined.png"
 fig_comb.savefig(out_path_comb, dpi=150, bbox_inches="tight")
 print(f"Combined density plot saved to: {out_path_comb}")
 plt.show()
@@ -446,7 +446,7 @@ fig2.suptitle(
 )
 plt.tight_layout()
 
-out_path2 = Path(__file__).parent / f"rnc1_dist_density_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path2 = OUT_DIR / "rnc1_dist_density.png"
 plt.savefig(out_path2, dpi=150, bbox_inches="tight")
 print(f"Density plot saved to: {out_path2}")
 plt.show()
@@ -651,7 +651,7 @@ axes_mia[-1].axis('off')
 fig_mia.suptitle(f"MIA Decision Boundaries (Equal Priors Gaussian Intersection)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
 fig_mia.tight_layout()
 
-out_path_mia = Path(__file__).parent / f"rnc1_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_mia = OUT_DIR / "rnc1_mia.png"
 fig_mia.savefig(out_path_mia, dpi=150, bbox_inches="tight")
 print(f"MIA plot saved to: {out_path_mia}")
 plt.show()
@@ -706,7 +706,7 @@ axes_gauss[-1].axis('off')
 fig_gauss.suptitle(f"MIA Idealized Gaussian Distributions\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
 fig_gauss.tight_layout()
 
-out_path_gauss = Path(__file__).parent / f"rnc1_mia_gaussians_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_gauss = OUT_DIR / "rnc1_mia_gaussians.png"
 fig_gauss.savefig(out_path_gauss, dpi=150, bbox_inches="tight")
 print(f"MIA Gaussians plot saved to: {out_path_gauss}")
 plt.show()
@@ -782,7 +782,7 @@ for i, (c1, c2) in enumerate(pairs_to_plot):
 fig_margin.suptitle(f"Margins of individual examples (Decision Boundaries)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}", fontsize=14)
 fig_margin.tight_layout()
 
-out_path_margin = Path(__file__).parent / f"rnc1_margin_plots_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_margin = OUT_DIR / "rnc1_margin_plots.png"
 fig_margin.savefig(out_path_margin, dpi=150, bbox_inches="tight")
 print(f"Margin plots saved to: {out_path_margin}")
 plt.show()
@@ -922,7 +922,7 @@ for i, (c, c0) in enumerate(pairs_margin_mia):
 fig_margin_mia.suptitle(f"Margin MIA Decision Boundaries (Class C vs Class 0)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}")
 fig_margin_mia.tight_layout()
 
-out_path_margin_mia = Path(__file__).parent / f"rnc1_margin_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_margin_mia = OUT_DIR / "rnc1_margin_mia.png"
 fig_margin_mia.savefig(out_path_margin_mia, dpi=150, bbox_inches="tight")
 print(f"Margin MIA plot saved to: {out_path_margin_mia}")
 plt.show()
@@ -1011,7 +1011,7 @@ fig_clean.suptitle(
 )
 plt.tight_layout()
 
-out_path_clean = Path(__file__).parent / f"rnc1_dist_density_clean_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_clean = OUT_DIR / "rnc1_dist_density_clean.png"
 fig_clean.savefig(out_path_clean, dpi=150, bbox_inches="tight")
 print(f"Clean density plot saved to: {out_path_clean}")
 plt.show()
@@ -1067,7 +1067,7 @@ ax_ortho.set_xlim(0, max_val * 1.1)
 ax_ortho.set_ylim(bottom=0)
 
 plt.tight_layout()
-out_path_ortho = Path(__file__).parent / f"rnc1_ortho_noise_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_ortho = OUT_DIR / "rnc1_ortho_noise.png"
 fig_ortho.savefig(out_path_ortho, dpi=150, bbox_inches="tight")
 print(f"Orthogonal Noise plot saved to: {out_path_ortho}")
 plt.show()
@@ -1192,7 +1192,7 @@ ax_roc.legend(loc="lower right")
 ax_roc.grid(True, linestyle=':', alpha=0.6)
 
 plt.tight_layout()
-out_path_roc = Path(__file__).parent / f"rnc1_roc_curves_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_roc = OUT_DIR / "rnc1_roc_curves.png"
 fig_roc.savefig(out_path_roc, dpi=150, bbox_inches="tight")
 print(f"ROC Curves plotted to: {out_path_roc}")
 plt.show()
@@ -1274,7 +1274,7 @@ ax_opt.legend(loc="lower right")
 ax_opt.grid(True, linestyle=':', alpha=0.6)
 
 plt.tight_layout()
-out_path_opt = Path(__file__).parent / f"rnc1_optimal_mia_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_opt = OUT_DIR / "rnc1_optimal_mia.png"
 fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
 print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
 plt.show()
@@ -1327,7 +1327,7 @@ ax_nn.legend()
 ax_nn.grid(True, linestyle=':', alpha=0.6)
 
 plt.tight_layout()
-out_path_nn = Path(__file__).parent / f"rnc1_nn_overlap_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_nn = OUT_DIR / "rnc1_nn_overlap.png"
 fig_nn.savefig(out_path_nn, dpi=150, bbox_inches="tight")
 print(f"Nearest Neighbor plot saved to: {out_path_nn}")
 plt.show()
@@ -1393,7 +1393,7 @@ for c in range(num_classes):
 
 fig_hyper.suptitle(f"Hypersphere Expansion: TPR & FPR vs Radius (9D Subspace)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
 plt.tight_layout()
-out_path_hyper = Path(__file__).parent / f"rnc1_hypersphere_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_hyper = OUT_DIR / "rnc1_hypersphere.png"
 fig_hyper.savefig(out_path_hyper, dpi=150, bbox_inches="tight")
 print(f"Hypersphere Expansion plot saved to: {out_path_hyper}")
 plt.show()
@@ -1445,7 +1445,7 @@ for c in range(num_classes):
 
 fig_hyper200.suptitle(f"Hypersphere Expansion: TPR & FPR vs Radius (200D Space)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
 plt.tight_layout()
-out_path_hyper200 = Path(__file__).parent / f"rnc1_hypersphere_200d_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_hyper200 = OUT_DIR / "rnc1_hypersphere_200d.png"
 fig_hyper200.savefig(out_path_hyper200, dpi=150, bbox_inches="tight")
 print(f"Hypersphere Expansion (200D) plot saved to: {out_path_hyper200}")
 plt.show()
@@ -1515,7 +1515,7 @@ for c in range(num_classes):
 
 fig_dist.suptitle(f"Microscopic Distribution: Dist to Mean vs Dist to Nearest Train Point (200D Space)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
 plt.tight_layout()
-out_path_dist = Path(__file__).parent / f"rnc1_dist_vs_nn_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_dist = OUT_DIR / "rnc1_dist_vs_nn.png"
 fig_dist.savefig(out_path_dist, dpi=150, bbox_inches="tight")
 print(f"Distance distribution scatter plot saved to: {out_path_dist}")
 plt.show()
@@ -1641,7 +1641,7 @@ ax.legend(fontsize=9, loc='center left', bbox_to_anchor=(1, 0.5))
 
 fig_knn.suptitle(f"The Bayes Error Collapse: Accuracy, TPR, FPR vs. n_neighbors\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
 plt.tight_layout()
-out_path_knn = Path(__file__).parent / f"rnc1_knn_collapse_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+out_path_knn = OUT_DIR / "rnc1_knn_collapse.png"
 fig_knn.savefig(out_path_knn, dpi=150, bbox_inches="tight")
 print(f"KNN Collapse plot saved to: {out_path_knn}")
 plt.show()
@@ -1738,7 +1738,7 @@ if len(train_f_canary) > 0:
         ax_outlier_roc.grid(True, linestyle=':', alpha=0.6)
         
         plt.tight_layout()
-        out_path_outlier_roc = Path(__file__).parent / f"rnc1_outlier_mia_roc_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+        out_path_outlier_roc = OUT_DIR / "rnc1_outlier_mia_roc.png"
         fig_outlier_roc.savefig(out_path_outlier_roc, dpi=150, bbox_inches="tight")
         print(f"Outlier MIA ROC plotted to: {out_path_outlier_roc}")
         plt.show()
