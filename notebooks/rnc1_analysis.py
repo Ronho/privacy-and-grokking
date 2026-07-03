@@ -164,6 +164,67 @@ print(f"\nRNC1 (train set) : {rnc1_train:.6f}")
 print(f"RNC1 (test set)  : {rnc1_test:.6f}")
 
 # ---------------------------------------------------------------------------
+# Representation Scale Distribution
+# ---------------------------------------------------------------------------
+print("\n--- Representation Scale Analysis ---")
+train_norms = train_f_normal.norm(dim=1).numpy()
+test_norms = test_features.float().norm(dim=1).numpy()
+
+fig_norm, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+ax1.hist(train_norms, bins=50, alpha=0.7, density=True, color='blue')
+ax1.set_xlabel('L2 Norm of Train Representation (Scale)')
+ax1.set_ylabel('Density')
+ax1.set_title("Train Scale Distribution")
+ax1.grid(True, linestyle=':', alpha=0.6)
+
+ax2.hist(test_norms, bins=50, alpha=0.7, density=True, color='orange')
+ax2.set_xlabel('L2 Norm of Test Representation (Scale)')
+ax2.set_ylabel('Density')
+ax2.set_title("Test Scale Distribution")
+ax2.grid(True, linestyle=':', alpha=0.6)
+
+fig_norm.suptitle(f"Representation Scale Distribution\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+plt.tight_layout()
+out_path_norm = Path(__file__).parent / f"rnc1_scale_dist_{RUN_ID[:8]}_step{CHECKPOINT_STEP}.png"
+fig_norm.savefig(out_path_norm, dpi=150, bbox_inches="tight")
+print(f"Scale distribution plot saved to: {out_path_norm}")
+plt.show()
+
+from scipy.stats import shapiro, skew, kurtosis
+def analyze_dist(name, data):
+    if len(data) == 0: return
+    
+    mean_val = np.mean(data)
+    std_val = np.std(data)
+    
+    print(f"\n{name} Scale Distribution:")
+    print(f"  Mean: {mean_val:.4f}, Std: {std_val:.4f}")
+    
+    if std_val < 1e-5:
+        print("  Distribution Type: Dirac Delta (all values are practically identical)")
+        return
+        
+    # Shapiro-Wilk test requires N <= 5000 for accurate p-value, so we sample if needed
+    sample_data = data if len(data) <= 5000 else np.random.choice(data, 5000, replace=False)
+    s, p = shapiro(sample_data)
+    sk = skew(data)
+    ku = kurtosis(data)
+    
+    print(f"  Skewness: {sk:.4f}, Kurtosis: {ku:.4f}")
+    if p > 0.05:
+        print(f"  Shapiro-Wilk: p={p:.4f} -> Likely normal distribution")
+    else:
+        if sk > 1.0:
+            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal, highly right-skewed (potentially Log-Normal or Chi-Square)")
+        elif sk < -1.0:
+            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal, highly left-skewed")
+        else:
+            print(f"  Shapiro-Wilk: p={p:.4f} -> Non-normal distribution")
+
+analyze_dist("Train", train_norms)
+analyze_dist("Test", test_norms)
+
+# ---------------------------------------------------------------------------
 # Class means on the TRAIN set (in the scaled feature space, as per RNC1 def)
 # ---------------------------------------------------------------------------
 train_f = train_features.float()
