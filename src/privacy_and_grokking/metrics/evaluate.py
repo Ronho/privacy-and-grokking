@@ -187,6 +187,7 @@ def evaluate(
             (compute_heavy_metrics and metrics_config.neural_collapse)
             or metrics_config.rnc1
             or metrics_config.nhsic
+            or metrics_config.attack_distance_to_class_mean
         )
         collect_inputs = metrics_config.nhsic
         train_results, train_activations, train_labels, train_inputs = _process_loader(
@@ -438,6 +439,36 @@ def evaluate(
                         )
                         for k, v in nhsic_test_x.items():
                             metrics[f"nhsic/{k}/test"] = v
+
+            if metrics_config.attack_distance_to_class_mean and test_feats is not None:
+                from privacy_and_grokking.metrics.mia import distances_to_class_mean
+                
+                num_classes = int(train_labels.max().item() + 1)
+                class_means = torch.zeros(num_classes, train_feats.shape[1], device=train_feats.device)
+                for c in range(num_classes):
+                    mask = train_labels == c
+                    if mask.sum() > 0:
+                        class_means[c] = train_feats[mask].float().mean(dim=0)
+                
+                train_dists = distances_to_class_mean(train_feats, train_labels, class_means)
+                test_dists = distances_to_class_mean(test_feats, test_labels, class_means)
+                
+                all_train_flat = torch.cat(list(train_dists.values())) if train_dists else torch.tensor([])
+                all_test_flat = torch.cat(list(test_dists.values())) if test_dists else torch.tensor([])
+                
+                if len(all_train_flat) > 0 and len(all_test_flat) > 0:
+                    m = compute_roc_metrics_single_step(-all_train_flat, -all_test_flat)
+                    for key, value in m.items():
+                        metrics[f"attack/distance_to_class_mean/global/{key}"] = value
+
+                for c in range(num_classes):
+                    if c in train_dists and c in test_dists:
+                        train_c = train_dists[c]
+                        test_c = test_dists[c]
+                        if len(train_c) > 0 and len(test_c) > 0:
+                            m = compute_roc_metrics_single_step(-train_c, -test_c)
+                            for key, value in m.items():
+                                metrics[f"attack/distance_to_class_mean/class_{c}/{key}"] = value
 
     keys = list(metrics.keys())
     for key in keys:

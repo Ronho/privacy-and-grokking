@@ -42,6 +42,7 @@ class MetricsConfig(BaseModel):
     attack_ce_loss: bool = True
     attack_mse_loss: bool = True
     attack_correctness: bool = True
+    attack_distance_to_class_mean: bool = True
 
     # Heavy metrics (only computed at heavy_metrics_log_frequency)
     curvature: bool = True
@@ -78,6 +79,7 @@ class MetricsConfig(BaseModel):
                 self.attack_ce_loss,
                 self.attack_mse_loss,
                 self.attack_correctness,
+                self.attack_distance_to_class_mean,
                 self.merlin_morgan,
             ]
         )
