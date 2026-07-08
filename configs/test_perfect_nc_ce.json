@@ -1,0 +1,44 @@
+{
+    "model": {
+        "name": "mlp-nc",
+        "initialization_scale": 1.0
+    },
+    "seed": 42,
+    "batch_size": 256,
+    "loss": {
+        "name": "cross_entropy"
+    },
+    "scheduler": {
+        "name": "CosineAnnealingLR",
+        "min_lr": 0.0
+    },
+    "optimizer": {
+        "name": "AdamW",
+        "lr": 0.001,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "data": {
+            "name": "etf",
+            "num_classes": 10,
+            "dimension": 10,
+            "num_samples_train": 250,
+            "num_samples_test": 1000,
+            "noise_std": 0.1,
+            "seed": 42
+        },
+        "train_size": 250,
+        "seed": 42
+    },
+    "metrics": {
+        "log_frequency": 1000,
+        "heavy_metrics_log_frequency": 10000,
+        "distribution_overlap_kde": false,
+        "kl_divergence_kde": false,
+        "js_distance_kde": false,
+        "distribution_overlap_adaptive": false,
+        "kl_divergence_adaptive": false,
+        "js_distance_adaptive": false,
+        "neural_collapse": true
+    }
+}

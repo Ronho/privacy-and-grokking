@@ -50,9 +50,9 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "7425ca56bb5643cca1a95f128a9b2588"
-CHECKPOINT_STEP = 100_000
-ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "9" #"6"
+RUN_ID = "de413d37bee14d1c97a22bbafbc0ad46"
+CHECKPOINT_STEP = 25_000
+ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "11" #"6"
 CHECKPOINT_PATH = (
     ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
 )
@@ -101,10 +101,11 @@ def extract_features(
     model,
     device: torch.device,
     batch_size: int = 512,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return (features [N, 200], labels [N]) for the given dataset."""
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return (features [N, 200], logits [N, C], labels [N]) for the given dataset."""
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     features_list: list[torch.Tensor] = []
+    logits_list: list[torch.Tensor] = []
     labels_list: list[torch.Tensor] = []
 
     with torch.no_grad():
@@ -113,15 +114,16 @@ def extract_features(
             # MLP forward up to the last layer input
             y, z = model(imgs, verbose=True)
             features_list.append(z.cpu())
+            logits_list.append(y.cpu())
             labels_list.append(lbls.cpu() if isinstance(lbls, torch.Tensor) else torch.tensor(lbls))
 
-    return torch.cat(features_list), torch.cat(labels_list)
+    return torch.cat(features_list), torch.cat(logits_list), torch.cat(labels_list)
 
 
 print("Extracting train features...")
-train_features, train_labels = extract_features(train_dataset, model, device)
+train_features, train_logits, train_labels = extract_features(train_dataset, model, device)
 print("Extracting test features...")
-test_features, test_labels = extract_features(test_dataset, model, device)
+test_features, test_logits, test_labels = extract_features(test_dataset, model, device)
 
 print(f"  train_features: {train_features.shape}")
 print(f"  test_features : {test_features.shape}")
@@ -152,16 +154,18 @@ train_f_normal = train_features[~canary_mask].float()
 train_l_normal = train_labels[~canary_mask]
 train_f_canary = train_features[canary_mask].float()
 train_l_canary = train_labels[canary_mask]
+train_y_canary = train_logits[canary_mask]
 
 # --- Generate Test Canaries ---
 from privacy_and_grokking.datasets.canaries.uniform_noise import UniformNoiseCanary
 from torch.utils.data import DataLoader
 test_f_canary = torch.empty(0)
 test_l_canary = torch.empty(0)
+test_y_canary = torch.empty(0)
 if len(train_f_canary) > 0:
     print("Generating unseen test canaries for evaluation...")
     noise_gen = UniformNoiseCanary(dim=(1, 28, 28))
-    tcf_list, tcl_list = [], []
+    tcf_list, tcl_list, tcy_list = [], [], []
     sub_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
     with torch.no_grad():
         for imgs, lbls in sub_loader:
@@ -169,9 +173,11 @@ if len(train_f_canary) > 0:
             y, z = model(noisy_imgs, verbose=True)
             tcf_list.append(z.cpu())
             tcl_list.append(lbls.cpu())
+            tcy_list.append(y.cpu())
             if sum(len(b) for b in tcf_list) >= len(train_f_canary): break
     test_f_canary = torch.cat(tcf_list)
     test_l_canary = torch.cat(tcl_list)
+    test_y_canary = torch.cat(tcy_list)
 
 print(f"  train_features_normal: {train_f_normal.shape}")
 print(f"  train_features_canary: {train_f_canary.shape}")
@@ -1732,6 +1738,27 @@ print("\n--- Outlier MIA (Train Canaries vs Test Canaries) ---")
 from privacy_and_grokking.datasets.canaries.uniform_noise import UniformNoiseCanary
 
 if len(train_f_canary) > 0:
+    print("\n--- Canary Classification Correctness ---")
+    
+    def print_classification_matrix(logits, labels, name):
+        preds = logits.argmax(dim=-1)
+        correct = (preds == labels)
+        total_correct = correct.sum().item()
+        total_count = len(labels)
+        print(f"{name} Canaries: {total_correct}/{total_count} ({total_correct/total_count:.1%}) correctly classified.")
+        print(f"{'Class':<6} | {'Total':<6} | {'Correct':<8} | {'False':<8}")
+        print("-" * 35)
+        for c in range(10):
+            c_mask = labels == c
+            if c_mask.sum() == 0: continue
+            c_correct = correct[c_mask].sum().item()
+            c_total = c_mask.sum().item()
+            print(f"{c:<6} | {c_total:<6} | {c_correct:<8} | {c_total - c_correct:<8}")
+        print()
+        
+    print_classification_matrix(train_y_canary, train_l_canary, "Train")
+    print_classification_matrix(test_y_canary, test_l_canary, "Test")
+
     # We already have train canary distances from earlier: canary_dists_clean
     all_train_canary_flat = np.concatenate(list(canary_dists_clean.values())) if canary_dists_clean else np.array([])
     all_test_canary_flat = np.concatenate(list(test_canary_dists_clean.values())) if test_canary_dists_clean else np.array([])
@@ -1794,8 +1821,18 @@ sys.stdout = print_capture.original_stdout
 with open(OUT_DIR / "analysis_output.txt", "w") as f:
     f.write(print_capture.getvalue())
 
-setup_mlflow()
-with mlflow.start_run(run_id=RUN_ID) as run:
-    mlflow.log_artifacts(str(OUT_DIR), artifact_path=f"rnc1_analysis_{CHECKPOINT_STEP}")
-print(f"Logged artifacts to MLflow run {RUN_ID} under 'rnc1_analysis_{CHECKPOINT_STEP}'")
+mlflow.set_tracking_uri("http://localhost:5051")
+
+try:
+    with mlflow.start_run(run_id=RUN_ID) as run:
+        mlflow.log_artifacts(str(OUT_DIR), artifact_path=f"rnc1_analysis_{CHECKPOINT_STEP}")
+    print(f"Logged artifacts to MLflow run {RUN_ID} under 'rnc1_analysis_{CHECKPOINT_STEP}'")
+except (mlflow.exceptions.RestException, mlflow.exceptions.MlflowException) as e:
+    print(f"Failed to attach to run {RUN_ID} ({e}). Creating a new run for this analysis.")
+    with mlflow.start_run() as run:
+        mlflow.set_tag("original_run_id", RUN_ID)
+        mlflow.log_artifacts(str(OUT_DIR), artifact_path=f"rnc1_analysis_{CHECKPOINT_STEP}")
+    print(f"Logged artifacts to new MLflow run {run.info.run_id} under 'rnc1_analysis_{CHECKPOINT_STEP}'")
+    
 temp_dir.cleanup()
+

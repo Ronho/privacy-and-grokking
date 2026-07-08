@@ -3,7 +3,7 @@ import os
 import mlflow
 import requests
 
-TRACKING_URI = "http://localhost:5050"
+TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5050")
 
 
 def setup_mlflow(exp_name: str = "default"):
