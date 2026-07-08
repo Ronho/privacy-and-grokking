@@ -243,7 +243,7 @@ def compute_nc3(
     if features.shape[0] == 0:
         return float("nan")
     features = features.float()
-    classifier_weight = classifier_weight.float()
+    classifier_weight = classifier_weight.float().to(features.device)
     class_means, global_mean, classes = _class_means_and_global(features, labels)
     if len(classes) < 2:
         return float("nan")
@@ -287,13 +287,13 @@ def compute_nc4(
     if features.shape[0] == 0:
         return float("nan")
     features = features.float()
-    classifier_weight = classifier_weight.float()
+    classifier_weight = classifier_weight.float().to(features.device)
     class_means, _, classes = _class_means_and_global(features, labels)
 
     # Linear classifier predictions
     logits = features @ classifier_weight.T
     if classifier_bias is not None:
-        logits = logits + classifier_bias.float()
+        logits = logits + classifier_bias.float().to(features.device)
     linear_preds = logits.argmax(dim=1)
 
     # Nearest-class-center predictions
@@ -341,7 +341,7 @@ def compute_nc3_papyan(
     if features.shape[0] == 0:
         return float("nan")
     features = features.float()
-    classifier_weight = classifier_weight.float()
+    classifier_weight = classifier_weight.float().to(features.device)
     class_means, global_mean, classes = _class_means_and_global(features, labels)
     if len(classes) < 2:
         return float("nan")
@@ -374,6 +374,10 @@ def compute_all_nc_metrics(
         NeuralCollapseMetrics dataclass with all metrics.
     """
     features = features.float()
+    if classifier_weight is not None:
+        classifier_weight = classifier_weight.to(features.device)
+    if classifier_bias is not None:
+        classifier_bias = classifier_bias.to(features.device)
     class_means, global_mean, classes = _class_means_and_global(features, labels)
 
     tr_w = compute_within_class_covariance_trace(features, labels, class_means, classes)

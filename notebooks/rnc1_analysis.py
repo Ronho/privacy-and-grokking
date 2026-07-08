@@ -11,6 +11,9 @@ Steps:
 
 import json
 from pathlib import Path
+import sys
+import io
+import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,9 +22,27 @@ import torch.nn.functional as F
 from sklearn.decomposition import PCA
 from torch.utils.data import DataLoader
 
+import mlflow
 from privacy_and_grokking.utils.logger import Logger
 from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.metrics.neural_collapse import compute_rnc1
+from privacy_and_grokking.utils.mlflow import setup_mlflow
+
+class PrintCapture(io.StringIO):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.original_stdout = sys.stdout
+
+    def write(self, s):
+        self.original_stdout.write(s)
+        super().write(s)
+
+    def flush(self):
+        self.original_stdout.flush()
+        super().flush()
+
+print_capture = PrintCapture()
+sys.stdout = print_capture
 
 Logger().setup()  # required before any project code calls Logger.get()
 
@@ -36,8 +57,8 @@ CHECKPOINT_PATH = (
     ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
 )
 CONFIG_PATH = ARTIFACT_BASE / RUN_ID / "artifacts" / "training_config.json"
-OUT_DIR = Path(__file__).parent / f"{RUN_ID[:8]}_step{CHECKPOINT_STEP}"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+temp_dir = tempfile.TemporaryDirectory()
+OUT_DIR = Path(temp_dir.name)
 
 # ---------------------------------------------------------------------------
 # Load config and build datasets
@@ -1764,3 +1785,17 @@ print(f"NC2 Equinorm (Variance of Norms, -> 0)                 | Train: {train_n
 print(f"NC2 Equiangular (Deviation from ETF angles, -> 0)      | Train: {train_nc.nc2_equiangular:.4f} | Test: {test_nc.nc2_equiangular:.4f}")
 print(f"NC3 (Self-Duality Frobenius Diff, -> 0)                | Train: {train_nc.nc3_papyan:.4f} | Test: {test_nc.nc3_papyan:.4f}")
 print(f"NC4 (Agreement of Linear Classifier and NCC, -> 1)     | Train: {train_nc.nc4:.4f} | Test: {test_nc.nc4:.4f}")
+
+# ---------------------------------------------------------------------------
+# MLFlow Logging & Output Capture
+# ---------------------------------------------------------------------------
+sys.stdout = print_capture.original_stdout
+
+with open(OUT_DIR / "analysis_output.txt", "w") as f:
+    f.write(print_capture.getvalue())
+
+setup_mlflow()
+with mlflow.start_run(run_id=RUN_ID) as run:
+    mlflow.log_artifacts(str(OUT_DIR), artifact_path=f"rnc1_analysis_{CHECKPOINT_STEP}")
+print(f"Logged artifacts to MLflow run {RUN_ID} under 'rnc1_analysis_{CHECKPOINT_STEP}'")
+temp_dir.cleanup()
