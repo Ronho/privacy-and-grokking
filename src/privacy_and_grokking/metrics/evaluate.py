@@ -369,7 +369,10 @@ def evaluate(
                 metrics["nc/rnc1/train"] = nc.rnc1
                 metrics["nc/nc1/train"] = nc.nc1
                 metrics["nc/nc2/train"] = nc.nc2
+                metrics["nc/nc2_equinorm/train"] = nc.nc2_equinorm
+                metrics["nc/nc2_equiangular/train"] = nc.nc2_equiangular
                 metrics["nc/nc3/train"] = nc.nc3
+                metrics["nc/nc3_papyan/train"] = nc.nc3_papyan
                 metrics["nc/nc4/train"] = nc.nc4
                 metrics["nc/between_class_variance/train"] = nc.between_class_variance
                 metrics["nc/within_class_variance/train"] = nc.within_class_variance
@@ -395,7 +398,10 @@ def evaluate(
                     metrics["nc/rnc1/test"] = nc_test.rnc1
                     metrics["nc/nc1/test"] = nc_test.nc1
                     metrics["nc/nc2/test"] = nc_test.nc2
+                    metrics["nc/nc2_equinorm/test"] = nc_test.nc2_equinorm
+                    metrics["nc/nc2_equiangular/test"] = nc_test.nc2_equiangular
                     metrics["nc/nc3/test"] = nc_test.nc3
+                    metrics["nc/nc3_papyan/test"] = nc_test.nc3_papyan
                     metrics["nc/nc4/test"] = nc_test.nc4
                     metrics["nc/between_class_variance/test"] = nc_test.between_class_variance
                     metrics["nc/within_class_variance/test"] = nc_test.within_class_variance

@@ -29,9 +29,9 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "ac91f9e60af1478a894d7b3432e1aec9"
-CHECKPOINT_STEP = 150_000
-ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "7" #"6"
+RUN_ID = "7425ca56bb5643cca1a95f128a9b2588"
+CHECKPOINT_STEP = 100_000
+ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "9" #"6"
 CHECKPOINT_PATH = (
     ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
 )
@@ -225,7 +225,7 @@ plt.tight_layout()
 out_path_norm = OUT_DIR / "rnc1_scale_dist_per_class.png"
 fig_norm.savefig(out_path_norm, dpi=150, bbox_inches="tight")
 print(f"Per-Class Scale distribution plot saved to: {out_path_norm}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Class means on the TRAIN set (in the scaled feature space, as per RNC1 def)
@@ -323,7 +323,7 @@ plt.tight_layout()
 out_path = OUT_DIR / "rnc1_analysis.png"
 plt.savefig(out_path, dpi=150, bbox_inches="tight")
 print(f"\nPlot saved to: {out_path}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Density of distance-to-class-mean for each class  (train vs test)
@@ -410,7 +410,7 @@ fig_comb.tight_layout()
 out_path_comb = OUT_DIR / "rnc1_dist_density_combined.png"
 fig_comb.savefig(out_path_comb, dpi=150, bbox_inches="tight")
 print(f"Combined density plot saved to: {out_path_comb}")
-plt.show()
+# plt.show()
 
 fig2, axes2 = plt.subplots(2, 5, figsize=(18, 7), sharey=False)
 axes2 = axes2.flatten()
@@ -449,7 +449,7 @@ plt.tight_layout()
 out_path2 = OUT_DIR / "rnc1_dist_density.png"
 plt.savefig(out_path2, dpi=150, bbox_inches="tight")
 print(f"Density plot saved to: {out_path2}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Membership Inference Attack (MIA)
@@ -654,7 +654,7 @@ fig_mia.tight_layout()
 out_path_mia = OUT_DIR / "rnc1_mia.png"
 fig_mia.savefig(out_path_mia, dpi=150, bbox_inches="tight")
 print(f"MIA plot saved to: {out_path_mia}")
-plt.show()
+# plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -709,14 +709,15 @@ fig_gauss.tight_layout()
 out_path_gauss = OUT_DIR / "rnc1_mia_gaussians.png"
 fig_gauss.savefig(out_path_gauss, dpi=150, bbox_inches="tight")
 print(f"MIA Gaussians plot saved to: {out_path_gauss}")
-plt.show()
+# plt.show()
 
 
 # ---------------------------------------------------------------------------
 # Margin Density Plots (Decision Boundaries)
 # ---------------------------------------------------------------------------
 w = model.classifier().weight.detach().cpu()
-b = model.classifier().bias.detach().cpu()
+_bias = model.classifier().bias
+b = _bias.detach().cpu() if _bias is not None else torch.zeros(w.shape[0])
 
 pairs_to_plot = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
 fig_margin, axes_margin = plt.subplots(len(pairs_to_plot), 2, figsize=(16, 3.5 * len(pairs_to_plot)), sharex=False)
@@ -785,7 +786,7 @@ fig_margin.tight_layout()
 out_path_margin = OUT_DIR / "rnc1_margin_plots.png"
 fig_margin.savefig(out_path_margin, dpi=150, bbox_inches="tight")
 print(f"Margin plots saved to: {out_path_margin}")
-plt.show()
+# plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -925,7 +926,7 @@ fig_margin_mia.tight_layout()
 out_path_margin_mia = OUT_DIR / "rnc1_margin_mia.png"
 fig_margin_mia.savefig(out_path_margin_mia, dpi=150, bbox_inches="tight")
 print(f"Margin MIA plot saved to: {out_path_margin_mia}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Approach 3: Removing Orthogonal Noise (PCA on Class Means)
@@ -1014,7 +1015,7 @@ plt.tight_layout()
 out_path_clean = OUT_DIR / "rnc1_dist_density_clean.png"
 fig_clean.savefig(out_path_clean, dpi=150, bbox_inches="tight")
 print(f"Clean density plot saved to: {out_path_clean}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Advanced MIA: 9D Clean Subspace Distance & Orthogonal Noise
@@ -1070,7 +1071,7 @@ plt.tight_layout()
 out_path_ortho = OUT_DIR / "rnc1_ortho_noise.png"
 fig_ortho.savefig(out_path_ortho, dpi=150, bbox_inches="tight")
 print(f"Orthogonal Noise plot saved to: {out_path_ortho}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Multi-Boundary Margin MIA (All C-1 boundaries)
@@ -1195,7 +1196,7 @@ plt.tight_layout()
 out_path_roc = OUT_DIR / "rnc1_roc_curves.png"
 fig_roc.savefig(out_path_roc, dpi=150, bbox_inches="tight")
 print(f"ROC Curves plotted to: {out_path_roc}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Meta-Classifier (Empirically finding the Optimal MIA)
@@ -1277,7 +1278,7 @@ plt.tight_layout()
 out_path_opt = OUT_DIR / "rnc1_optimal_mia.png"
 fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
 print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Nearest Neighbor Overlap Analysis
@@ -1330,7 +1331,7 @@ plt.tight_layout()
 out_path_nn = OUT_DIR / "rnc1_nn_overlap.png"
 fig_nn.savefig(out_path_nn, dpi=150, bbox_inches="tight")
 print(f"Nearest Neighbor plot saved to: {out_path_nn}")
-plt.show()
+# plt.show()
 
 # Calculate the overlap metric
 median_tr = np.median(nn_dist_train)
@@ -1396,7 +1397,7 @@ plt.tight_layout()
 out_path_hyper = OUT_DIR / "rnc1_hypersphere.png"
 fig_hyper.savefig(out_path_hyper, dpi=150, bbox_inches="tight")
 print(f"Hypersphere Expansion plot saved to: {out_path_hyper}")
-plt.show()
+# plt.show()
 # ---------------------------------------------------------------------------
 # Hypersphere Expansion Analysis (200D Raw Space)
 # ---------------------------------------------------------------------------
@@ -1448,7 +1449,7 @@ plt.tight_layout()
 out_path_hyper200 = OUT_DIR / "rnc1_hypersphere_200d.png"
 fig_hyper200.savefig(out_path_hyper200, dpi=150, bbox_inches="tight")
 print(f"Hypersphere Expansion (200D) plot saved to: {out_path_hyper200}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Test Data Distribution: Dist to Mean vs. Dist to Nearest Train (200D)
@@ -1518,7 +1519,7 @@ plt.tight_layout()
 out_path_dist = OUT_DIR / "rnc1_dist_vs_nn.png"
 fig_dist.savefig(out_path_dist, dpi=150, bbox_inches="tight")
 print(f"Distance distribution scatter plot saved to: {out_path_dist}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Theoretical Discriminator Limit (Ultimate Overfitter)
@@ -1644,7 +1645,7 @@ plt.tight_layout()
 out_path_knn = OUT_DIR / "rnc1_knn_collapse.png"
 fig_knn.savefig(out_path_knn, dpi=150, bbox_inches="tight")
 print(f"KNN Collapse plot saved to: {out_path_knn}")
-plt.show()
+# plt.show()
 
 # ---------------------------------------------------------------------------
 # Estimating True Train Mean via PDF Maximum (Mode Extraction)
@@ -1741,6 +1742,25 @@ if len(train_f_canary) > 0:
         out_path_outlier_roc = OUT_DIR / "rnc1_outlier_mia_roc.png"
         fig_outlier_roc.savefig(out_path_outlier_roc, dpi=150, bbox_inches="tight")
         print(f"Outlier MIA ROC plotted to: {out_path_outlier_roc}")
-        plt.show()
+        # plt.show()
 else:
     print("Skipping Outlier MIA: No canaries were injected during training for this model.")
+
+# ---------------------------------------------------------------------------
+# Neural Collapse Metrics (NC1 - NC4)
+# ---------------------------------------------------------------------------
+print("\n--- Neural Collapse Metrics (Train vs Test) ---")
+from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
+
+last_layer = list(model.children())[-1]
+W = last_layer.weight
+b = last_layer.bias if hasattr(last_layer, 'bias') else None
+
+train_nc = compute_all_nc_metrics(train_features, train_labels, W, b)
+test_nc = compute_all_nc_metrics(test_features, test_labels, W, b)
+
+print(f"NC1 (Variance Collapse)                                | Train: {train_nc.nc1:.4f} | Test: {test_nc.nc1:.4f}")
+print(f"NC2 Equinorm (Variance of Norms, -> 0)                 | Train: {train_nc.nc2_equinorm:.4f} | Test: {test_nc.nc2_equinorm:.4f}")
+print(f"NC2 Equiangular (Deviation from ETF angles, -> 0)      | Train: {train_nc.nc2_equiangular:.4f} | Test: {test_nc.nc2_equiangular:.4f}")
+print(f"NC3 (Self-Duality Frobenius Diff, -> 0)                | Train: {train_nc.nc3_papyan:.4f} | Test: {test_nc.nc3_papyan:.4f}")
+print(f"NC4 (Agreement of Linear Classifier and NCC, -> 1)     | Train: {train_nc.nc4:.4f} | Test: {test_nc.nc4:.4f}")

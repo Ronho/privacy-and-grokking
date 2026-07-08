@@ -1,0 +1,33 @@
+{
+    "model": {
+        "name": "mlp-nc",
+        "initialization_scale": 1.0
+    },
+    "seed": 42,
+    "batch_size": 256,
+    "loss": {
+        "name": "cross_entropy"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "SGD",
+        "lr": 0.05,
+        "momentum": 0.9,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "data": {
+            "name": "etf",
+            "num_classes": 10,
+            "dimension": 10,
+            "num_samples_train": 250,
+            "num_samples_test": 1000,
+            "noise_std": 0.1,
+            "seed": 42
+        },
+        "train_size": 250,
+        "seed": 42
+    }
+}

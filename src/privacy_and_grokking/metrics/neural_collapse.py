@@ -24,7 +24,10 @@ class NeuralCollapseMetrics:
     rnc1: float
     nc1: float
     nc2: float
+    nc2_equinorm: float
+    nc2_equiangular: float
     nc3: float
+    nc3_papyan: float
     nc4: float
     between_class_variance: float
     within_class_variance: float
@@ -205,7 +208,14 @@ def compute_nc2(features: torch.Tensor, labels: torch.Tensor) -> float:
     # Center class means
     centered = class_means - global_mean  # (K, d)
     sv = torch.linalg.svdvals(centered)
-    sv_pos = sv[sv > 1e-10]
+    
+    # Since there are K centered class means, the maximum rank is K-1.
+    # The last singular value (or beyond) is mathematically 0, but due to 
+    # floating point precision might be slightly > 0. We take the top K-1.
+    K = len(classes)
+    sv_true = sv[:K-1]
+    sv_pos = sv_true[sv_true > 1e-7]
+    
     if len(sv_pos) == 0:
         return float("inf")
     return (sv_pos[0] / sv_pos[-1]).item()
@@ -294,6 +304,57 @@ def compute_nc4(
     agreement = (linear_preds == ncc_preds).float().mean()
     return agreement.item()
 
+def compute_nc2_papyan(features: torch.Tensor, labels: torch.Tensor) -> tuple[float, float]:
+    """Compute original Papyan et al. NC2 metrics (Equinorm and Equiangular)."""
+    if features.shape[0] == 0:
+        return float("nan"), float("nan")
+    features = features.float()
+    class_means, global_mean, classes = _class_means_and_global(features, labels)
+    if len(classes) < 2:
+        return float("nan"), float("nan")
+    
+    K = len(classes)
+    centered = class_means - global_mean
+    norms = centered.norm(dim=1)
+    
+    # Equinorm: std(norms) / mean(norms)  -> should approach 0
+    nc2_equinorm = (norms.std() / norms.mean()).item() if norms.mean() > 0 else float("inf")
+    
+    # Equiangular: deviation from ideal cosine similarity
+    normed = centered / torch.clamp(norms.unsqueeze(1), min=1e-8)
+    cos_sim = normed @ normed.T
+    
+    # Papyan: || M^T M / ||M^T M||_F - 1/sqrt(K-1) (I - 1/K 11^T) ||_F
+    # Alternatively, the image provides the element-wise limit for cosine sim:
+    # off-diagonals approach -1 / (K-1)
+    ideal_cos = (float(K) / (K - 1)) * torch.eye(K, device=features.device) - (1.0 / (K - 1)) * torch.ones(K, K, device=features.device)
+    nc2_equiangular = (cos_sim - ideal_cos).norm(p='fro').item()
+    
+    return nc2_equinorm, nc2_equiangular
+
+def compute_nc3_papyan(
+    features: torch.Tensor,
+    labels: torch.Tensor,
+    classifier_weight: torch.Tensor,
+) -> float:
+    """Compute original Papyan et al. NC3 metric (Self-Duality / Frobenius difference)."""
+    if features.shape[0] == 0:
+        return float("nan")
+    features = features.float()
+    classifier_weight = classifier_weight.float()
+    class_means, global_mean, classes = _class_means_and_global(features, labels)
+    if len(classes) < 2:
+        return float("nan")
+
+    centered_means = class_means - global_mean  # (K, d)
+    
+    # Normalize W and M_dot
+    W_normed = classifier_weight / torch.clamp(classifier_weight.norm(p='fro'), min=1e-8)
+    M_normed = centered_means / torch.clamp(centered_means.norm(p='fro'), min=1e-8)
+    
+    # || W/||W||_F - M/||M||_F ||_F  -> should approach 0
+    return (W_normed - M_normed).norm(p='fro').item()
+
 
 def compute_all_nc_metrics(
     features: torch.Tensor,
@@ -322,8 +383,14 @@ def compute_all_nc_metrics(
     rnc1 = compute_rnc1(features, labels)
     nc1 = tr_w / tr_b if tr_b > 0 else float("inf")
     nc2 = compute_nc2(features, labels)
+    nc2_equinorm, nc2_equiangular = compute_nc2_papyan(features, labels)
     nc3 = (
         compute_nc3(features, labels, classifier_weight)
+        if classifier_weight is not None
+        else float("nan")
+    )
+    nc3_papyan = (
+        compute_nc3_papyan(features, labels, classifier_weight)
         if classifier_weight is not None
         else float("nan")
     )
@@ -338,7 +405,10 @@ def compute_all_nc_metrics(
         rnc1=rnc1,
         nc1=nc1,
         nc2=nc2,
+        nc2_equinorm=nc2_equinorm,
+        nc2_equiangular=nc2_equiangular,
         nc3=nc3,
+        nc3_papyan=nc3_papyan,
         nc4=nc4,
         between_class_variance=tr_b,
         within_class_variance=tr_w,
