@@ -15,9 +15,15 @@ from torch.utils.data import Subset
 class MNISTConfig(DatasetConfig):
     name: Literal["mnist"] = "mnist"
     subset_size: int | None = None
+    pad: bool = False
 
     def __call__(self) -> DataContainer:
-        transform = transforms.ToTensor()
+        transform_list = []
+        if self.pad:
+            transform_list.append(transforms.Pad(2))
+        transform_list.append(transforms.ToTensor())
+        transform = transforms.Compose(transform_list)
+
         CACHE_PATH.mkdir(exist_ok=True)
         train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
         if self.subset_size is not None:

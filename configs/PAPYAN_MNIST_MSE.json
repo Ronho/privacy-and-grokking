@@ -5,19 +5,19 @@
     "seed": 0,
     "batch_size": 128,
     "loss": {
-        "name": "cross_entropy"
+        "name": "mse"
     },
     "scheduler": {
         "name": "MultiStepLR",
         "milestones": [
-            45500,
-            91000
+            54600,
+            109200
         ],
         "gamma": 0.1
     },
     "optimizer": {
         "name": "SGD",
-        "lr": 0.05,
+        "lr": 0.0184,
         "momentum": 0.9,
         "weight_decay": 0.0005
     },
@@ -54,7 +54,8 @@
     },
     "data": {
         "data": {
-            "name": "cifar10"
+            "name": "mnist",
+            "pad": true
         },
         "seed": 0
     }

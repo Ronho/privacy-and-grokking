@@ -5,7 +5,7 @@
     "seed": 0,
     "batch_size": 128,
     "loss": {
-        "name": "cross_entropy"
+        "name": "mse"
     },
     "scheduler": {
         "name": "MultiStepLR",
