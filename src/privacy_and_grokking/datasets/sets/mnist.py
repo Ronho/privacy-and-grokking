@@ -12,9 +12,15 @@ from privacy_and_grokking.datasets.sets.base import (
 
 class MNISTConfig(DatasetConfig):
     name: Literal["mnist"] = "mnist"
+    pad: bool = False
 
     def __call__(self) -> DataContainer:
-        transform = transforms.ToTensor()
+        transform_list = []
+        if self.pad:
+            transform_list.append(transforms.Pad(2))
+        transform_list.append(transforms.ToTensor())
+        transform = transforms.Compose(transform_list)
+
         CACHE_PATH.mkdir(exist_ok=True)
         train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
         test = datasets.MNIST(root=CACHE_PATH, train=False, download=True, transform=transform)
