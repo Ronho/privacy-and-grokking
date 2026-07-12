@@ -50,13 +50,19 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "de413d37bee14d1c97a22bbafbc0ad46"
-CHECKPOINT_STEP = 25_000
-ARTIFACT_BASE = Path(__file__).parent.parent / "mlartifacts" / "11" #"6"
-CHECKPOINT_PATH = (
-    ARTIFACT_BASE / RUN_ID / "artifacts" / "checkpoints" / str(CHECKPOINT_STEP) / "model.pth"
+RUN_ID = "c2b14babd0b04f1eb32d276304f01ada"
+CHECKPOINT_STEP = 150_000
+TRAIN_MODELS = False
+
+from privacy_and_grokking.utils.mlflow import TRACKING_URI
+mlflow.set_tracking_uri(TRACKING_URI)
+CHECKPOINT_PATH = mlflow.artifacts.download_artifacts(
+    run_id=RUN_ID, artifact_path=f"checkpoints/{CHECKPOINT_STEP}/model.pth"
 )
-CONFIG_PATH = ARTIFACT_BASE / RUN_ID / "artifacts" / "training_config.json"
+CONFIG_PATH = mlflow.artifacts.download_artifacts(
+    run_id=RUN_ID, artifact_path="training_config.json"
+)
+
 temp_dir = tempfile.TemporaryDirectory()
 OUT_DIR = Path(temp_dir.name)
 
@@ -1251,61 +1257,64 @@ y_train_mia = np.concatenate([
 # Train/Test split specifically for evaluating the Meta-Classifier
 X_mia_tr, X_mia_te, y_mia_tr, y_mia_te = train_test_split(X_train_mia, y_train_mia, test_size=0.3, random_state=42)
 
-# 1. Logistic Regression (Finds optimal linear combination of all 200 dimensions)
-lr = LogisticRegression(max_iter=1000)
-lr.fit(X_mia_tr, y_mia_tr)
-lr_probs = lr.predict_proba(X_mia_te)[:, 1]
+if TRAIN_MODELS:
+    # 1. Logistic Regression (Finds optimal linear combination of all 200 dimensions)
+    lr = LogisticRegression(max_iter=1000)
+    lr.fit(X_mia_tr, y_mia_tr)
+    lr_probs = lr.predict_proba(X_mia_te)[:, 1]
 
-# 2. Random Forest (Finds optimal non-linear boundaries across all dimensions/noise)
-rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1, random_state=42)
-rf.fit(X_mia_tr, y_mia_tr)
-rf_probs = rf.predict_proba(X_mia_te)[:, 1]
+    # 2. Random Forest (Finds optimal non-linear boundaries across all dimensions/noise)
+    rf = RandomForestClassifier(n_estimators=100, max_depth=5, n_jobs=-1, random_state=42)
+    rf.fit(X_mia_tr, y_mia_tr)
+    rf_probs = rf.predict_proba(X_mia_te)[:, 1]
 
-# 3. Deep Neural Network (Universal Function Approximator for ultra-complex manifolds)
-from sklearn.neural_network import MLPClassifier
-# An ultra-sophisticated DNN: Wider, deeper, adaptive learning, no early stopping
-dnn = MLPClassifier(
-    hidden_layer_sizes=(512, 512, 256, 128), 
-    activation='relu',
-    solver='adam',
-    learning_rate='adaptive',
-    max_iter=2000, 
-    early_stopping=False, # Let it train to full convergence to find the most complex manifold possible
-    random_state=42
-)
-dnn.fit(X_mia_tr, y_mia_tr)
-dnn_probs = dnn.predict_proba(X_mia_te)[:, 1]
+    # 3. Deep Neural Network (Universal Function Approximator for ultra-complex manifolds)
+    from sklearn.neural_network import MLPClassifier
+    # An ultra-sophisticated DNN: Wider, deeper, adaptive learning, no early stopping
+    dnn = MLPClassifier(
+        hidden_layer_sizes=(512, 512, 256, 128), 
+        activation='relu',
+        solver='adam',
+        learning_rate='adaptive',
+        max_iter=2000, 
+        early_stopping=False, # Let it train to full convergence to find the most complex manifold possible
+        random_state=42
+    )
+    dnn.fit(X_mia_tr, y_mia_tr)
+    dnn_probs = dnn.predict_proba(X_mia_te)[:, 1]
 
-fig_opt, ax_opt = plt.subplots(figsize=(8, 6))
+    fig_opt, ax_opt = plt.subplots(figsize=(8, 6))
 
-fpr_lr, tpr_lr, _ = roc_curve(y_mia_te, lr_probs)
-auc_lr = auc(fpr_lr, tpr_lr)
-ax_opt.plot(fpr_lr, tpr_lr, color='red', lw=2, label=f'Optimal Linear MIA (LR) (AUC = {auc_lr:.2f})')
+    fpr_lr, tpr_lr, _ = roc_curve(y_mia_te, lr_probs)
+    auc_lr = auc(fpr_lr, tpr_lr)
+    ax_opt.plot(fpr_lr, tpr_lr, color='red', lw=2, label=f'Optimal Linear MIA (LR) (AUC = {auc_lr:.2f})')
 
-fpr_rf, tpr_rf, _ = roc_curve(y_mia_te, rf_probs)
-auc_rf = auc(fpr_rf, tpr_rf)
-ax_opt.plot(fpr_rf, tpr_rf, color='darkred', lw=2, label=f'Optimal Non-Linear MIA (RF) (AUC = {auc_rf:.2f})')
+    fpr_rf, tpr_rf, _ = roc_curve(y_mia_te, rf_probs)
+    auc_rf = auc(fpr_rf, tpr_rf)
+    ax_opt.plot(fpr_rf, tpr_rf, color='darkred', lw=2, label=f'Optimal Non-Linear MIA (RF) (AUC = {auc_rf:.2f})')
 
-fpr_dnn, tpr_dnn, _ = roc_curve(y_mia_te, dnn_probs)
-auc_dnn = auc(fpr_dnn, tpr_dnn)
-ax_opt.plot(fpr_dnn, tpr_dnn, color='purple', lw=2, label=f'Optimal Deep MIA (DNN) (AUC = {auc_dnn:.2f})')
+    fpr_dnn, tpr_dnn, _ = roc_curve(y_mia_te, dnn_probs)
+    auc_dnn = auc(fpr_dnn, tpr_dnn)
+    ax_opt.plot(fpr_dnn, tpr_dnn, color='purple', lw=2, label=f'Optimal Deep MIA (DNN) (AUC = {auc_dnn:.2f})')
 
-ax_opt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
-ax_opt.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
+    ax_opt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
+    ax_opt.axvspan(0, 0.05, color='red', alpha=0.1, label="Low FPR Region (<5%)")
 
-ax_opt.set_xlim([0.0, 1.0])
-ax_opt.set_ylim([0.0, 1.05])
-ax_opt.set_xlabel('False Positive Rate (FPR)')
-ax_opt.set_ylabel('True Positive Rate (TPR)')
-ax_opt.set_title(f"Optimal Meta-Classifier MIA (All 200 Dimensions)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
-ax_opt.legend(loc="lower right")
-ax_opt.grid(True, linestyle=':', alpha=0.6)
+    ax_opt.set_xlim([0.0, 1.0])
+    ax_opt.set_ylim([0.0, 1.05])
+    ax_opt.set_xlabel('False Positive Rate (FPR)')
+    ax_opt.set_ylabel('True Positive Rate (TPR)')
+    ax_opt.set_title(f"Optimal Meta-Classifier MIA (All 200 Dimensions)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}")
+    ax_opt.legend(loc="lower right")
+    ax_opt.grid(True, linestyle=':', alpha=0.6)
 
-plt.tight_layout()
-out_path_opt = OUT_DIR / "rnc1_optimal_mia.png"
-fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
-print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
-# plt.show()
+    plt.tight_layout()
+    out_path_opt = OUT_DIR / "rnc1_optimal_mia.png"
+    fig_opt.savefig(out_path_opt, dpi=150, bbox_inches="tight")
+    print(f"Optimal MIA ROC Curves plotted to: {out_path_opt}")
+    # plt.show()
+else:
+    print("Skipping Meta-Classifier training (TRAIN_MODELS=False).")
 
 # ---------------------------------------------------------------------------
 # Nearest Neighbor Overlap Analysis
@@ -1820,8 +1829,6 @@ sys.stdout = print_capture.original_stdout
 
 with open(OUT_DIR / "analysis_output.txt", "w") as f:
     f.write(print_capture.getvalue())
-
-mlflow.set_tracking_uri("http://localhost:5051")
 
 try:
     with mlflow.start_run(run_id=RUN_ID) as run:

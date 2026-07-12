@@ -10,13 +10,18 @@ from privacy_and_grokking.datasets.sets.base import (
 )
 
 
+from torch.utils.data import Subset
+
 class MNISTConfig(DatasetConfig):
     name: Literal["mnist"] = "mnist"
+    subset_size: int | None = None
 
     def __call__(self) -> DataContainer:
         transform = transforms.ToTensor()
         CACHE_PATH.mkdir(exist_ok=True)
         train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
+        if self.subset_size is not None:
+            train = Subset(train, list(range(self.subset_size)))
         test = datasets.MNIST(root=CACHE_PATH, train=False, download=True, transform=transform)
         return DataContainer(
             train=train,
