@@ -50,7 +50,7 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "c2b14babd0b04f1eb32d276304f01ada"
+RUN_ID = "5c972f89059546bfba4a44b6d1f66baf"
 CHECKPOINT_STEP = 150_000
 TRAIN_MODELS = False
 
