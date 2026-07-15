@@ -29,6 +29,13 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torchvision.models as models
+import argparse
+import json
+import tempfile
+import mlflow
+from pathlib import Path
+from privacy_and_grokking.utils.mlflow import TRACKING_URI
+from privacy_and_grokking.models.resnet_torchvision import TorchvisionResNet
 
 from tqdm import tqdm
 from collections import OrderedDict
@@ -36,17 +43,22 @@ from scipy.sparse.linalg import svds
 from torchvision import datasets, transforms
 from IPython import embed
 
-debug = True # Only runs 20 batches per epoch for debugging
+parser = argparse.ArgumentParser()
+parser.add_argument('--debug', action='store_true', help='Run in debug mode (20 batches per epoch)')
+parser.add_argument('--loss_name', type=str, choices=['CrossEntropyLoss', 'MSELoss'], default='MSELoss')
+parser.add_argument('--run_name', type=str, default='nc_under_mse')
+args = parser.parse_args()
+
+debug = args.debug
+loss_name = args.loss_name
+
+mlflow.set_tracking_uri(TRACKING_URI)
 
 # dataset parameters
 im_size             = 28
 padded_im_size      = 32
 C                   = 10
 input_ch            = 1
-
-# Optimization Criterion
-# loss_name = 'CrossEntropyLoss'
-loss_name = 'MSELoss'
 
 # Optimization hyperparameters
 lr_decay            = 0.1
@@ -271,9 +283,7 @@ def analysis(graphs, model, criterion_summed, device, num_classes, loader):
     graphs.cos_M.append(coherence(M_/M_norms))
     graphs.cos_W.append(coherence(W.T/W_norms))
 
-model = models.resnet18(pretrained=False, num_classes=C)
-model.conv1 = nn.Conv2d(input_ch, model.conv1.weight.shape[0], 3, 1, 1, bias=False) # Small dataset filter size used by He et al. (2015)
-model.maxpool = nn.MaxPool2d(kernel_size=1, stride=1, padding=0)
+model = TorchvisionResNet(input_dim=(input_ch, padded_im_size, padded_im_size), num_classes=C)
 model = model.to(device)
 
 class features:
@@ -283,7 +293,7 @@ def hook(self, input, output):
     features.value = input[0].clone()
 
 # register hook that saves last-layer input into features
-classifier = model.fc
+classifier = model.classifier()
 classifier.register_forward_hook(hook)
 
 transform = transforms.Compose([transforms.Pad((padded_im_size - im_size)//2),
@@ -411,3 +421,27 @@ for epoch in range(1, epochs + 1):
           plt.title('Decomposition of MSE')
 
         plt.show()
+
+print("Saving model to MLflow...")
+with mlflow.start_run(run_name=args.run_name) as run:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_dir_path = Path(tmp_dir)
+        
+        checkpoint_dir = tmp_dir_path / "checkpoints" / str(epochs)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        torch.save(model.state_dict(), checkpoint_dir / "model.pth")
+        
+        config_dict = {
+            "model": {"name": "resnet_torchvision"},
+            "data": {"data": {"name": "mnist"}},
+            "batch_size": batch_size,
+            "seed": 64,
+            "loss": {"name": "mse" if loss_name == 'MSELoss' else "cross_entropy"},
+            "optimizer": {"name": "sgd"},
+            "scheduler": {"name": "multistep"}
+        }
+        with open(tmp_dir_path / "training_config.json", "w") as f:
+            json.dump(config_dict, f)
+            
+        mlflow.log_artifacts(str(tmp_dir_path))
+        print(f"Logged to MLflow run {run.info.run_id}")

@@ -9,11 +9,12 @@ from .mlp_batchnorm import MLPBatchNormConfig
 from .mlp_extended import MLPExtendedConfig
 from .mlp_nc import MLPNCConfig
 from .resnet import ResNetConfig
+from .resnet_torchvision import ResNetTorchvisionConfig
 from .vgg import VGGConfig
 from .vit import ViTConfig
 
 Model = Annotated[
-    MLPConfig | MLPBatchNormConfig | MLPExtendedConfig | MLPNCConfig | CNNConfig | CNNExtendedConfig | ResNetConfig | VGGConfig | ViTConfig,
+    MLPConfig | MLPBatchNormConfig | MLPExtendedConfig | MLPNCConfig | CNNConfig | CNNExtendedConfig | ResNetConfig | ResNetTorchvisionConfig | VGGConfig | ViTConfig,
     Field(discriminator="name"),
 ]
 
@@ -26,6 +27,7 @@ __all__ = [
     "MLPNCConfig",
     "Model",
     "ResNetConfig",
+    "ResNetTorchvisionConfig",
     "VGGConfig",
     "ViTConfig",
 ]
