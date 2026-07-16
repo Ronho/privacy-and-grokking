@@ -107,16 +107,23 @@ def extract_features(
     model,
     device: torch.device,
     batch_size: int = 512,
+    normalization = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return (features [N, 200], logits [N, C], labels [N]) for the given dataset."""
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     features_list: list[torch.Tensor] = []
     logits_list: list[torch.Tensor] = []
     labels_list: list[torch.Tensor] = []
+    
+    if normalization is not None:
+        mean = torch.tensor(normalization.mean, device=device).view(-1, 1, 1)
+        std = torch.tensor(normalization.std, device=device).view(-1, 1, 1)
 
     with torch.no_grad():
         for imgs, lbls in loader:
             imgs = imgs.to(device)
+            if normalization is not None:
+                imgs = (imgs - mean) / std
             # MLP forward up to the last layer input
             y, z = model(imgs, verbose=True)
             features_list.append(z.cpu())
@@ -127,9 +134,10 @@ def extract_features(
 
 
 print("Extracting train features...")
-train_features, train_logits, train_labels = extract_features(train_dataset, model, device)
+norm_to_apply = data_container.normalization
+train_features, train_logits, train_labels = extract_features(train_dataset, model, device, normalization=norm_to_apply)
 print("Extracting test features...")
-test_features, test_logits, test_labels = extract_features(test_dataset, model, device)
+test_features, test_logits, test_labels = extract_features(test_dataset, model, device, normalization=norm_to_apply)
 
 print(f"  train_features: {train_features.shape}")
 print(f"  test_features : {test_features.shape}")
@@ -197,6 +205,10 @@ if len(train_f_canary) > 0:
     with torch.no_grad():
         for imgs, lbls in sub_loader:
             noisy_imgs = torch.stack([noise_gen(img) for img in imgs]).to(device)
+            if norm_to_apply is not None:
+                mean = torch.tensor(norm_to_apply.mean, device=device).view(-1, 1, 1)
+                std = torch.tensor(norm_to_apply.std, device=device).view(-1, 1, 1)
+                noisy_imgs = (noisy_imgs - mean) / std
             y, z = model(noisy_imgs, verbose=True)
             tcf_list.append(z.cpu())
             tcl_list.append(lbls.cpu())

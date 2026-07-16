@@ -237,6 +237,12 @@ def train_handle(
         last_epoch=cfg.checkpoint if restart else -1,
     )
 
+    norm_mean = None
+    norm_std = None
+    if data_container.normalization is not None:
+        norm_mean = torch.tensor(data_container.normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(data_container.normalization.std, device=device).view(-1, 1, 1)
+
     logger.info("Starting training loop.")
     enable_profiler = os.environ.get("PAG_PROFILE", "").lower() in ("1", "true", "yes")
     step = cfg.checkpoint if restart else 0
@@ -287,6 +293,7 @@ def train_handle(
                         metrics_config=metrics_config,
                         in_canary_indices=in_canary_indices,
                         out_canary_loader=out_canary_loader,
+                        normalization=data_container.normalization,
                     )
                     mlflow.log_metrics(metrics, step=step)
 
@@ -303,6 +310,8 @@ def train_handle(
                     save_model(model, optimizer, step)
 
                 x, y = x.to(device), y.to(device)
+                if norm_mean is not None:
+                    x = (x - norm_mean) / norm_std
                 optimizer.zero_grad()
                 logits = model(x)
                 task_loss = loss_fn(logits, y)
@@ -361,6 +370,7 @@ def train_handle(
         metrics_config=metrics_config,
         in_canary_indices=in_canary_indices,
         out_canary_loader=out_canary_loader,
+        normalization=data_container.normalization,
     )
     save_model(model, optimizer, step)
 

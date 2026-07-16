@@ -41,6 +41,7 @@ def _process_loader(
     last_step: bool,
     collect_features: bool = False,
     collect_inputs: bool = False,
+    normalization = None,
 ):
     device = get_device()
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
@@ -71,12 +72,18 @@ def _process_loader(
 
     result = defaultdict(list)
 
+    if normalization is not None:
+        norm_mean = torch.tensor(normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(normalization.std, device=device).view(-1, 1, 1)
+
     for x, y in loader:
         if _collect:
             label_list_accum.append(y.cpu())
         if collect_inputs:
             input_list_accum.append(x.detach().cpu().reshape(x.size(0), -1))
         x, y = x.to(device), y.to(device)
+        if normalization is not None:
+            x = (x - norm_mean) / norm_std
         logit = model(x)
         prob = F.softmax(logit, dim=1)
         result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)).cpu())
@@ -169,6 +176,7 @@ def evaluate(
     metrics_config: MetricsConfig | None = None,
     in_canary_indices: list[int] | None = None,
     out_canary_loader: torch.utils.data.DataLoader | None = None,
+    normalization = None,
 ) -> dict[str, float]:
     if metrics_config is None:
         metrics_config = MetricsConfig()
@@ -193,10 +201,12 @@ def evaluate(
         train_results, train_activations, train_labels, train_inputs = _process_loader(
             model, train_loader, compute_mm=compute_mm, last_step=last_step,
             collect_features=collect_features, collect_inputs=collect_inputs,
+            normalization=normalization,
         )
         test_results, test_activations, test_labels, test_inputs = _process_loader(
             model, test_loader, compute_mm=compute_mm, last_step=last_step,
             collect_features=collect_features, collect_inputs=collect_inputs,
+            normalization=normalization,
         )
 
         if metrics_config.loss_stats:
@@ -314,7 +324,8 @@ def evaluate(
             from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
             in_canary_losses = train_results["ce_loss"][in_canary_indices]
             out_results, _, _, _ = _process_loader(
-                model, out_canary_loader, compute_mm=False, last_step=False, collect_features=False
+                model, out_canary_loader, compute_mm=False, last_step=False, collect_features=False,
+                normalization=normalization,
             )
             out_canary_losses = out_results["ce_loss"]
             audit_metrics = compute_empirical_epsilon(in_canary_losses, out_canary_losses, step)
