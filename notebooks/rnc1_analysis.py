@@ -50,8 +50,8 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "5c972f89059546bfba4a44b6d1f66baf"
-CHECKPOINT_STEP = 150_000
+RUN_ID = "babeafda216f4fc284b445038e26e664"
+CHECKPOINT_STEP = 350
 TRAIN_MODELS = False
 
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
@@ -1842,7 +1842,7 @@ else:
 print("\n--- Neural Collapse Metrics (Train vs Test) ---")
 from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
 
-last_layer = list(model.children())[-1]
+last_layer = model.classifier()
 W = last_layer.weight
 b = last_layer.bias if hasattr(last_layer, 'bias') else None
 
