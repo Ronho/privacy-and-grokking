@@ -291,7 +291,7 @@ def run_patch_inversion_dlg(run_id, step, img_index, patch_size=5, lr=0.1, num_i
             plt.tight_layout()
             
             temp_dir = tempfile.mkdtemp()
-            out_path = os.path.join(temp_dir, f"patch_inversion_dlg_{img_index}.png")
+            out_path = os.path.join(temp_dir, f"patch_inversion_dlg_{split}_{img_index}.png")
             plt.savefig(out_path, bbox_inches='tight')
             
             mlflow.log_artifact(out_path)
