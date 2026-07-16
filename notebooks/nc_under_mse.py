@@ -433,7 +433,7 @@ with mlflow.start_run(run_name=args.run_name) as run:
         
         config_dict = {
             "model": {"name": "resnet_torchvision"},
-            "data": {"data": {"name": "mnist"}},
+            "data": {"data": {"name": "mnist", "pad": True}},
             "batch_size": batch_size,
             "seed": 64,
             "loss": {"name": "mse" if loss_name == 'MSELoss' else "cross_entropy"},
