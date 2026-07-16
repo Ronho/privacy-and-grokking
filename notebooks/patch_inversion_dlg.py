@@ -42,6 +42,12 @@ def run_patch_inversion_dlg(run_id, step, img_index, patch_size=5, lr=0.1, num_i
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    norm_mean = None
+    norm_std = None
+    if data_container.normalization is not None:
+        norm_mean = torch.tensor(data_container.normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(data_container.normalization.std, device=device).view(-1, 1, 1)
+
     model = config.model(
         input_dim=input_shape,
         num_classes=num_classes,
@@ -99,11 +105,15 @@ def run_patch_inversion_dlg(run_id, step, img_index, patch_size=5, lr=0.1, num_i
     
     def get_confidence(img_tensor):
         with torch.no_grad():
+            if norm_mean is not None:
+                img_tensor_in = (img_tensor - norm_mean) / norm_std
+            else:
+                img_tensor_in = img_tensor
             try:
-                output = model(img_tensor, verbose=True)
+                output = model(img_tensor_in, verbose=True)
                 logits = output[0] if isinstance(output, tuple) else output
             except TypeError:
-                output = model(img_tensor)
+                output = model(img_tensor_in)
                 logits = output[0] if isinstance(output, tuple) else output
             probs = F.softmax(logits, dim=1)
             return probs[0, true_label].item()
@@ -117,11 +127,15 @@ def run_patch_inversion_dlg(run_id, step, img_index, patch_size=5, lr=0.1, num_i
     
     # Compute target gradients from the true image
     model.zero_grad()
+    if norm_mean is not None:
+        target_input = (true_img - norm_mean) / norm_std
+    else:
+        target_input = true_img
     try:
-        target_output = model(true_img, verbose=True)
+        target_output = model(target_input, verbose=True)
         target_logits = target_output[0] if isinstance(target_output, tuple) else target_output
     except TypeError:
-        target_output = model(true_img)
+        target_output = model(target_input)
         target_logits = target_output[0] if isinstance(target_output, tuple) else target_output
         
     target_loss = criterion(target_logits, target_tensor)
@@ -146,11 +160,15 @@ def run_patch_inversion_dlg(run_id, step, img_index, patch_size=5, lr=0.1, num_i
             
             # Forward pass
             model.zero_grad()
+            if norm_mean is not None:
+                model_input = (full_img - norm_mean) / norm_std
+            else:
+                model_input = full_img
             try:
-                output = model(full_img, verbose=True)
+                output = model(model_input, verbose=True)
                 logits = output[0] if isinstance(output, tuple) else output
             except TypeError:
-                output = model(full_img)
+                output = model(model_input)
                 logits = output[0] if isinstance(output, tuple) else output
                 
             dummy_loss = criterion(logits, target_tensor)

@@ -41,6 +41,12 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    norm_mean = None
+    norm_std = None
+    if data_container.normalization is not None:
+        norm_mean = torch.tensor(data_container.normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(data_container.normalization.std, device=device).view(-1, 1, 1)
+
     model = config.model(
         input_dim=input_shape,
         num_classes=num_classes,
@@ -99,6 +105,8 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
     import torch.nn.functional as F
     def get_confidence(img_tensor):
         with torch.no_grad():
+            if norm_mean is not None:
+                img_tensor = (img_tensor - norm_mean) / norm_std
             output = model(img_tensor)
             logits = output[0] if isinstance(output, tuple) else output
             probs = F.softmax(logits, dim=1)
@@ -122,11 +130,15 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             if not mask_lbl.any():
                 continue
             imgs = imgs[mask_lbl].to(device)
+            if norm_mean is not None:
+                imgs_input = (imgs - norm_mean) / norm_std
+            else:
+                imgs_input = imgs
             try:
-                output = model(imgs, verbose=True)
+                output = model(imgs_input, verbose=True)
                 feats = output[1] if isinstance(output, tuple) else output
             except TypeError:
-                output = model(imgs)
+                output = model(imgs_input)
                 feats = output[1] if isinstance(output, tuple) else output
             features_list.append(feats)
             
@@ -139,11 +151,15 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
         if class_mean_features is None:
             return 0.0
         with torch.no_grad():
+            if norm_mean is not None:
+                img_input = (img_tensor - norm_mean) / norm_std
+            else:
+                img_input = img_tensor
             try:
-                output = model(img_tensor, verbose=True)
+                output = model(img_input, verbose=True)
                 feats = output[1] if isinstance(output, tuple) else output
             except TypeError:
-                output = model(img_tensor)
+                output = model(img_input)
                 feats = output[1] if isinstance(output, tuple) else output
             return torch.norm(feats - class_mean_features, p=2).item()
     
@@ -162,11 +178,15 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             full_img[:, :, start_y:start_y+patch_size, start_x:start_x+patch_size] = patch
             
             # Forward pass
+            if norm_mean is not None:
+                model_input = (full_img - norm_mean) / norm_std
+            else:
+                model_input = full_img
             try:
-                output = model(full_img, verbose=True)
+                output = model(model_input, verbose=True)
                 logits, feats = output if isinstance(output, tuple) else (output, output)
             except TypeError:
-                output = model(full_img)
+                output = model(model_input)
                 logits = output[0] if isinstance(output, tuple) else output
                 feats = output[1] if isinstance(output, tuple) else output
                 

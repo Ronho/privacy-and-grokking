@@ -51,6 +51,12 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    norm_mean = None
+    norm_std = None
+    if data_container.normalization is not None:
+        norm_mean = torch.tensor(data_container.normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(data_container.normalization.std, device=device).view(-1, 1, 1)
+
     model = config.model(
         input_dim=input_shape,
         num_classes=num_classes,
@@ -91,7 +97,12 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 jittered_img = dummy_img
             
             # Forward pass
-            output = model(jittered_img)
+            if norm_mean is not None:
+                model_input = (jittered_img - norm_mean) / norm_std
+            else:
+                model_input = jittered_img
+                
+            output = model(model_input)
             if isinstance(output, tuple):
                 logits = output[0]
             else:
