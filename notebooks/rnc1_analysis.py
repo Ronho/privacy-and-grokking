@@ -134,6 +134,27 @@ test_features, test_logits, test_labels = extract_features(test_dataset, model, 
 print(f"  train_features: {train_features.shape}")
 print(f"  test_features : {test_features.shape}")
 
+# ---------------------------------------------------------------------------
+# Model Accuracy
+# ---------------------------------------------------------------------------
+train_preds = train_logits.argmax(dim=1)
+train_acc = (train_preds == train_labels).float().mean().item()
+test_preds = test_logits.argmax(dim=1)
+test_acc = (test_preds == test_labels).float().mean().item()
+print(f"\nOverall Train accuracy : {train_acc:.2%}")
+print(f"Overall Test accuracy  : {test_acc:.2%}")
+
+print("\nPer-class Accuracy:")
+for c in range(num_classes):
+    train_mask = train_labels == c
+    test_mask = test_labels == c
+    
+    c_train_acc = (train_preds[train_mask] == train_labels[train_mask]).float().mean().item() if train_mask.sum() > 0 else float('nan')
+    c_test_acc = (test_preds[test_mask] == test_labels[test_mask]).float().mean().item() if test_mask.sum() > 0 else float('nan')
+    
+    print(f"  Class {c} -> Train: {c_train_acc:.2%} | Test: {c_test_acc:.2%}")
+print()
+
 def get_canary_mask(dataset) -> torch.Tensor:
     if hasattr(dataset, "dataset") and hasattr(dataset.dataset, "canary_indices"):
         canary_ds = dataset.dataset
