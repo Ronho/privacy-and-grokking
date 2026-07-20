@@ -13,7 +13,7 @@ from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
 from privacy_and_grokking.utils.logger import Logger
 
-def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_feature_matching=False, use_context_matching=False, use_dip=False):
+def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_feature_matching=False, use_context_matching=False, use_dip=False, criterion_choice="cross_entropy"):
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -103,17 +103,18 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
         optimizer = optim.Adam([patch], lr=lr)
     
     import torch.nn.functional as F
-    def get_confidence(img_tensor):
+    def get_confidence_and_entropy(img_tensor):
         with torch.no_grad():
             if norm_mean is not None:
                 img_tensor = (img_tensor - norm_mean) / norm_std
             output = model(img_tensor)
             logits = output[0] if isinstance(output, tuple) else output
             probs = F.softmax(logits, dim=1)
-            return probs[0, true_label].item()
+            entropy = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean().item()
+            return probs[0, true_label].item(), entropy
 
-    conf_before = get_confidence(true_img)
-    conf_with_masked = get_confidence(masked_img)
+    conf_before, ent_before = get_confidence_and_entropy(true_img)
+    conf_with_masked, ent_with_masked = get_confidence_and_entropy(masked_img)
     
     # optimizer is defined above based on use_dip
     criterion = config.loss(num_classes=num_classes)
@@ -194,7 +195,10 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             
             dist_to_mean = torch.norm(feats - class_mean_features, p=2).item() if class_mean_features is not None else 0.0
             
-            if use_feature_matching and class_mean_features is not None:
+            if criterion_choice == "negative_entropy":
+                probs = F.softmax(logits, dim=1)
+                loss_main = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
+            elif use_feature_matching and class_mean_features is not None:
                 loss_main = torch.nn.functional.mse_loss(feats, class_mean_features)
             else:
                 loss_main = task_loss
@@ -263,7 +267,7 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             
             # Top row: True, Masked, Reconstructed
             ax1 = fig.add_subplot(gs[0, 0])
-            conf_after = get_confidence(final_img)
+            conf_after, ent_after = get_confidence_and_entropy(final_img)
             dist_before = get_dist_to_mean(true_img)
             dist_with_masked = get_dist_to_mean(masked_img)
             dist_after = get_dist_to_mean(final_img)
@@ -272,17 +276,17 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             mse_final = torch.nn.functional.mse_loss(final_img, true_img).item()
             
             ax1.imshow(to_numpy(true_img), cmap=cmap)
-            ax1.set_title(f"True Image\nConf: {conf_before*100:.1f}% | Dist: {dist_before:.2f}")
+            ax1.set_title(f"True Image\nConf: {conf_before*100:.1f}% | Ent: {ent_before:.4f} | Dist: {dist_before:.2f}")
             ax1.axis('off')
             
             ax2 = fig.add_subplot(gs[0, 2])
             ax2.imshow(to_numpy(masked_img), cmap=cmap)
-            ax2.set_title(f"Initial Patch\nConf: {conf_with_masked*100:.1f}% | Dist: {dist_with_masked:.2f}\nMSE: {mse_masked:.4f}")
+            ax2.set_title(f"Initial Patch\nConf: {conf_with_masked*100:.1f}% | Ent: {ent_with_masked:.4f} | Dist: {dist_with_masked:.2f}\nMSE: {mse_masked:.4f}")
             ax2.axis('off')
             
             ax3 = fig.add_subplot(gs[0, 4])
             ax3.imshow(to_numpy(final_img), cmap=cmap)
-            ax3.set_title(f"Reconstructed\nConf: {conf_after*100:.1f}% | Dist: {dist_after:.2f}\nMSE: {mse_final:.4f}")
+            ax3.set_title(f"Reconstructed\nConf: {conf_after*100:.1f}% | Ent: {ent_after:.4f} | Dist: {dist_after:.2f}\nMSE: {mse_final:.4f}")
             ax3.axis('off')
             
             # Intermediate steps
@@ -293,10 +297,10 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
                 ax = fig.add_subplot(gs[r, c_idx])
                 temp_img = masked_img.clone()
                 temp_img[:, :, start_y:start_y+patch_size, start_x:start_x+patch_size] = p_val
-                conf = get_confidence(temp_img)
+                conf, ent = get_confidence_and_entropy(temp_img)
                 mse_val = torch.nn.functional.mse_loss(temp_img, true_img).item()
                 ax.imshow(to_numpy(temp_img), cmap=cmap)
-                ax.set_title(f"Step {step_i}\nConf: {conf*100:.1f}% | Dist: {dist:.2f}\nMSE: {mse_val:.4f}")
+                ax.set_title(f"Step {step_i}\nConf: {conf*100:.1f}% | Ent: {ent:.4f} | Dist: {dist:.2f}\nMSE: {mse_val:.4f}")
                 ax.axis('off')
             
             plt.tight_layout()
@@ -317,12 +321,13 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
     parser.add_argument("--num_iters", type=int, default=1500, help="Number of optimization iterations")
     parser.add_argument("--split", type=str, default="train", choices=["train", "test"], help="Dataset split")
+    parser.add_argument("--criterion", type=str, default="cross_entropy", choices=["cross_entropy", "negative_entropy"], help="Optimization criterion")
     parser.add_argument("--use_feature_matching", action="store_true", help="Match features to class mean instead of minimizing logits loss")
     parser.add_argument("--use_context_matching", action="store_true", help="Match color/variance of surrounding pixels")
     parser.add_argument("--use_dip", action="store_true", help="Use Deep Image Prior (CNN) instead of raw pixels")
     
     args = parser.parse_args()
-    run_patch_inversion(args.run_id, args.step, args.img_index, args.patch_size, args.lr, args.num_iters, args.split, args.use_context_matching, args.use_feature_matching, args.use_dip)
+    run_patch_inversion(args.run_id, args.step, args.img_index, args.patch_size, args.lr, args.num_iters, args.split, args.use_feature_matching, args.use_context_matching, args.use_dip, args.criterion)
 
 """
 ### How this script works:

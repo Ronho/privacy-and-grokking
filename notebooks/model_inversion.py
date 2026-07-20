@@ -5,6 +5,7 @@ import tempfile
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import mlflow
 from pathlib import Path
@@ -20,7 +21,7 @@ def total_variation_loss(img):
     tv_w = torch.pow(img[:, :, :, 1:] - img[:, :, :, :-1], 2).sum()
     return (tv_h + tv_w) / (c_img * h_img * w_img)
 
-def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, num_iters: int, tv_weight: float, l2_weight: float, jitter: int):
+def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, num_iters: int, tv_weight: float, l2_weight: float, jitter: int, criterion_choice: str = "cross_entropy"):
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -108,7 +109,13 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
             else:
                 logits = output
                 
-            task_loss = criterion(logits, target_tensor)
+            probs = F.softmax(logits, dim=1)
+            entropy = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
+                
+            if criterion_choice == "negative_entropy":
+                task_loss = entropy
+            else:
+                task_loss = criterion(logits, target_tensor)
             tv_loss = total_variation_loss(dummy_img)
             # L2 Sparsity Loss
             l2_loss = torch.norm(dummy_img, p=2) if (is_mnist and l2_weight > 0) else torch.tensor(0.0, device=device)
@@ -123,10 +130,11 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 dummy_img.clamp_(0, 1)
             
             if i % 100 == 0:
-                print(f"Iter {i:04d} | Loss: {loss.item():.4f} | TaskLoss: {task_loss.item():.4f} | TV: {tv_loss.item():.4f} | L2: {l2_loss.item():.4f}")
+                print(f"Iter {i:04d} | Loss: {loss.item():.4f} | TaskLoss: {task_loss.item():.4f} | Ent: {entropy.item():.4f} | TV: {tv_loss.item():.4f} | L2: {l2_loss.item():.4f}")
                 mlflow.log_metrics({
                     f"mi_c{target_class}_total_loss": loss.item(), 
                     f"mi_c{target_class}_task_loss": task_loss.item(), 
+                    f"mi_c{target_class}_entropy": entropy.item(),
                     f"mi_c{target_class}_tv_loss": tv_loss.item(),
                     f"mi_c{target_class}_l2_loss": l2_loss.item()
                 }, step=i)
@@ -134,6 +142,18 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
         # Save output
         with torch.no_grad():
             final_img = dummy_img.clone().detach().cpu()
+            
+            # calculate final entropy
+            if norm_mean is not None:
+                final_input = (dummy_img - norm_mean) / norm_std
+            else:
+                final_input = dummy_img
+            
+            final_out = model(final_input)
+            final_logits = final_out[0] if isinstance(final_out, tuple) else final_out
+            final_probs = F.softmax(final_logits, dim=1)
+            final_entropy = -torch.sum(final_probs * torch.log(final_probs + 1e-8), dim=1).mean().item()
+            
             # Image is already clamped to [0, 1], so we don't apply min/max scaling which artificially boosts noise
             
             # Plot
@@ -142,7 +162,7 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 plt.imshow(final_img[0, 0].numpy(), cmap='gray')
             else:
                 plt.imshow(final_img[0].permute(1, 2, 0).numpy())
-            plt.title(f"Inverted Image (Class {target_class})")
+            plt.title(f"Inverted Image (Class {target_class})\nEnt: {final_entropy:.4f}")
             plt.axis('off')
             
             temp_dir = tempfile.mkdtemp()
@@ -162,7 +182,8 @@ if __name__ == "__main__":
     parser.add_argument('--tv_weight', type=float, default=1e-3, help="Weight for Total Variation loss.")
     parser.add_argument('--l2_weight', type=float, default=0.01, help="Weight for L2 sparsity loss.")
     parser.add_argument('--jitter', type=int, default=2, help="Max random pixel shift for robust optimization.")
+    parser.add_argument('--criterion', type=str, default='cross_entropy', choices=['cross_entropy', 'negative_entropy'], help="Loss criterion for inversion.")
     
     args = parser.parse_args()
     
-    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.tv_weight, args.l2_weight, args.jitter)
+    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.tv_weight, args.l2_weight, args.jitter, args.criterion)
