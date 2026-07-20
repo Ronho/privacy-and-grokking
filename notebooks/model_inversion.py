@@ -109,16 +109,7 @@ def run_model_inversion(run_id, step, target_class=0, lr=0.1, num_iters=500, jit
     print(f"Starting Model Inversion for target class: {target_class}")
     
     with mlflow.start_run(run_id=run_id):
-        log_dict = {
-            f"mi_c{target_class}_checkpoint_step": step,
-            f"mi_c{target_class}_lr": lr,
-            f"mi_c{target_class}_num_iters": num_iters,
-            f"mi_c{target_class}_jitter": jitter
-        }
-        for k, v in losses_dict.items():
-            log_dict[f"mi_c{target_class}_loss_{k}"] = v
-        mlflow.log_params(log_dict)
-        
+
         intermediate_imgs = []
         
         for i in range(num_iters):
