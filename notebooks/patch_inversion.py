@@ -13,7 +13,7 @@ from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
 from privacy_and_grokking.utils.logger import Logger
 
-def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_feature_matching=False, use_context_matching=False, use_dip=False, criterion_choice="cross_entropy"):
+def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_feature_matching=False, use_context_matching=False, use_dip=False, criterion_choice="ce_loss"):
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -195,7 +195,7 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             
             dist_to_mean = torch.norm(feats - class_mean_features, p=2).item() if class_mean_features is not None else 0.0
             
-            if criterion_choice == "negative_entropy":
+            if criterion_choice == "negative_entropy_loss":
                 probs = F.softmax(logits, dim=1)
                 loss_main = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
             elif use_feature_matching and class_mean_features is not None:
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
     parser.add_argument("--num_iters", type=int, default=1500, help="Number of optimization iterations")
     parser.add_argument("--split", type=str, default="train", choices=["train", "test"], help="Dataset split")
-    parser.add_argument("--criterion", type=str, default="cross_entropy", choices=["cross_entropy", "negative_entropy"], help="Optimization criterion")
+    parser.add_argument("--criterion", type=str, default="ce_loss", choices=["ce_loss", "negative_entropy_loss"], help="Optimization criterion")
     parser.add_argument("--use_feature_matching", action="store_true", help="Match features to class mean instead of minimizing logits loss")
     parser.add_argument("--use_context_matching", action="store_true", help="Match color/variance of surrounding pixels")
     parser.add_argument("--use_dip", action="store_true", help="Use Deep Image Prior (CNN) instead of raw pixels")
