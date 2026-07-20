@@ -138,7 +138,7 @@ def run_model_inversion(run_id, step, target_class=0, lr=0.1, num_iters=500, jit
             else:
                 model_input = jittered_img
                 
-            if criterion_choice in ["internal_representation_mse_loss", "internal_representation_mse_loss_and_negative_entropy_loss"]:
+            if losses_dict.get("repr_mse", 0.0) > 0.0:
                 try:
                     output = model(model_input, verbose=True)
                     logits, feats = output if isinstance(output, tuple) else (output, output)
