@@ -1194,6 +1194,56 @@ if all_tr_multi and all_te_multi:
         print(f"Global Multi-Boundary MIA  -> Acc: {global_multi_mia['acc']:.1%} | TPR: {global_multi_mia['tpr']:.1%} | FPR: {global_multi_mia['fpr']:.1%}")
 
 # ---------------------------------------------------------------------------
+# Leakage-Free Multi-Boundary MIA (Weight-based Proxy)
+# ---------------------------------------------------------------------------
+print("\n--- Leakage-Free Multi-Boundary MIA (Weight Proxy) ---")
+
+# Estimate the global feature norm scale from a pool of all candidate data (Train + Test)
+# to properly scale the weight proxy without knowing which is which.
+pool_features = torch.cat([train_f_normal, test_features.float()])
+pool_mean_norm = pool_features.norm(dim=1).mean().item()
+
+all_tr_leak_free = []
+all_te_leak_free = []
+
+for c in range(num_classes):
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr]
+    f_te = test_features.float()[mask_te]
+    
+    if len(f_tr) < 2 or len(f_te) < 2:
+        continue
+        
+    # The proxy for the class mean is the weight vector, normalized and scaled to typical feature magnitude
+    w_proxy = w[c] / torch.norm(w[c]) * pool_mean_norm
+    w_proxy = w_proxy.unsqueeze(0) # Shape: (1, 200)
+    
+    # Calculate the ideal margins using ONLY the weight proxy (leakage free!)
+    proxy_margins = get_all_margins(w_proxy, c)
+    proxy_margin_mean = proxy_margins[0] 
+    
+    tr_margins = get_all_margins(f_tr, c)
+    te_margins = get_all_margins(f_te, c)
+    
+    # Distance to the proxy margins instead of the empirical train margins
+    tr_margin_dist_lf = np.linalg.norm(tr_margins - proxy_margin_mean, axis=1)
+    te_margin_dist_lf = np.linalg.norm(te_margins - proxy_margin_mean, axis=1)
+    
+    all_tr_leak_free.append(tr_margin_dist_lf)
+    all_te_leak_free.append(te_margin_dist_lf)
+    
+    mia_result = evaluate_mia(tr_margin_dist_lf, te_margin_dist_lf)
+    if mia_result:
+        print(f"Class {c} Leakage-Free MIA -> Acc: {mia_result['acc']:.1%} | TPR: {mia_result['tpr']:.1%} | FPR: {mia_result['fpr']:.1%}")
+
+if all_tr_leak_free and all_te_leak_free:
+    global_lf_mia = evaluate_mia(np.concatenate(all_tr_leak_free), np.concatenate(all_te_leak_free))
+    if global_lf_mia:
+        print(f"Global Leakage-Free MIA  -> Acc: {global_lf_mia['acc']:.1%} | TPR: {global_lf_mia['tpr']:.1%} | FPR: {global_lf_mia['fpr']:.1%}")
+
+# ---------------------------------------------------------------------------
 # Exact Match Verification (Proving the coordinates are identical)
 # ---------------------------------------------------------------------------
 print("\n--- Exact Match Verification ---")
@@ -1244,6 +1294,8 @@ plot_roc(ax_roc, train_ortho_noise, test_ortho_noise, "Orthogonal Noise", "orang
 
 if all_tr_multi and all_te_multi:
     plot_roc(ax_roc, np.concatenate(all_tr_multi), np.concatenate(all_te_multi), "Multi-Boundary Margin", "green", invert=True)
+if all_tr_leak_free and all_te_leak_free:
+    plot_roc(ax_roc, np.concatenate(all_tr_leak_free), np.concatenate(all_te_leak_free), "Leakage-Free Multi-Boundary", "cyan", invert=True)
 
 ax_roc.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
 
