@@ -358,10 +358,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     losses_dict = {}
+    valid_keys = {"ce", "neg_ent", "conf", "mse", "repr_mse", "tv"}
     for pair in args.losses.split(','):
         if '=' in pair:
             k, v = pair.split('=')
-            losses_dict[k.strip()] = float(v.strip())
+            k = k.strip()
+            if k not in valid_keys:
+                raise ValueError(f"Invalid loss key: '{k}'. Valid keys are: {', '.join(sorted(valid_keys))}")
+            losses_dict[k] = float(v.strip())
             
     run_patch_inversion(args.run_id, args.step, args.img_index, args.patch_size, args.lr, args.num_iters, args.split, args.use_context_matching, args.use_dip, losses_dict)
 
