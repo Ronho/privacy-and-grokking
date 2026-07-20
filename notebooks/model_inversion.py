@@ -21,7 +21,9 @@ def total_variation_loss(img):
     tv_w = torch.pow(img[:, :, :, 1:] - img[:, :, :, :-1], 2).sum()
     return (tv_h + tv_w) / (c_img * h_img * w_img)
 
-def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, num_iters: int, tv_weight: float, l2_weight: float, jitter: int, criterion_choice: str = "ce_loss", entropy_weight: float = 0.1):
+def run_model_inversion(run_id, step, target_class=0, lr=0.1, num_iters=500, jitter=2, losses_dict=None):
+    if losses_dict is None:
+        losses_dict = {'ce': 1.0, 'tv': 1e-3, 'l2': 0.01}
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -74,8 +76,9 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
     
     target_tensor = torch.tensor([target_class], device=device)
     
+    # If the criterion involves internal representation, we need the feature means of the target class
     class_mean_features = None
-    if criterion_choice in ["internal_representation_mse_loss", "internal_representation_mse_loss_and_negative_entropy_loss"]:
+    if losses_dict.get("repr_mse", 0.0) > 0.0:
         print("Computing class mean for target label...")
         train_loader = torch.utils.data.DataLoader(data_container.train, batch_size=256, shuffle=False)
         features_list = []
@@ -106,14 +109,15 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
     print(f"Starting Model Inversion for target class: {target_class}")
     
     with mlflow.start_run(run_id=run_id):
-        mlflow.log_params({
+        log_dict = {
             f"mi_c{target_class}_checkpoint_step": step,
             f"mi_c{target_class}_lr": lr,
             f"mi_c{target_class}_num_iters": num_iters,
-            f"mi_c{target_class}_tv_weight": tv_weight,
-            f"mi_c{target_class}_l2_weight": l2_weight,
             f"mi_c{target_class}_jitter": jitter
-        })
+        }
+        for k, v in losses_dict.items():
+            log_dict[f"mi_c{target_class}_loss_{k}"] = v
+        mlflow.log_params(log_dict)
         
         intermediate_imgs = []
         
@@ -146,44 +150,46 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 output = model(model_input)
                 logits = output[0] if isinstance(output, tuple) else output
                 
+            loss = torch.tensor(0.0, device=device)
+            metrics_vals = {}
+            
             probs = F.softmax(logits, dim=1)
-            entropy_loss = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
-            conf_val = probs[:, target_class].mean()
-            ce_val = criterion(logits, target_tensor)
             
-            target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
-            output_mse_val = F.mse_loss(probs, target_one_hot)
-            
-            repr_mse_val = None
-            if criterion_choice in ["internal_representation_mse_loss", "internal_representation_mse_loss_and_negative_entropy_loss"] and class_mean_features is not None:
-                repr_mse_val = torch.nn.functional.mse_loss(feats, class_mean_features)
+            if losses_dict.get("ce", 0) > 0:
+                ce_val = criterion(logits, target_tensor)
+                loss = loss + losses_dict["ce"] * ce_val
+                metrics_vals["ce"] = ce_val.item()
                 
-            if criterion_choice == "ce_loss":
-                task_loss = ce_val
-            elif criterion_choice == "negative_entropy_loss":
-                task_loss = entropy_loss
-            elif criterion_choice == "internal_representation_mse_loss":
-                task_loss = repr_mse_val if repr_mse_val is not None else torch.tensor(0.0, device=device)
-            elif criterion_choice == "internal_representation_mse_loss_and_negative_entropy_loss":
-                task_loss = (repr_mse_val if repr_mse_val is not None else torch.tensor(0.0, device=device)) + entropy_weight * entropy_loss
-            elif criterion_choice == "ce_loss_and_negative_entropy_loss":
-                task_loss = ce_val + entropy_weight * entropy_loss
-            elif criterion_choice == "conf_loss":
-                task_loss = -conf_val
-            elif criterion_choice == "conf_loss_and_negative_entropy_loss":
-                task_loss = -conf_val + entropy_weight * entropy_loss
-            elif criterion_choice == "mse_loss":
-                task_loss = output_mse_val
-            elif criterion_choice == "mse_loss_and_negative_entropy_loss":
-                task_loss = output_mse_val + entropy_weight * entropy_loss
-            else:
-                task_loss = ce_val
+            if losses_dict.get("neg_ent", 0) > 0:
+                entropy_loss = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
+                loss = loss + losses_dict["neg_ent"] * entropy_loss
+                metrics_vals["neg_ent"] = entropy_loss.item()
                 
-            tv_loss = total_variation_loss(dummy_img)
-            # L2 Sparsity Loss
-            l2_loss = torch.norm(dummy_img, p=2) if (is_mnist and l2_weight > 0) else torch.tensor(0.0, device=device)
-            
-            loss = task_loss + tv_weight * tv_loss + l2_weight * l2_loss
+            if losses_dict.get("conf", 0) > 0:
+                conf_val = probs[:, target_class].mean()
+                loss = loss - losses_dict["conf"] * conf_val  # minimize negative confidence
+                metrics_vals["conf"] = conf_val.item()
+                
+            if losses_dict.get("mse", 0) > 0:
+                target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
+                output_mse_val = F.mse_loss(probs, target_one_hot)
+                loss = loss + losses_dict["mse"] * output_mse_val
+                metrics_vals["mse"] = output_mse_val.item()
+                
+            if losses_dict.get("repr_mse", 0) > 0 and class_mean_features is not None:
+                repr_mse_val = torch.nn.functional.mse_loss(feats, class_mean_features, reduction='sum')
+                loss = loss + losses_dict["repr_mse"] * repr_mse_val
+                metrics_vals["repr_mse"] = repr_mse_val.item()
+                
+            if losses_dict.get("tv", 0) > 0:
+                tv_loss = total_variation_loss(dummy_img)
+                loss = loss + losses_dict["tv"] * tv_loss
+                metrics_vals["tv"] = tv_loss.item()
+                
+            if losses_dict.get("l2", 0) > 0 and is_mnist:
+                l2_loss = torch.norm(dummy_img, p=2)
+                loss = loss + losses_dict["l2"] * l2_loss
+                metrics_vals["l2"] = l2_loss.item()
             
             loss.backward()
             optimizer.step()
@@ -193,30 +199,18 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 dummy_img.clamp_(0, 1)
             
             if i % 100 == 0 or i == num_iters - 1:
-                metrics = {
-                    "ce_loss": ce_val.item(),
-                    "entropy": entropy_loss.item(),
-                    "conf": conf_val.item(),
-                    "output_mse": output_mse_val.item(),
-                    "repr_mse": repr_mse_val.item() if repr_mse_val is not None else None
-                }
-                
                 parts = [f"Iter {i:04d}", f"Total: {loss.item():.4f}"]
-                if "internal_representation_mse" in criterion_choice and metrics["repr_mse"] is not None:
-                    parts.append(f"ReprMSE: {metrics['repr_mse']:.4f}")
-                elif "mse_loss" in criterion_choice:
-                    parts.append(f"OutMSE: {metrics['output_mse']:.4f}")
+                if "repr_mse" in metrics_vals: parts.append(f"ReprMSE: {metrics_vals['repr_mse']:.4f}")
+                if "mse" in metrics_vals: parts.append(f"OutMSE: {metrics_vals['mse']:.4f}")
+                if "ce" in metrics_vals: parts.append(f"CELoss: {metrics_vals['ce']:.4f}")
+                if "conf" in metrics_vals: parts.append(f"Conf: {metrics_vals['conf']:.4f}")
+                if "neg_ent" in metrics_vals: parts.append(f"NegEnt: {metrics_vals['neg_ent']:.4f}")
+                if "tv" in metrics_vals: parts.append(f"TV: {metrics_vals['tv']:.4f}")
+                if "l2" in metrics_vals: parts.append(f"L2: {metrics_vals['l2']:.4f}")
                 
-                if "ce_loss" in criterion_choice:
-                    parts.append(f"CELoss: {metrics['ce_loss']:.4f}")
-                if "conf_loss" in criterion_choice:
-                    parts.append(f"Conf: {metrics['conf']:.4f}")
-                if "negative_entropy" in criterion_choice:
-                    parts.append(f"NegEnt: {metrics['entropy']:.4f}")
-                    
                 print(" | ".join(parts))
                 
-                intermediate_imgs.append((i, dummy_img.clone().detach(), metrics))
+                intermediate_imgs.append((i, dummy_img.clone().detach(), metrics_vals.copy()))
         
         # Plotting
         with torch.no_grad():
@@ -229,17 +223,21 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
 
             def get_title(step_i, metrics_dict):
                 lines = [f"Step {step_i}"]
-                if "internal_representation_mse" in criterion_choice and metrics_dict.get("repr_mse") is not None:
-                    lines.append(f"Repr MSE: {metrics_dict['repr_mse']:.4f}")
-                elif "mse_loss" in criterion_choice:
-                    lines.append(f"Out MSE: {metrics_dict['output_mse']:.4f}")
-                    
-                if "ce_loss" in criterion_choice:
-                    lines.append(f"CE Loss: {metrics_dict['ce_loss']:.4f}")
-                if "conf_loss" in criterion_choice:
-                    lines.append(f"Conf: {metrics_dict['conf']:.4f}")
-                if "negative_entropy" in criterion_choice:
-                    lines.append(f"Neg Ent: {metrics_dict['entropy']:.4f}")
+                
+                # Primary Criteria
+                if "repr_mse" in metrics_dict: lines.append(f"Repr MSE: {metrics_dict['repr_mse']:.4f}")
+                if "mse" in metrics_dict: lines.append(f"Out MSE: {metrics_dict['mse']:.4f}")
+                if "ce" in metrics_dict: lines.append(f"CE Loss: {metrics_dict['ce']:.4f}")
+                if "conf" in metrics_dict: lines.append(f"Conf: {metrics_dict['conf']:.4f}")
+                if "neg_ent" in metrics_dict: lines.append(f"Neg Ent: {metrics_dict['neg_ent']:.4f}")
+                
+                # Regularization components
+                reg_parts = []
+                if "tv" in metrics_dict: reg_parts.append(f"TV: {metrics_dict['tv']:.4f}")
+                if "l2" in metrics_dict: reg_parts.append(f"L2: {metrics_dict['l2']:.4f}")
+                if reg_parts:
+                    lines.append(" | ".join(reg_parts))
+                
                 return "\n".join(lines)
             
             num_intermediates = len(intermediate_imgs)
@@ -274,16 +272,15 @@ if __name__ == "__main__":
     parser.add_argument("--target_class", type=int, default=0, help="Class to invert")
     parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
     parser.add_argument('--num_iters', type=int, default=500, help="Number of optimization iterations.")
-    parser.add_argument('--tv_weight', type=float, default=1e-3, help="Weight for Total Variation loss.")
-    parser.add_argument('--l2_weight', type=float, default=0.01, help="Weight for L2 sparsity loss.")
     parser.add_argument('--jitter', type=int, default=2, help="Max random pixel shift for robust optimization.")
-    parser.add_argument('--criterion', type=str, default='ce_loss', choices=[
-        'ce_loss', 'negative_entropy_loss', 'internal_representation_mse_loss', 
-        'internal_representation_mse_loss_and_negative_entropy_loss', 'ce_loss_and_negative_entropy_loss', 
-        'conf_loss', 'conf_loss_and_negative_entropy_loss', 'mse_loss', 'mse_loss_and_negative_entropy_loss'
-    ], help="Loss criterion for inversion.")
-    parser.add_argument('--entropy_weight', type=float, default=0.1, help="Weight for entropy when combined with other losses.")
+    parser.add_argument('--losses', type=str, default='ce=1.0,tv=0.001,l2=0.01', help="Comma separated list of loss_name=weight. E.g. 'ce=1.0,neg_ent=0.1,tv=0.001'")
     
     args = parser.parse_args()
     
-    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.tv_weight, args.l2_weight, args.jitter, args.criterion, args.entropy_weight)
+    losses_dict = {}
+    for pair in args.losses.split(','):
+        if '=' in pair:
+            k, v = pair.split('=')
+            losses_dict[k.strip()] = float(v.strip())
+            
+    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.jitter, losses_dict)

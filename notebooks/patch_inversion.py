@@ -13,7 +13,9 @@ from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
 from privacy_and_grokking.utils.logger import Logger
 
-def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_feature_matching=False, use_context_matching=False, use_dip=False, criterion_choice="ce_loss"):
+def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_iters=1000, dataset_split="train", use_context_matching=False, use_dip=False, losses_dict=None):
+    if losses_dict is None:
+        losses_dict = {'ce': 1.0, 'tv': 1e-4}
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -121,32 +123,32 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
     
     print(f"Starting Patch Inversion for True Label: {true_label}")
     
-    print("Computing class mean for true label...")
-    model.eval()
-    train_loader = torch.utils.data.DataLoader(data_container.train, batch_size=256, shuffle=False)
-    features_list = []
-    with torch.no_grad():
-        for imgs, lbls in train_loader:
-            mask_lbl = lbls == true_label
-            if not mask_lbl.any():
-                continue
-            imgs = imgs[mask_lbl].to(device)
-            if norm_mean is not None:
-                imgs_input = (imgs - norm_mean) / norm_std
-            else:
-                imgs_input = imgs
-            try:
-                output = model(imgs_input, verbose=True)
-                feats = output[1] if isinstance(output, tuple) else output
-            except TypeError:
-                output = model(imgs_input)
-                feats = output[1] if isinstance(output, tuple) else output
-            features_list.append(feats)
-            
-    if len(features_list) > 0:
-        class_mean_features = torch.cat(features_list).mean(dim=0, keepdim=True)
-    else:
-        class_mean_features = None
+    class_mean_features = None
+    if losses_dict.get("repr_mse", 0.0) > 0.0:
+        print("Computing class mean for true label...")
+        model.eval()
+        train_loader = torch.utils.data.DataLoader(data_container.train, batch_size=256, shuffle=False)
+        features_list = []
+        with torch.no_grad():
+            for imgs, lbls in train_loader:
+                mask_lbl = lbls == true_label
+                if not mask_lbl.any():
+                    continue
+                imgs = imgs[mask_lbl].to(device)
+                if norm_mean is not None:
+                    imgs_input = (imgs - norm_mean) / norm_std
+                else:
+                    imgs_input = imgs
+                try:
+                    output = model(imgs_input, verbose=True)
+                    feats = output[1] if isinstance(output, tuple) else output
+                except TypeError:
+                    output = model(imgs_input)
+                    feats = output[1] if isinstance(output, tuple) else output
+                features_list.append(feats)
+                
+        if len(features_list) > 0:
+            class_mean_features = torch.cat(features_list).mean(dim=0, keepdim=True)
         
     def get_dist_to_mean(img_tensor):
         if class_mean_features is None:
@@ -191,25 +193,46 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
                 logits = output[0] if isinstance(output, tuple) else output
                 feats = output[1] if isinstance(output, tuple) else output
                 
-            task_loss = criterion(logits, target_tensor)
+            loss = torch.tensor(0.0, device=device)
+            metrics_vals = {}
+            probs = F.softmax(logits, dim=1)
             
-            dist_to_mean = torch.norm(feats - class_mean_features, p=2).item() if class_mean_features is not None else 0.0
+            # Using original target label for patch inversion (which is to reconstruct the true patch)
+            target_tensor = torch.tensor([true_label], device=device)
             
-            if criterion_choice == "negative_entropy_loss":
-                probs = F.softmax(logits, dim=1)
-                loss_main = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
-            elif use_feature_matching and class_mean_features is not None:
-                loss_main = torch.nn.functional.mse_loss(feats, class_mean_features)
-            else:
-                loss_main = task_loss
-            
-            # TV loss to make patch smoother
-            tv_h = torch.pow(patch[:, :, 1:, :] - patch[:, :, :-1, :], 2).sum()
-            tv_w = torch.pow(patch[:, :, :, 1:] - patch[:, :, :, :-1], 2).sum()
-            tv_loss = (tv_h + tv_w) / (c * patch_size * patch_size)
-            
-            # Context matching loss
-            context_loss = 0.0
+            if losses_dict.get("ce", 0) > 0:
+                ce_val = criterion(logits, target_tensor)
+                loss = loss + losses_dict["ce"] * ce_val
+                metrics_vals["ce"] = ce_val.item()
+                
+            if losses_dict.get("neg_ent", 0) > 0:
+                entropy_loss = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
+                loss = loss + losses_dict["neg_ent"] * entropy_loss
+                metrics_vals["neg_ent"] = entropy_loss.item()
+                
+            if losses_dict.get("conf", 0) > 0:
+                conf_val = probs[:, true_label].mean()
+                loss = loss - losses_dict["conf"] * conf_val
+                metrics_vals["conf"] = conf_val.item()
+                
+            if losses_dict.get("mse", 0) > 0:
+                target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
+                output_mse_val = F.mse_loss(probs, target_one_hot)
+                loss = loss + losses_dict["mse"] * output_mse_val
+                metrics_vals["mse"] = output_mse_val.item()
+                
+            if losses_dict.get("repr_mse", 0) > 0 and class_mean_features is not None:
+                repr_mse_val = torch.nn.functional.mse_loss(feats, class_mean_features, reduction='sum')
+                loss = loss + losses_dict["repr_mse"] * repr_mse_val
+                metrics_vals["repr_mse"] = repr_mse_val.item()
+                
+            if losses_dict.get("tv", 0) > 0:
+                tv_h = torch.pow(patch[:, :, 1:, :] - patch[:, :, :-1, :], 2).sum()
+                tv_w = torch.pow(patch[:, :, :, 1:] - patch[:, :, :, :-1], 2).sum()
+                tv_loss = (tv_h + tv_w) / (c * patch_size * patch_size)
+                loss = loss + losses_dict["tv"] * tv_loss
+                metrics_vals["tv"] = tv_loss.item()
+
             if use_context_matching:
                 y_min = max(0, start_y - 2)
                 y_max = min(h, start_y + patch_size + 2)
@@ -221,11 +244,9 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
                 patch_mean = patch.mean(dim=(0, 2, 3))
                 patch_var = patch.var(dim=(0, 2, 3))
                 context_loss = torch.nn.functional.mse_loss(patch_mean, surround_mean) + torch.nn.functional.mse_loss(patch_var, surround_var)
-            
-            # small weight for TV loss
-            loss = loss_main + 1e-4 * tv_loss
-            if use_context_matching:
                 loss += 0.1 * context_loss
+            
+            dist_to_mean = torch.norm(feats - class_mean_features, p=2).item() if class_mean_features is not None else 0.0
             
             loss.backward()
             optimizer.step()
@@ -233,7 +254,16 @@ def run_patch_inversion(run_id, step, img_index=0, patch_size=5, lr=0.1, num_ite
             if i % 100 == 0:
                 intermediate_patches.append((i, patch.clone().detach()))
                 intermediate_dists.append(dist_to_mean)
-                print(f"Iter {i:04d} | Loss: {loss.item():.4f} | Dist2Mean: {dist_to_mean:.4f} | TaskLoss: {task_loss.item():.4f} | TV: {tv_loss.item():.4f}")
+                
+                parts = [f"Iter {i:04d}", f"Total: {loss.item():.4f}"]
+                if "repr_mse" in metrics_vals: parts.append(f"ReprMSE: {metrics_vals['repr_mse']:.4f}")
+                if "mse" in metrics_vals: parts.append(f"OutMSE: {metrics_vals['mse']:.4f}")
+                if "ce" in metrics_vals: parts.append(f"CELoss: {metrics_vals['ce']:.4f}")
+                if "conf" in metrics_vals: parts.append(f"Conf: {metrics_vals['conf']:.4f}")
+                if "neg_ent" in metrics_vals: parts.append(f"NegEnt: {metrics_vals['neg_ent']:.4f}")
+                if "tv" in metrics_vals: parts.append(f"TV: {metrics_vals['tv']:.4f}")
+                
+                print(" | ".join(parts))
         
         # Plotting
         with torch.no_grad():
@@ -321,13 +351,19 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
     parser.add_argument("--num_iters", type=int, default=1500, help="Number of optimization iterations")
     parser.add_argument("--split", type=str, default="train", choices=["train", "test"], help="Dataset split")
-    parser.add_argument("--criterion", type=str, default="ce_loss", choices=["ce_loss", "negative_entropy_loss"], help="Optimization criterion")
-    parser.add_argument("--use_feature_matching", action="store_true", help="Match features to class mean instead of minimizing logits loss")
+    parser.add_argument("--losses", type=str, default='ce=1.0,tv=1e-4', help="Comma separated list of loss_name=weight")
     parser.add_argument("--use_context_matching", action="store_true", help="Match color/variance of surrounding pixels")
     parser.add_argument("--use_dip", action="store_true", help="Use Deep Image Prior (CNN) instead of raw pixels")
     
     args = parser.parse_args()
-    run_patch_inversion(args.run_id, args.step, args.img_index, args.patch_size, args.lr, args.num_iters, args.split, args.use_feature_matching, args.use_context_matching, args.use_dip, args.criterion)
+    
+    losses_dict = {}
+    for pair in args.losses.split(','):
+        if '=' in pair:
+            k, v = pair.split('=')
+            losses_dict[k.strip()] = float(v.strip())
+            
+    run_patch_inversion(args.run_id, args.step, args.img_index, args.patch_size, args.lr, args.num_iters, args.split, args.use_context_matching, args.use_dip, losses_dict)
 
 """
 ### How this script works:
