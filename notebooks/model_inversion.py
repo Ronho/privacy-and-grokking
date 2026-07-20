@@ -21,7 +21,7 @@ def total_variation_loss(img):
     tv_w = torch.pow(img[:, :, :, 1:] - img[:, :, :, :-1], 2).sum()
     return (tv_h + tv_w) / (c_img * h_img * w_img)
 
-def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, num_iters: int, tv_weight: float, l2_weight: float, jitter: int, criterion_choice: str = "cross_entropy"):
+def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, num_iters: int, tv_weight: float, l2_weight: float, jitter: int, criterion_choice: str = "cross_entropy", entropy_weight: float = 0.1):
     Logger().setup()
     
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -73,6 +73,35 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
     criterion = config.loss(num_classes=num_classes)
     
     target_tensor = torch.tensor([target_class], device=device)
+    
+    class_mean_features = None
+    if criterion_choice in ["mse", "entropy_and_mse"]:
+        print("Computing class mean for target label...")
+        train_loader = torch.utils.data.DataLoader(data_container.train, batch_size=256, shuffle=False)
+        features_list = []
+        with torch.no_grad():
+            for imgs, lbls in train_loader:
+                mask_lbl = lbls == target_class
+                if not mask_lbl.any():
+                    continue
+                imgs = imgs[mask_lbl].to(device)
+                if norm_mean is not None:
+                    imgs_input = (imgs - norm_mean) / norm_std
+                else:
+                    imgs_input = imgs
+                try:
+                    output = model(imgs_input, verbose=True)
+                    feats = output[1] if isinstance(output, tuple) else output
+                except TypeError:
+                    output = model(imgs_input)
+                    feats = output[1] if isinstance(output, tuple) else output
+                features_list.append(feats)
+                
+        if len(features_list) > 0:
+            class_mean_features = torch.cat(features_list).mean(dim=0, keepdim=True)
+        else:
+            print(f"Warning: No samples found for class {target_class} in training set.")
+            class_mean_features = None
 
     print(f"Starting Model Inversion for target class: {target_class}")
     
@@ -103,17 +132,35 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
             else:
                 model_input = jittered_img
                 
-            output = model(model_input)
-            if isinstance(output, tuple):
-                logits = output[0]
+            if criterion_choice in ["mse", "entropy_and_mse"]:
+                try:
+                    output = model(model_input, verbose=True)
+                    logits, feats = output if isinstance(output, tuple) else (output, output)
+                except TypeError:
+                    output = model(model_input)
+                    logits = output[0] if isinstance(output, tuple) else output
+                    feats = output[1] if isinstance(output, tuple) else output
             else:
-                logits = output
+                output = model(model_input)
+                logits = output[0] if isinstance(output, tuple) else output
                 
             probs = F.softmax(logits, dim=1)
             entropy = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
                 
-            if criterion_choice == "negative_entropy":
+            if criterion_choice == "cross_entropy":
+                task_loss = criterion(logits, target_tensor)
+            elif criterion_choice == "negative_entropy":
                 task_loss = entropy
+            elif criterion_choice == "mse":
+                task_loss = torch.nn.functional.mse_loss(feats, class_mean_features) if class_mean_features is not None else torch.tensor(0.0, device=device)
+            elif criterion_choice == "entropy_and_mse":
+                mse_loss = torch.nn.functional.mse_loss(feats, class_mean_features) if class_mean_features is not None else torch.tensor(0.0, device=device)
+                task_loss = mse_loss + entropy_weight * entropy
+            elif criterion_choice == "entropy_and_ce":
+                task_loss = criterion(logits, target_tensor) + entropy_weight * entropy
+            elif criterion_choice == "entropy_and_conf":
+                conf_loss = -probs[:, target_class].mean()
+                task_loss = conf_loss + entropy_weight * entropy
             else:
                 task_loss = criterion(logits, target_tensor)
             tv_loss = total_variation_loss(dummy_img)
@@ -182,8 +229,9 @@ if __name__ == "__main__":
     parser.add_argument('--tv_weight', type=float, default=1e-3, help="Weight for Total Variation loss.")
     parser.add_argument('--l2_weight', type=float, default=0.01, help="Weight for L2 sparsity loss.")
     parser.add_argument('--jitter', type=int, default=2, help="Max random pixel shift for robust optimization.")
-    parser.add_argument('--criterion', type=str, default='cross_entropy', choices=['cross_entropy', 'negative_entropy'], help="Loss criterion for inversion.")
+    parser.add_argument('--criterion', type=str, default='cross_entropy', choices=['cross_entropy', 'negative_entropy', 'mse', 'entropy_and_mse', 'entropy_and_ce', 'entropy_and_conf'], help="Loss criterion for inversion.")
+    parser.add_argument('--entropy_weight', type=float, default=0.1, help="Weight for entropy when combined with other losses.")
     
     args = parser.parse_args()
     
-    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.tv_weight, args.l2_weight, args.jitter, args.criterion)
+    run_model_inversion(args.run_id, args.step, args.target_class, args.lr, args.num_iters, args.tv_weight, args.l2_weight, args.jitter, args.criterion, args.entropy_weight)
