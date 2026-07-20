@@ -115,6 +115,8 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
             f"mi_c{target_class}_jitter": jitter
         })
         
+        intermediate_imgs = []
+        
         for i in range(num_iters):
             optimizer.zero_grad()
             
@@ -146,31 +148,37 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
                 
             probs = F.softmax(logits, dim=1)
             entropy_loss = -torch.sum(probs * torch.log(probs + 1e-8), dim=1).mean()
+            conf_val = probs[:, target_class].mean()
+            ce_val = criterion(logits, target_tensor)
+            
+            target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
+            output_mse_val = F.mse_loss(probs, target_one_hot)
+            
+            repr_mse_val = None
+            if criterion_choice in ["internal_representation_mse_loss", "internal_representation_mse_loss_and_negative_entropy_loss"] and class_mean_features is not None:
+                repr_mse_val = torch.nn.functional.mse_loss(feats, class_mean_features)
                 
             if criterion_choice == "ce_loss":
-                task_loss = criterion(logits, target_tensor)
+                task_loss = ce_val
             elif criterion_choice == "negative_entropy_loss":
                 task_loss = entropy_loss
             elif criterion_choice == "internal_representation_mse_loss":
-                task_loss = torch.nn.functional.mse_loss(feats, class_mean_features) if class_mean_features is not None else torch.tensor(0.0, device=device)
+                task_loss = repr_mse_val if repr_mse_val is not None else torch.tensor(0.0, device=device)
             elif criterion_choice == "internal_representation_mse_loss_and_negative_entropy_loss":
-                mse_val = torch.nn.functional.mse_loss(feats, class_mean_features) if class_mean_features is not None else torch.tensor(0.0, device=device)
-                task_loss = mse_val + entropy_weight * entropy_loss
+                task_loss = (repr_mse_val if repr_mse_val is not None else torch.tensor(0.0, device=device)) + entropy_weight * entropy_loss
             elif criterion_choice == "ce_loss_and_negative_entropy_loss":
-                task_loss = criterion(logits, target_tensor) + entropy_weight * entropy_loss
+                task_loss = ce_val + entropy_weight * entropy_loss
             elif criterion_choice == "conf_loss":
-                task_loss = -probs[:, target_class].mean()
+                task_loss = -conf_val
             elif criterion_choice == "conf_loss_and_negative_entropy_loss":
-                conf_val = -probs[:, target_class].mean()
-                task_loss = conf_val + entropy_weight * entropy_loss
+                task_loss = -conf_val + entropy_weight * entropy_loss
             elif criterion_choice == "mse_loss":
-                target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
-                task_loss = F.mse_loss(probs, target_one_hot)
+                task_loss = output_mse_val
             elif criterion_choice == "mse_loss_and_negative_entropy_loss":
-                target_one_hot = F.one_hot(target_tensor, num_classes=num_classes).float()
-                task_loss = F.mse_loss(probs, target_one_hot) + entropy_weight * entropy_loss
+                task_loss = output_mse_val + entropy_weight * entropy_loss
             else:
-                task_loss = criterion(logits, target_tensor)
+                task_loss = ce_val
+                
             tv_loss = total_variation_loss(dummy_img)
             # L2 Sparsity Loss
             l2_loss = torch.norm(dummy_img, p=2) if (is_mnist and l2_weight > 0) else torch.tensor(0.0, device=device)
@@ -184,48 +192,80 @@ def run_model_inversion(run_id: str, step: int, target_class: int, lr: float, nu
             with torch.no_grad():
                 dummy_img.clamp_(0, 1)
             
-            if i % 100 == 0:
-                print(f"Iter {i:04d} | Loss: {loss.item():.4f} | TaskLoss: {task_loss.item():.4f} | Ent: {entropy_loss.item():.4f} | TV: {tv_loss.item():.4f} | L2: {l2_loss.item():.4f}")
-                mlflow.log_metrics({
-                    f"mi_c{target_class}_total_loss": loss.item(), 
-                    f"mi_c{target_class}_task_loss": task_loss.item(), 
-                    f"mi_c{target_class}_entropy": entropy_loss.item(),
-                    f"mi_c{target_class}_tv_loss": tv_loss.item(),
-                    f"mi_c{target_class}_l2_loss": l2_loss.item()
-                }, step=i)
+            if i % 100 == 0 or i == num_iters - 1:
+                metrics = {
+                    "ce_loss": ce_val.item(),
+                    "entropy": entropy_loss.item(),
+                    "conf": conf_val.item(),
+                    "output_mse": output_mse_val.item(),
+                    "repr_mse": repr_mse_val.item() if repr_mse_val is not None else None
+                }
+                
+                parts = [f"Iter {i:04d}", f"Total: {loss.item():.4f}"]
+                if "internal_representation_mse" in criterion_choice and metrics["repr_mse"] is not None:
+                    parts.append(f"ReprMSE: {metrics['repr_mse']:.4f}")
+                elif "mse_loss" in criterion_choice:
+                    parts.append(f"OutMSE: {metrics['output_mse']:.4f}")
+                
+                if "ce_loss" in criterion_choice:
+                    parts.append(f"CELoss: {metrics['ce_loss']:.4f}")
+                if "conf_loss" in criterion_choice:
+                    parts.append(f"Conf: {metrics['conf']:.4f}")
+                if "negative_entropy" in criterion_choice:
+                    parts.append(f"NegEnt: {metrics['entropy']:.4f}")
+                    
+                print(" | ".join(parts))
+                
+                intermediate_imgs.append((i, dummy_img.clone().detach(), metrics))
         
-        # Save output
+        # Plotting
         with torch.no_grad():
-            final_img = dummy_img.clone().detach().cpu()
+            def to_numpy(t):
+                t = t.clone().detach().cpu()
+                if input_shape[0] == 1:
+                    return t[0, 0].numpy()
+                else:
+                    return t[0].permute(1, 2, 0).numpy()
+
+            def get_title(step_i, metrics_dict):
+                lines = [f"Step {step_i}"]
+                if "internal_representation_mse" in criterion_choice and metrics_dict.get("repr_mse") is not None:
+                    lines.append(f"Repr MSE: {metrics_dict['repr_mse']:.4f}")
+                elif "mse_loss" in criterion_choice:
+                    lines.append(f"Out MSE: {metrics_dict['output_mse']:.4f}")
+                    
+                if "ce_loss" in criterion_choice:
+                    lines.append(f"CE Loss: {metrics_dict['ce_loss']:.4f}")
+                if "conf_loss" in criterion_choice:
+                    lines.append(f"Conf: {metrics_dict['conf']:.4f}")
+                if "negative_entropy" in criterion_choice:
+                    lines.append(f"Neg Ent: {metrics_dict['entropy']:.4f}")
+                return "\n".join(lines)
             
-            # calculate final entropy
-            if norm_mean is not None:
-                final_input = (dummy_img - norm_mean) / norm_std
-            else:
-                final_input = dummy_img
+            num_intermediates = len(intermediate_imgs)
+            cols = min(5, num_intermediates)
+            rows = (num_intermediates + cols - 1) // cols
             
-            final_out = model(final_input)
-            final_logits = final_out[0] if isinstance(final_out, tuple) else final_out
-            final_probs = F.softmax(final_logits, dim=1)
-            final_entropy = -torch.sum(final_probs * torch.log(final_probs + 1e-8), dim=1).mean().item()
+            fig = plt.figure(figsize=(3 * cols, 3 * rows))
+            gs = fig.add_gridspec(rows, cols)
+            cmap = 'gray' if input_shape[0] == 1 else None
             
-            # Image is already clamped to [0, 1], so we don't apply min/max scaling which artificially boosts noise
-            
-            # Plot
-            plt.figure(figsize=(4, 4))
-            if input_shape[0] == 1:
-                plt.imshow(final_img[0, 0].numpy(), cmap='gray')
-            else:
-                plt.imshow(final_img[0].permute(1, 2, 0).numpy())
-            plt.title(f"Inverted Image (Class {target_class})\nEnt: {final_entropy:.4f}")
-            plt.axis('off')
+            for idx, (step_i, img_val, metrics_dict) in enumerate(intermediate_imgs):
+                r = idx // cols
+                c_idx = idx % cols
+                ax = fig.add_subplot(gs[r, c_idx])
+                ax.imshow(to_numpy(img_val), cmap=cmap)
+                ax.set_title(get_title(step_i, metrics_dict), fontsize=9)
+                ax.axis('off')
+                
+            plt.tight_layout()
             
             temp_dir = tempfile.mkdtemp()
-            out_path = os.path.join(temp_dir, f"inverted_class_{target_class}.png")
+            out_path = os.path.join(temp_dir, f"model_inversion_class_{target_class}.png")
             plt.savefig(out_path, bbox_inches='tight')
             
             mlflow.log_artifact(out_path)
-            print(f"Reconstructed image saved to MLflow artifacts.")
+            print(f"Reconstructed images grid saved to MLflow artifacts.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
