@@ -879,22 +879,27 @@ def plot_margin_histogram(ax, f, l, w, b, c_pos, c_neg):
         
     x_min = min(margins_pos.min(), margins_neg.min()) - 0.5
     x_max = max(margins_pos.max(), margins_neg.max()) + 0.5
-    bins = np.linspace(x_min, x_max, 50)
+    bins = np.linspace(x_min, x_max, 1500)
     
     counts_pos, edges_pos = np.histogram(margins_pos, bins=bins, density=False)
-    ax.bar(edges_pos[:-1], counts_pos, width=np.diff(edges_pos), align="edge", color="steelblue", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_pos}")
+    ax.bar(edges_pos[:-1], counts_pos, width=np.diff(edges_pos), align="edge", color="steelblue", alpha=1.0, edgecolor="none", label=f"class {c_pos}")
     
     counts_neg, edges_neg = np.histogram(margins_neg, bins=bins, density=False)
-    ax.bar(edges_neg[:-1], -counts_neg, width=np.diff(edges_neg), align="edge", color="peru", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_neg}")
+    ax.bar(edges_neg[:-1], -counts_neg, width=np.diff(edges_neg), align="edge", color="peru", alpha=1.0, edgecolor="none", label=f"class {c_neg}")
     
     ax.axhline(0, color="black", linewidth=0.8)
     ax.axvline(0, color="black", linewidth=1.5)
     
-    ax.set_yticks([])
+    ax.set_yscale('symlog', linthresh=1.0)
+    
+    # Custom y-ticks to show logarithmic nature
+    ax.set_yticks([-1000, -100, -10, 0, 10, 100, 1000])
+    ax.set_yticklabels(['1000', '100', '10', '0', '10', '100', '1000'])
+    
     ax.set_xlabel(f"Signed distance to decision boundary (class {c_pos} vs. class {c_neg})")
-    ax.set_ylabel("Count")
+    ax.set_ylabel("Count (Log Scale)")
     ax.legend(fontsize=8, frameon=True)
-    ax.grid(True, axis='x', linestyle='-', alpha=0.5)
+    ax.grid(True, axis='both', linestyle=':', alpha=0.5)
 
 for i, (c1, c2) in enumerate(pairs_to_plot):
     ax_tr = axes_margin_hist[i, 0]
