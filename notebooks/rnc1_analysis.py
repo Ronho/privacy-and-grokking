@@ -922,6 +922,49 @@ print(f"Margin histogram plots saved to: {out_path_margin_hist}")
 
 
 # ---------------------------------------------------------------------------
+# Confidence Histograms
+# ---------------------------------------------------------------------------
+print("\n--- Confidence Histograms ---")
+
+import torch.nn.functional as F
+
+train_probs = F.softmax(train_logits, dim=1)
+test_probs = F.softmax(test_logits, dim=1)
+
+# Get confidence of the true class
+train_conf = train_probs[torch.arange(len(train_labels)), train_labels].detach().cpu().numpy()
+test_conf = test_probs[torch.arange(len(test_labels)), test_labels].detach().cpu().numpy()
+
+fig_conf, axes_conf = plt.subplots(1, 2, figsize=(15, 6))
+
+bins_conf = np.linspace(0, 1.0, 100)
+
+axes_conf[0].hist(train_conf, bins=bins_conf, color="steelblue", alpha=0.7, edgecolor="none")
+axes_conf[0].set_yscale('symlog', linthresh=1.0)
+axes_conf[0].set_yticks([0, 10, 100, 1000, 10000])
+axes_conf[0].set_yticklabels(['0', '10', '100', '1000', '10000'])
+axes_conf[0].set_title("Train Confidence (True Class)")
+axes_conf[0].set_xlabel("Confidence")
+axes_conf[0].set_ylabel("Count (Log Scale)")
+axes_conf[0].grid(True, linestyle=':', alpha=0.5)
+
+axes_conf[1].hist(test_conf, bins=bins_conf, color="peru", alpha=0.7, edgecolor="none")
+axes_conf[1].set_yscale('symlog', linthresh=1.0)
+axes_conf[1].set_yticks([0, 10, 100, 1000, 10000])
+axes_conf[1].set_yticklabels(['0', '10', '100', '1000', '10000'])
+axes_conf[1].set_title("Test Confidence (True Class)")
+axes_conf[1].set_xlabel("Confidence")
+axes_conf[1].set_ylabel("Count (Log Scale)")
+axes_conf[1].grid(True, linestyle=':', alpha=0.5)
+
+fig_conf.suptitle(f"Model Confidence for True Class\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_conf.tight_layout()
+
+out_path_conf = OUT_DIR / "rnc1_confidence_hist.png"
+fig_conf.savefig(out_path_conf, dpi=150, bbox_inches="tight")
+print(f"Confidence histogram saved to: {out_path_conf}")
+
+# ---------------------------------------------------------------------------
 # Margin-based MIA
 # ---------------------------------------------------------------------------
 print("\n--- Margin-based Membership Inference Attack ---")
