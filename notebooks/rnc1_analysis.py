@@ -1952,6 +1952,183 @@ else:
 # ---------------------------------------------------------------------------
 # Neural Collapse Metrics (NC1 - NC4)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 1. Directional Analysis: Overshooting vs Undershooting (Cosine Sim to Mean)
+# ---------------------------------------------------------------------------
+print("\n--- Directional Analysis 1: Overshooting vs Undershooting ---")
+fig_dir1, axes_dir1 = plt.subplots(2, 5, figsize=(20, 8))
+axes_dir1 = axes_dir1.flatten()
+
+for c in range(num_classes):
+    ax = axes_dir1[c]
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr]
+    f_te = test_features.float()[mask_te]
+    
+    if len(f_tr) < 2 or len(f_te) == 0:
+        continue
+        
+    mu_c = class_means_unscaled[c]
+    norm_mu_c = torch.norm(mu_c)
+    
+    if norm_mu_c.item() == 0:
+        continue
+        
+    r_tr = f_tr - mu_c
+    r_te = f_te - mu_c
+    
+    dist_tr = torch.norm(r_tr, dim=1)
+    dist_te = torch.norm(r_te, dim=1)
+    
+    # Cosine similarity to mu_c: <r, mu_c> / (||r|| * ||mu_c||)
+    cos_tr = torch.matmul(r_tr, mu_c) / (dist_tr * norm_mu_c + 1e-9)
+    cos_te = torch.matmul(r_te, mu_c) / (dist_te * norm_mu_c + 1e-9)
+    
+    ax.scatter(dist_tr.numpy(), cos_tr.numpy(), color='blue', alpha=0.3, s=10, label='Train')
+    ax.scatter(dist_te.numpy(), cos_te.numpy(), color='orange', alpha=0.3, s=10, label='Test')
+    
+    ax.axhline(0, color='black', linestyle='--', linewidth=1)
+    
+    ax.set_title(f"Class {c}")
+    if c >= 5:
+        ax.set_xlabel("Distance to Mean ||r_i||")
+    if c % 5 == 0:
+        ax.set_ylabel("Cos Sim to Mean")
+    if c == 0:
+        ax.legend()
+        
+fig_dir1.suptitle(f"Overshooting vs Undershooting (Cosine Sim to Class Mean)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_dir1.tight_layout()
+out_path_dir1 = OUT_DIR / "rnc1_dir1_overshooting.png"
+fig_dir1.savefig(out_path_dir1, dpi=150, bbox_inches="tight")
+print(f"Overshooting analysis plot saved to: {out_path_dir1}")
+
+# ---------------------------------------------------------------------------
+# 3. Directional Analysis: Intra-Class Variance (PCA of Residuals)
+# ---------------------------------------------------------------------------
+print("\n--- Directional Analysis 3: Intra-Class Variance (PCA of Residuals) ---")
+fig_dir3, axes_dir3 = plt.subplots(2, 5, figsize=(20, 8))
+axes_dir3 = axes_dir3.flatten()
+
+for c in range(num_classes):
+    ax = axes_dir3[c]
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr]
+    f_te = test_features.float()[mask_te]
+    
+    if len(f_tr) < 3 or len(f_te) == 0:
+        continue
+        
+    mu_c = class_means_unscaled[c]
+    r_tr = (f_tr - mu_c).numpy()
+    r_te = (f_te - mu_c).numpy()
+    
+    pca_res = PCA(n_components=2)
+    pca_res.fit(r_tr)
+    
+    r_tr_pca = pca_res.transform(r_tr)
+    r_te_pca = pca_res.transform(r_te)
+    
+    ax.scatter(r_tr_pca[:, 0], r_tr_pca[:, 1], color='blue', alpha=0.3, s=10, label='Train')
+    ax.scatter(r_te_pca[:, 0], r_te_pca[:, 1], color='orange', alpha=0.3, s=10, label='Test')
+    
+    ax.axhline(0, color='black', linestyle='--', linewidth=0.5)
+    ax.axvline(0, color='black', linestyle='--', linewidth=0.5)
+    
+    ax.set_title(f"Class {c} (EV: {pca_res.explained_variance_ratio_[0]:.1%}, {pca_res.explained_variance_ratio_[1]:.1%})")
+    if c >= 5:
+        ax.set_xlabel("PC 1 of Train Residuals")
+    if c % 5 == 0:
+        ax.set_ylabel("PC 2 of Train Residuals")
+    if c == 0:
+        ax.legend()
+
+fig_dir3.suptitle(f"Intra-Class Variance (PCA of Train Residuals)\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_dir3.tight_layout()
+out_path_dir3 = OUT_DIR / "rnc1_dir3_intra_class_pca.png"
+fig_dir3.savefig(out_path_dir3, dpi=150, bbox_inches="tight")
+print(f"Intra-Class PCA plot saved to: {out_path_dir3}")
+
+# ---------------------------------------------------------------------------
+# 5. Directional Analysis: Spherical Distribution (Pairwise Cosine Similarities)
+# ---------------------------------------------------------------------------
+print("\n--- Directional Analysis 5: Spherical Distribution (Pairwise Cos Sim) ---")
+fig_dir5, axes_dir5 = plt.subplots(2, 5, figsize=(20, 8))
+axes_dir5 = axes_dir5.flatten()
+
+for c in range(num_classes):
+    ax = axes_dir5[c]
+    mask_tr = train_l_normal == c
+    mask_te = test_labels == c
+    
+    f_tr = train_f_normal[mask_tr]
+    f_te = test_features.float()[mask_te]
+    
+    if len(f_tr) < 2 or len(f_te) < 2:
+        continue
+        
+    mu_c = class_means_unscaled[c]
+    r_tr = f_tr - mu_c
+    r_te = f_te - mu_c
+    
+    # Normalize residuals
+    v_tr = F.normalize(r_tr, p=2, dim=1)
+    v_te = F.normalize(r_te, p=2, dim=1)
+    
+    # Subsample to max 500 to avoid huge matrices
+    if len(v_tr) > 500: v_tr = v_tr[torch.randperm(len(v_tr))[:500]]
+    if len(v_te) > 500: v_te = v_te[torch.randperm(len(v_te))[:500]]
+    
+    cos_tr_tr = torch.matmul(v_tr, v_tr.T)
+    cos_te_te = torch.matmul(v_te, v_te.T)
+    cos_tr_te = torch.matmul(v_tr, v_te.T)
+    
+    # Extract upper triangle without diagonal for tr_tr and te_te
+    idx_tr = torch.triu_indices(len(v_tr), len(v_tr), offset=1)
+    vals_tr_tr = cos_tr_tr[idx_tr[0], idx_tr[1]].numpy()
+    
+    idx_te = torch.triu_indices(len(v_te), len(v_te), offset=1)
+    vals_te_te = cos_te_te[idx_te[0], idx_te[1]].numpy()
+    
+    vals_tr_te = cos_tr_te.flatten().numpy()
+    
+    x_grid = np.linspace(-1, 1, 200)
+    
+    try:
+        kde_tr_tr = gaussian_kde(vals_tr_tr, bw_method="scott")
+        ax.plot(x_grid, kde_tr_tr(x_grid), color='blue', label='Train-Train')
+    except: pass
+    
+    try:
+        kde_te_te = gaussian_kde(vals_te_te, bw_method="scott")
+        ax.plot(x_grid, kde_te_te(x_grid), color='orange', linestyle='--', label='Test-Test')
+    except: pass
+    
+    try:
+        kde_tr_te = gaussian_kde(vals_tr_te, bw_method="scott")
+        ax.plot(x_grid, kde_tr_te(x_grid), color='green', linestyle=':', label='Train-Test')
+    except: pass
+    
+    ax.set_title(f"Class {c}")
+    ax.set_xlim([-1, 1])
+    if c >= 5:
+        ax.set_xlabel("Pairwise Cosine Similarity")
+    if c % 5 == 0:
+        ax.set_ylabel("Density")
+    if c == 0:
+        ax.legend(fontsize=8)
+        
+fig_dir5.suptitle(f"Spherical Isotropy: Pairwise Cosine Similarities of Residuals\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_dir5.tight_layout()
+out_path_dir5 = OUT_DIR / "rnc1_dir5_spherical_isotropy.png"
+fig_dir5.savefig(out_path_dir5, dpi=150, bbox_inches="tight")
+print(f"Spherical isotropy plot saved to: {out_path_dir5}")
+
+
 print("\n--- Neural Collapse Metrics (Train vs Test) ---")
 from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
 
