@@ -856,6 +856,67 @@ print(f"Margin plots saved to: {out_path_margin}")
 
 
 # ---------------------------------------------------------------------------
+# Margin Histogram Plots (Decision Boundaries)
+# ---------------------------------------------------------------------------
+fig_margin_hist, axes_margin_hist = plt.subplots(len(pairs_to_plot), 2, figsize=(16, 3.5 * len(pairs_to_plot)), sharex=False)
+
+def plot_margin_histogram(ax, f, l, w, b, c_pos, c_neg):
+    mask_pos = (l == c_pos)
+    mask_neg = (l == c_neg)
+    
+    w_diff = w[c_pos] - w[c_neg]
+    b_diff = b[c_pos] - b[c_neg]
+    norm_w_diff = torch.norm(w_diff, p=2)
+    
+    def get_margins(f_subset):
+        return (torch.matmul(f_subset, w_diff) + b_diff) / norm_w_diff
+        
+    margins_pos = get_margins(f[mask_pos]).numpy()
+    margins_neg = get_margins(f[mask_neg]).numpy()
+    
+    if len(margins_pos) < 2 or len(margins_neg) < 2:
+        return
+        
+    x_min = min(margins_pos.min(), margins_neg.min()) - 0.5
+    x_max = max(margins_pos.max(), margins_neg.max()) + 0.5
+    bins = np.linspace(x_min, x_max, 50)
+    
+    counts_pos, edges_pos = np.histogram(margins_pos, bins=bins, density=False)
+    ax.bar(edges_pos[:-1], counts_pos, width=np.diff(edges_pos), align="edge", color="steelblue", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_pos}")
+    
+    counts_neg, edges_neg = np.histogram(margins_neg, bins=bins, density=False)
+    ax.bar(edges_neg[:-1], -counts_neg, width=np.diff(edges_neg), align="edge", color="peru", alpha=1.0, edgecolor="black", linewidth=0.5, label=f"class {c_neg}")
+    
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.axvline(0, color="black", linewidth=1.5)
+    
+    ax.set_yticks([])
+    ax.set_xlabel(f"Signed distance to decision boundary (class {c_pos} vs. class {c_neg})")
+    ax.set_ylabel("Count")
+    ax.legend(fontsize=8, frameon=True)
+    ax.grid(True, axis='x', linestyle='-', alpha=0.5)
+
+for i, (c1, c2) in enumerate(pairs_to_plot):
+    ax_tr = axes_margin_hist[i, 0]
+    ax_te = axes_margin_hist[i, 1]
+    
+    plot_margin_histogram(ax_tr, train_f_normal, train_l_normal, w, b, c1, c2)
+    plot_margin_histogram(ax_te, test_features.float(), test_labels, w, b, c1, c2)
+    
+    if i == 0:
+        ax_tr.set_title("Train Examples (Histograms)", fontsize=12)
+        ax_te.set_title("Unseen Examples (Histograms)", fontsize=12)
+
+fig_margin_hist.suptitle(f"Margins of individual examples (Histograms)\nModel {RUN_ID[:8]}…  |  step {CHECKPOINT_STEP:,}", fontsize=14)
+fig_margin_hist.tight_layout()
+
+out_path_margin_hist = OUT_DIR / "rnc1_margin_hist_plots.png"
+fig_margin_hist.savefig(out_path_margin_hist, dpi=150, bbox_inches="tight")
+print(f"Margin histogram plots saved to: {out_path_margin_hist}")
+# plt.show()
+
+
+# ---------------------------------------------------------------------------
 # Margin-based MIA
 # ---------------------------------------------------------------------------
 print("\n--- Margin-based Membership Inference Attack ---")
