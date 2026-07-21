@@ -1,9 +1,13 @@
+import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, TypeVar
+import ast
 
 import typer
+from pydantic import BaseModel
 from typer import Typer
 
 from privacy_and_grokking.config import TrainConfig
@@ -14,6 +18,65 @@ from privacy_and_grokking.utils import Logger
 from privacy_and_grokking.visualize import visualization_multi_handler, visualization_single_handler
 
 app = Typer(name="Privacy and Grokking CLI", pretty_exceptions_enable=False)
+
+T = TypeVar("T", bound=BaseModel)
+
+def _dicts_differ(input_dict: dict[str, Any], validated_dict: dict[str, Any], path: str = "") -> str | None:
+    for k, v in input_dict.items():
+        if k not in validated_dict:
+            return f"{path}{k}"
+        if isinstance(v, dict) and isinstance(validated_dict[k], dict):
+            res = _dicts_differ(v, validated_dict[k], path=f"{path}{k}.")
+            if res:
+                return res
+    return None
+
+def _parse_value(val_str: str) -> Any:
+    if val_str.lower() == "true":
+        return True
+    if val_str.lower() == "false":
+        return False
+    if val_str.lower() in ("none", "null"):
+        return None
+    try:
+        return json.loads(val_str)
+    except json.JSONDecodeError:
+        try:
+            return ast.literal_eval(val_str)
+        except (ValueError, SyntaxError):
+            return val_str
+
+def apply_overrides(cfg: T, overrides: list[str] | None) -> T:
+    if not overrides:
+        return cfg
+    
+    cfg_dict = cfg.model_dump(mode="json")
+    
+    for override in overrides:
+        if "=" not in override:
+            raise typer.BadParameter(f"Invalid override format: {override}. Expected key.path=value.")
+        
+        path, val_str = override.split("=", 1)
+        keys = path.split(".")
+        
+        val = _parse_value(val_str)
+            
+        curr_dict = cfg_dict
+        for key in keys[:-1]:
+            if key not in curr_dict or curr_dict[key] is None:
+                curr_dict[key] = {}
+            curr_dict = curr_dict[key]
+            
+        curr_dict[keys[-1]] = val
+
+    validated = type(cfg).model_validate(cfg_dict)
+    validated_dict = validated.model_dump(mode="json")
+    
+    diff_path = _dicts_differ(cfg_dict, validated_dict)
+    if diff_path:
+        raise typer.BadParameter(f"Unknown config field: {diff_path}")
+        
+    return validated
 
 CONFIG_DIR = Path(__file__).parent.parent.parent / "configs"
 
@@ -59,6 +122,7 @@ def train(
     run_name: str | None = None,
     checkpoint_frequency: int = LOG_FREQUENCY,
     profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
+    overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
 ):
     if profile:
         os.environ["PAG_PROFILE"] = "1"
@@ -67,6 +131,7 @@ def train(
         cfg.seed = seed
     if cfg.data.mask is not None:
         cfg.data.mask.model_index = mask_index
+    cfg = apply_overrides(cfg, overrides)
     training(
         exp_name=exp_name,
         total_steps=total_steps,
@@ -157,6 +222,7 @@ def pipeline(
     run_id: str | None = None,
     checkpoint: int | None = None,
     checkpoint_frequency: int = LOG_FREQUENCY,
+    overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
 ):
     if checkpoint is not None and run_id is None:
         raise typer.BadParameter("--run-id is required when --checkpoint is provided.")
@@ -178,6 +244,7 @@ def pipeline(
                 cfg.seed = seed
             if cfg.data.mask is not None:
                 cfg.data.mask.model_index = mask_index
+            cfg = apply_overrides(cfg, overrides)
             logger.info("Running train step.")
         current_run_id = training(
             exp_name=exp_name,
