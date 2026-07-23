@@ -1130,11 +1130,16 @@ print("\n--- Removing Orthogonal Noise (PCA on Class Means) ---")
 pca_collapse = PCA(n_components=num_classes - 1, random_state=0)
 pca_collapse.fit(class_means_unscaled.numpy())
 
+def safe_pca_transform(pca_obj, tensor_data):
+    if len(tensor_data) == 0:
+        return torch.empty((0, pca_obj.n_components_), dtype=torch.float32)
+    return torch.tensor(pca_obj.transform(tensor_data.numpy()), dtype=torch.float32)
+
 # 2. Transform all features into this noise-free subspace
-train_f_clean = torch.tensor(pca_collapse.transform(train_f_normal.numpy()))
-test_f_clean  = torch.tensor(pca_collapse.transform(test_features.float().numpy()))
-canary_f_clean = torch.tensor(pca_collapse.transform(train_f_canary.numpy())) if len(train_f_canary) > 0 else torch.empty(0)
-train_f_all_clean = torch.tensor(pca_collapse.transform(train_features.float().numpy()))
+train_f_clean = safe_pca_transform(pca_collapse, train_f_normal)
+test_f_clean  = safe_pca_transform(pca_collapse, test_features.float())
+canary_f_clean = safe_pca_transform(pca_collapse, train_f_canary)
+train_f_all_clean = safe_pca_transform(pca_collapse, train_features.float())
 
 # Compute RNC1 on the cleaned features
 rnc1_train_clean = compute_rnc1(train_f_all_clean, train_labels)
@@ -1143,12 +1148,12 @@ print(f"Clean RNC1 (train set) : {rnc1_train_clean:.6f}")
 print(f"Clean RNC1 (test set)  : {rnc1_test_clean:.6f}")
 
 # 3. Re-evaluate Distances to Class Mean in the clean subspace
-class_means_clean = torch.tensor(pca_collapse.transform(class_means_unscaled.numpy()))
+class_means_clean = safe_pca_transform(pca_collapse, class_means_unscaled)
 
 train_dists_clean = distances_to_class_mean(train_f_clean, train_l_normal, class_means_clean)
 test_dists_clean  = distances_to_class_mean(test_f_clean, test_labels, class_means_clean)
 canary_dists_clean = distances_to_class_mean(canary_f_clean, train_l_canary, class_means_clean)
-test_f_canary_clean = torch.tensor(pca_collapse.transform(test_f_canary.numpy())) if len(test_f_canary) > 0 else torch.empty(0)
+test_f_canary_clean = safe_pca_transform(pca_collapse, test_f_canary)
 test_canary_dists_clean = distances_to_class_mean(test_f_canary_clean, test_l_canary, class_means_clean)
 
 train_test_dists_clean = {}
@@ -1494,6 +1499,11 @@ print("Training ML models to distinguish Train vs Test using ALL 200 dimensions.
 # Prepare dataset: Features = 200D vectors, Labels = 1 (Train), 0 (Test)
 # We sample an equal number of train and test points
 min_samples = min(len(train_f_normal), len(test_features))
+
+if min_samples < 2:
+    print("Insufficient normal train samples available for Meta-Classifier MIA. Ending analysis early.")
+    import sys
+    sys.exit(0)
 
 X_train_mia = np.concatenate([
     train_f_normal[:min_samples].numpy(),
