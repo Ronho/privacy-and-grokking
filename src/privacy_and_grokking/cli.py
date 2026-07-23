@@ -274,7 +274,7 @@ def pipeline(
 
 def _handle(line):
     line = line.strip()
-    if not line:
+    if not line or line.startswith("#"):
         return
     with Logger() as logger:
         logger.info("Processing command.", command=line)
