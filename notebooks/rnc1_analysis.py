@@ -1501,9 +1501,7 @@ print("Training ML models to distinguish Train vs Test using ALL 200 dimensions.
 min_samples = min(len(train_f_normal), len(test_features))
 
 if min_samples < 2:
-    print("Insufficient normal train samples available for Meta-Classifier MIA. Ending analysis early.")
-    import sys
-    sys.exit(0)
+    print("Insufficient normal train samples available for Meta-Classifier MIA. Skipping these specific sections instead of exiting.")
 
 X_train_mia = np.concatenate([
     train_f_normal[:min_samples].numpy(),
@@ -1515,9 +1513,10 @@ y_train_mia = np.concatenate([
 ])
 
 # Train/Test split specifically for evaluating the Meta-Classifier
-X_mia_tr, X_mia_te, y_mia_tr, y_mia_te = train_test_split(X_train_mia, y_train_mia, test_size=0.3, random_state=42)
+if min_samples >= 2:
+    X_mia_tr, X_mia_te, y_mia_tr, y_mia_te = train_test_split(X_train_mia, y_train_mia, test_size=0.3, random_state=42)
 
-if TRAIN_MODELS:
+if min_samples >= 2 and TRAIN_MODELS:
     # 1. Logistic Regression (Finds optimal linear combination of all 200 dimensions)
     lr = LogisticRegression(max_iter=1000)
     lr.fit(X_mia_tr, y_mia_tr)
@@ -1826,25 +1825,26 @@ from sklearn.metrics import accuracy_score
 print("\n--- Theoretical Discriminator Limit (Overfitted 1-NN) ---")
 print("Training an ultimate overfitted discriminator on ALL balanced data and evaluating on the SAME data...")
 
-# We use the balanced dataset (X_train_mia, y_train_mia) created earlier (200D space)
-# 1. Evaluate in 200D space
-nn_200d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
-nn_200d.fit(X_train_mia, y_train_mia)
-preds_200d = nn_200d.predict(X_train_mia)
-acc_200d = accuracy_score(y_train_mia, preds_200d)
+if min_samples >= 2:
+    # We use the balanced dataset (X_train_mia, y_train_mia) created earlier (200D space)
+    # 1. Evaluate in 200D space
+    nn_200d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+    nn_200d.fit(X_train_mia, y_train_mia)
+    preds_200d = nn_200d.predict(X_train_mia)
+    acc_200d = accuracy_score(y_train_mia, preds_200d)
 
-# 2. Evaluate in 9D Subspace
-X_train_9d = np.concatenate([
-    train_f_clean[:min_samples].numpy(),
-    test_f_clean[:min_samples].numpy()
-])
-nn_9d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
-nn_9d.fit(X_train_9d, y_train_mia)
-preds_9d = nn_9d.predict(X_train_9d)
-acc_9d = accuracy_score(y_train_mia, preds_9d)
+    # 2. Evaluate in 9D Subspace
+    X_train_9d = np.concatenate([
+        train_f_clean[:min_samples].numpy(),
+        test_f_clean[:min_samples].numpy()
+    ])
+    nn_9d = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+    nn_9d.fit(X_train_9d, y_train_mia)
+    preds_9d = nn_9d.predict(X_train_9d)
+    acc_9d = accuracy_score(y_train_mia, preds_9d)
 
-print(f"Absolute Overfitted Accuracy (200D Space): {acc_200d:.2%}")
-print(f"Absolute Overfitted Accuracy (9D Subspace):  {acc_9d:.2%}")
+    print(f"Absolute Overfitted Accuracy (200D Space): {acc_200d:.2%}")
+    print(f"Absolute Overfitted Accuracy (9D Subspace):  {acc_9d:.2%}")
 
 # ---------------------------------------------------------------------------
 # KNN Accuracy, TPR, FPR vs. n_neighbors (The Bayes Error Collapse)
@@ -1895,45 +1895,46 @@ def compute_knn_metrics(features, labels, n_range, e_limit=None):
 # Use a small 'e' based on the Train-to-Train median calculated earlier
 e_small = median_tr * 2.0 
 
-# 1. Evaluate 200D
-accs_200d_std, tprs_200d_std, fprs_200d_std = compute_knn_metrics(X_train_mia, y_train_mia, n_range, e_limit=None)
-accs_200d_lim, tprs_200d_lim, fprs_200d_lim = compute_knn_metrics(X_train_mia, y_train_mia, n_range, e_limit=e_small)
+if min_samples >= 2:
+    # 1. Evaluate 200D
+    accs_200d_std, tprs_200d_std, fprs_200d_std = compute_knn_metrics(X_train_mia, y_train_mia, n_range, e_limit=None)
+    accs_200d_lim, tprs_200d_lim, fprs_200d_lim = compute_knn_metrics(X_train_mia, y_train_mia, n_range, e_limit=e_small)
 
-ax = axes_knn[0]
-ax.plot(n_range, accs_200d_std, marker='o', label='Acc (Std)', color='blue')
-ax.plot(n_range, tprs_200d_std, marker='^', linestyle='--', label='TPR (Std)', color='green')
-ax.plot(n_range, fprs_200d_std, marker='v', linestyle='--', label='FPR (Std)', color='red')
+    ax = axes_knn[0]
+    ax.plot(n_range, accs_200d_std, marker='o', label='Acc (Std)', color='blue')
+    ax.plot(n_range, tprs_200d_std, marker='^', linestyle='--', label='TPR (Std)', color='green')
+    ax.plot(n_range, fprs_200d_std, marker='v', linestyle='--', label='FPR (Std)', color='red')
 
-ax.plot(n_range, accs_200d_lim, marker='s', label=f'Acc (Lim e={e_small:.4f})', color='orange')
-ax.plot(n_range, tprs_200d_lim, marker='^', linestyle=':', label='TPR (Lim)', color='lime')
-ax.plot(n_range, fprs_200d_lim, marker='v', linestyle=':', label='FPR (Lim)', color='darkred')
+    ax.plot(n_range, accs_200d_lim, marker='s', label=f'Acc (Lim e={e_small:.4f})', color='orange')
+    ax.plot(n_range, tprs_200d_lim, marker='^', linestyle=':', label='TPR (Lim)', color='lime')
+    ax.plot(n_range, fprs_200d_lim, marker='v', linestyle=':', label='FPR (Lim)', color='darkred')
 
-ax.set_title("200D Space")
-ax.set_xlabel("n_neighbors")
-ax.set_ylabel("Metric Value (Evaluating on Training Data)")
-ax.grid(True, linestyle=':', alpha=0.6)
-ax.legend(fontsize=9, loc='center left', bbox_to_anchor=(1, 0.5))
+    ax.set_title("200D Space")
+    ax.set_xlabel("n_neighbors")
+    ax.set_ylabel("Metric Value (Evaluating on Training Data)")
+    ax.grid(True, linestyle=':', alpha=0.6)
+    ax.legend(fontsize=9, loc='center left', bbox_to_anchor=(1, 0.5))
 
-# 2. Evaluate 9D
-nbrs_9d_tr = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(train_f_clean.numpy())
-dist_9d_tr, _ = nbrs_9d_tr.kneighbors(train_f_clean.numpy())
-e_small_9d = np.median(dist_9d_tr[:, 1]) * 2.0
+    # 2. Evaluate 9D
+    nbrs_9d_tr = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(train_f_clean.numpy())
+    dist_9d_tr, _ = nbrs_9d_tr.kneighbors(train_f_clean.numpy())
+    e_small_9d = np.median(dist_9d_tr[:, 1]) * 2.0
 
-accs_9d_std, tprs_9d_std, fprs_9d_std = compute_knn_metrics(X_train_9d, y_train_mia, n_range, e_limit=None)
-accs_9d_lim, tprs_9d_lim, fprs_9d_lim = compute_knn_metrics(X_train_9d, y_train_mia, n_range, e_limit=e_small_9d)
+    accs_9d_std, tprs_9d_std, fprs_9d_std = compute_knn_metrics(X_train_9d, y_train_mia, n_range, e_limit=None)
+    accs_9d_lim, tprs_9d_lim, fprs_9d_lim = compute_knn_metrics(X_train_9d, y_train_mia, n_range, e_limit=e_small_9d)
 
-ax = axes_knn[1]
-ax.plot(n_range, accs_9d_std, marker='o', label='Acc (Std)', color='blue')
-ax.plot(n_range, tprs_9d_std, marker='^', linestyle='--', label='TPR (Std)', color='green')
-ax.plot(n_range, fprs_9d_std, marker='v', linestyle='--', label='FPR (Std)', color='red')
+    ax = axes_knn[1]
+    ax.plot(n_range, accs_9d_std, marker='o', label='Acc (Std)', color='blue')
+    ax.plot(n_range, tprs_9d_std, marker='^', linestyle='--', label='TPR (Std)', color='green')
+    ax.plot(n_range, fprs_9d_std, marker='v', linestyle='--', label='FPR (Std)', color='red')
 
-ax.plot(n_range, accs_9d_lim, marker='s', label=f'Acc (Lim e={e_small_9d:.4f})', color='orange')
-ax.plot(n_range, tprs_9d_lim, marker='^', linestyle=':', label='TPR (Lim)', color='lime')
-ax.plot(n_range, fprs_9d_lim, marker='v', linestyle=':', label='FPR (Lim)', color='darkred')
+    ax.plot(n_range, accs_9d_lim, marker='s', label=f'Acc (Lim e={e_small_9d:.4f})', color='orange')
+    ax.plot(n_range, tprs_9d_lim, marker='^', linestyle=':', label='TPR (Lim)', color='lime')
+    ax.plot(n_range, fprs_9d_lim, marker='v', linestyle=':', label='FPR (Lim)', color='darkred')
 
-ax.set_title("9D Subspace")
-ax.set_xlabel("n_neighbors")
-ax.grid(True, linestyle=':', alpha=0.6)
+    ax.set_title("9D Subspace")
+    ax.set_xlabel("n_neighbors")
+    ax.grid(True, linestyle=':', alpha=0.6)
 ax.legend(fontsize=9, loc='center left', bbox_to_anchor=(1, 0.5))
 
 fig_knn.suptitle(f"The Bayes Error Collapse: Accuracy, TPR, FPR vs. n_neighbors\nModel {RUN_ID[:8]}… | step {CHECKPOINT_STEP:,}", fontsize=16)
