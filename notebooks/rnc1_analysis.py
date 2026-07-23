@@ -50,8 +50,8 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "777b9bcf2fe040a1a18983738d958a15"
-CHECKPOINT_STEP = 1000
+RUN_ID = "86388ca2375c4189b8e80658c770a72f"
+CHECKPOINT_STEP = 350
 TRAIN_MODELS = False
 
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
@@ -1369,6 +1369,9 @@ for c in range(num_classes):
         fpr_rand = np.mean(te_preds_rand)
         print(f"Class {c} LF Random MIA -> Acc: {acc_rand:.1%} | TPR: {tpr_rand:.1%} | FPR: {fpr_rand:.1%}")
 
+tr_preds_rand_global = None
+te_preds_rand_global = None
+
 if all_tr_leak_free and all_te_leak_free:
     all_tr_lf = np.concatenate(all_tr_leak_free)
     all_te_lf = np.concatenate(all_te_leak_free)
@@ -1376,11 +1379,11 @@ if all_tr_leak_free and all_te_leak_free:
     if global_lf_mia:
         print(f"Global Leakage-Free MIA  -> Acc: {global_lf_mia['acc']:.1%} | TPR: {global_lf_mia['tpr']:.1%} | FPR: {global_lf_mia['fpr']:.1%}")
         bounds = global_lf_mia['bounds']
-        tr_preds_rand = apply_coin_flip_bound(all_tr_lf, bounds)
-        te_preds_rand = apply_coin_flip_bound(all_te_lf, bounds)
-        acc_rand = (np.sum(tr_preds_rand) + np.sum(~te_preds_rand)) / (len(all_tr_lf) + len(all_te_lf))
-        tpr_rand = np.mean(tr_preds_rand)
-        fpr_rand = np.mean(te_preds_rand)
+        tr_preds_rand_global = apply_coin_flip_bound(all_tr_lf, bounds)
+        te_preds_rand_global = apply_coin_flip_bound(all_te_lf, bounds)
+        acc_rand = (np.sum(tr_preds_rand_global) + np.sum(~te_preds_rand_global)) / (len(all_tr_lf) + len(all_te_lf))
+        tpr_rand = np.mean(tr_preds_rand_global)
+        fpr_rand = np.mean(te_preds_rand_global)
         print(f"Global LF Random MIA  -> Acc: {acc_rand:.1%} | TPR: {tpr_rand:.1%} | FPR: {fpr_rand:.1%}")
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1439,10 @@ if all_tr_multi and all_te_multi:
     plot_roc(ax_roc, np.concatenate(all_tr_multi), np.concatenate(all_te_multi), "Multi-Boundary Margin", "green", invert=True)
 if all_tr_leak_free and all_te_leak_free:
     plot_roc(ax_roc, np.concatenate(all_tr_leak_free), np.concatenate(all_te_leak_free), "Leakage-Free Multi-Boundary", "cyan", invert=True)
+if tr_preds_rand_global is not None and te_preds_rand_global is not None:
+    tpr_val = np.mean(tr_preds_rand_global)
+    fpr_val = np.mean(te_preds_rand_global)
+    ax_roc.scatter([fpr_val], [tpr_val], color='magenta', marker='*', s=150, zorder=5, label=f'LF Random Coin-Flip Point')
 
 ax_roc.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random Guess')
 
