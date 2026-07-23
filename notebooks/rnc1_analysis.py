@@ -50,8 +50,8 @@ Logger().setup()  # required before any project code calls Logger.get()
 # Paths
 # ---------------------------------------------------------------------------
 # RUN_ID = "c9a3105bba4a4fe499b1e6ce139d4c85"
-RUN_ID = "babeafda216f4fc284b445038e26e664"
-CHECKPOINT_STEP = 350
+RUN_ID = "777b9bcf2fe040a1a18983738d958a15"
+CHECKPOINT_STEP = 1000
 TRAIN_MODELS = False
 
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
@@ -1307,6 +1307,21 @@ if all_tr_multi and all_te_multi:
 # ---------------------------------------------------------------------------
 print("\n--- Leakage-Free Multi-Boundary MIA (Weight Proxy) ---")
 
+def apply_coin_flip_bound(d, bounds):
+    if bounds[0] is None:
+        in_region = d < bounds[1]
+    elif bounds[1] is None:
+        in_region = d > bounds[0]
+    elif bounds[0] <= bounds[1]:
+        in_region = (d >= bounds[0]) & (d <= bounds[1])
+    else:
+        in_region = (d < bounds[1]) | (d > bounds[0])
+    
+    preds = np.zeros_like(d, dtype=bool)
+    coin_flips = np.random.rand(np.sum(in_region)) < 0.5
+    preds[in_region] = coin_flips
+    return preds
+
 # Estimate the global feature norm scale from a pool of all candidate data (Train + Test)
 # to properly scale the weight proxy without knowing which is which.
 pool_features = torch.cat([train_f_normal, test_features.float()])
@@ -1346,11 +1361,27 @@ for c in range(num_classes):
     mia_result = evaluate_mia(tr_margin_dist_lf, te_margin_dist_lf)
     if mia_result:
         print(f"Class {c} Leakage-Free MIA -> Acc: {mia_result['acc']:.1%} | TPR: {mia_result['tpr']:.1%} | FPR: {mia_result['fpr']:.1%}")
+        bounds = mia_result['bounds']
+        tr_preds_rand = apply_coin_flip_bound(tr_margin_dist_lf, bounds)
+        te_preds_rand = apply_coin_flip_bound(te_margin_dist_lf, bounds)
+        acc_rand = (np.sum(tr_preds_rand) + np.sum(~te_preds_rand)) / (len(tr_margin_dist_lf) + len(te_margin_dist_lf))
+        tpr_rand = np.mean(tr_preds_rand)
+        fpr_rand = np.mean(te_preds_rand)
+        print(f"Class {c} LF Random MIA -> Acc: {acc_rand:.1%} | TPR: {tpr_rand:.1%} | FPR: {fpr_rand:.1%}")
 
 if all_tr_leak_free and all_te_leak_free:
-    global_lf_mia = evaluate_mia(np.concatenate(all_tr_leak_free), np.concatenate(all_te_leak_free))
+    all_tr_lf = np.concatenate(all_tr_leak_free)
+    all_te_lf = np.concatenate(all_te_leak_free)
+    global_lf_mia = evaluate_mia(all_tr_lf, all_te_lf)
     if global_lf_mia:
         print(f"Global Leakage-Free MIA  -> Acc: {global_lf_mia['acc']:.1%} | TPR: {global_lf_mia['tpr']:.1%} | FPR: {global_lf_mia['fpr']:.1%}")
+        bounds = global_lf_mia['bounds']
+        tr_preds_rand = apply_coin_flip_bound(all_tr_lf, bounds)
+        te_preds_rand = apply_coin_flip_bound(all_te_lf, bounds)
+        acc_rand = (np.sum(tr_preds_rand) + np.sum(~te_preds_rand)) / (len(all_tr_lf) + len(all_te_lf))
+        tpr_rand = np.mean(tr_preds_rand)
+        fpr_rand = np.mean(te_preds_rand)
+        print(f"Global LF Random MIA  -> Acc: {acc_rand:.1%} | TPR: {tpr_rand:.1%} | FPR: {fpr_rand:.1%}")
 
 # ---------------------------------------------------------------------------
 # Exact Match Verification (Proving the coordinates are identical)
