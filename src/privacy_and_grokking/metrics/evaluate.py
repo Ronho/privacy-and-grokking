@@ -196,6 +196,7 @@ def evaluate(
             or metrics_config.rnc1
             or metrics_config.nhsic
             or metrics_config.attack_distance_to_class_mean
+            or metrics_config.attack_margin_distance_lf
         )
         collect_inputs = metrics_config.nhsic
         train_results, train_activations, train_labels, train_inputs = _process_loader(
@@ -486,6 +487,37 @@ def evaluate(
                             m = compute_roc_metrics_single_step(-train_c, -test_c)
                             for key, value in m.items():
                                 metrics[f"attack/distance_to_class_mean/class_{c}/{key}"] = value
+
+            if metrics_config.attack_margin_distance_lf and test_feats is not None and last_linear_weight is not None:
+                from privacy_and_grokking.metrics.mia import margin_distance_lf
+                
+                num_classes = int(train_labels.max().item() + 1)
+                pool_features = torch.cat([train_feats.float(), test_feats.float()])
+                pool_mean_norm = pool_features.norm(dim=1).mean().item()
+                
+                train_dists_lf = margin_distance_lf(
+                    train_feats, train_labels, last_linear_weight, last_linear_bias, pool_mean_norm
+                )
+                test_dists_lf = margin_distance_lf(
+                    test_feats, test_labels, last_linear_weight, last_linear_bias, pool_mean_norm
+                )
+                
+                all_train_flat_lf = torch.cat(list(train_dists_lf.values())) if train_dists_lf else torch.tensor([])
+                all_test_flat_lf = torch.cat(list(test_dists_lf.values())) if test_dists_lf else torch.tensor([])
+                
+                if len(all_train_flat_lf) > 0 and len(all_test_flat_lf) > 0:
+                    m = compute_roc_metrics_single_step(-all_train_flat_lf, -all_test_flat_lf)
+                    for key, value in m.items():
+                        metrics[f"attack/margin_distance_lf/global/{key}"] = value
+
+                for c in range(num_classes):
+                    if c in train_dists_lf and c in test_dists_lf:
+                        train_c_lf = train_dists_lf[c]
+                        test_c_lf = test_dists_lf[c]
+                        if len(train_c_lf) > 0 and len(test_c_lf) > 0:
+                            m = compute_roc_metrics_single_step(-train_c_lf, -test_c_lf)
+                            for key, value in m.items():
+                                metrics[f"attack/margin_distance_lf/class_{c}/{key}"] = value
 
     keys = list(metrics.keys())
     for key in keys:
