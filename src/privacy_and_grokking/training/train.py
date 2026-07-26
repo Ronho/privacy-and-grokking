@@ -158,6 +158,16 @@ def train_handle(
         batch_size=config.batch_size,
         shuffle=False,
     )
+    
+    epoch_log_frequency = None
+    if metrics_config.log_every_n_epochs is not None:
+        epoch_log_frequency = metrics_config.log_every_n_epochs * len(train_loader)
+        logger.info(f"Adding epoch_log_frequency: {epoch_log_frequency} ({metrics_config.log_every_n_epochs} epochs)")
+        
+    epoch_heavy_log_frequency = None
+    if metrics_config.heavy_log_every_n_epochs is not None:
+        epoch_heavy_log_frequency = metrics_config.heavy_log_every_n_epochs * len(train_loader)
+        logger.info(f"Adding epoch_heavy_log_frequency: {epoch_heavy_log_frequency} ({metrics_config.heavy_log_every_n_epochs} epochs)")
 
     in_canary_indices = []
     out_canary_loader = None
@@ -278,8 +288,9 @@ def train_handle(
                     (step < 50)
                     or (step < log_frequency and step % 100 == 0)
                     or (step % log_frequency == 0)
+                    or (epoch_log_frequency is not None and step % epoch_log_frequency == 0)
                 ):
-                    heavy_metrics = step % heavy_metrics_log_frequency == 0
+                    heavy_metrics = (step % heavy_metrics_log_frequency == 0) or (epoch_heavy_log_frequency is not None and step % epoch_heavy_log_frequency == 0)
                     metrics = evaluate(
                         model=model,
                         step=step,
@@ -295,6 +306,7 @@ def train_handle(
                         out_canary_loader=out_canary_loader,
                         normalization=data_container.normalization,
                     )
+                    metrics["epoch"] = step / max(1, len(train_loader))
                     mlflow.log_metrics(metrics, step=step)
 
                     train_loss_mean = metrics[f"eval/train/loss/{config.loss.name}/mean"]

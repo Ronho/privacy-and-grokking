@@ -251,8 +251,8 @@ def compute_nc3(
     centered_means = class_means - global_mean  # (K, d)
     K = len(classes)
     cos_sum = 0.0
-    for i in range(K):
-        w_c = classifier_weight[i]
+    for i, c in enumerate(classes):
+        w_c = classifier_weight[c]
         m_c = centered_means[i]
         w_norm = w_c.norm()
         m_norm = m_c.norm()
@@ -299,7 +299,11 @@ def compute_nc4(
     # Nearest-class-center predictions
     # Distances to each class mean: (N, K)
     dists = torch.cdist(features, class_means)  # (N, K)
-    ncc_preds = dists.argmin(dim=1)
+    ncc_preds_idx = dists.argmin(dim=1)
+    
+    # Map NCC indices back to actual class labels
+    classes_tensor = torch.tensor(classes, device=features.device)
+    ncc_preds = classes_tensor[ncc_preds_idx]
 
     agreement = (linear_preds == ncc_preds).float().mean()
     return agreement.item()
@@ -348,8 +352,11 @@ def compute_nc3_papyan(
 
     centered_means = class_means - global_mean  # (K, d)
     
+    # Only compare weights for classes that actually have samples
+    present_weights = classifier_weight[classes]
+    
     # Normalize W and M_dot
-    W_normed = classifier_weight / torch.clamp(classifier_weight.norm(p='fro'), min=1e-8)
+    W_normed = present_weights / torch.clamp(present_weights.norm(p='fro'), min=1e-8)
     M_normed = centered_means / torch.clamp(centered_means.norm(p='fro'), min=1e-8)
     
     # || W/||W||_F - M/||M||_F ||_F  -> should approach 0

@@ -12,6 +12,8 @@ class MetricsConfig(BaseModel):
     # Logging frequency
     log_frequency: int = 1000
     heavy_metrics_log_frequency: int = 10000
+    log_every_n_epochs: int | None = None
+    heavy_log_every_n_epochs: int | None = None
 
     # Metric groups (lightweight — computed every log_frequency steps)
     loss_stats: bool = True
