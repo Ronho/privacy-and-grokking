@@ -24,7 +24,11 @@ from privacy_and_grokking.metrics.distribution_overlap import (
     compute_mmd,
     soft_distribution_overlap,
 )
-from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics, compute_rnc1
+from privacy_and_grokking.metrics.neural_collapse import (
+    compute_all_nc_metrics,
+    compute_rnc1,
+    compute_rnc1_train_mean,
+)
 from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_weight_norms
 from privacy_and_grokking.metrics.optimizer_params import get_optimizer_internals
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
@@ -194,6 +198,7 @@ def evaluate(
         collect_features = (
             (compute_heavy_metrics and metrics_config.neural_collapse)
             or metrics_config.rnc1
+            or metrics_config.rnc1_train_mean
             or metrics_config.nhsic
             or metrics_config.attack_distance_to_class_mean
             or metrics_config.attack_margin_distance_lf
@@ -336,7 +341,7 @@ def evaluate(
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
 
-    if train_activations and ((compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1):
+    if train_activations and ((compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1 or metrics_config.rnc1_train_mean):
         # Find the last linear layer's weight (classifier head).
         last_linear_name = None
         last_linear_weight = None
@@ -365,7 +370,7 @@ def evaluate(
                 penultimate = layer_names[-2]
             else:
                 penultimate = layer_names[0] if layer_names else None
-            
+
             if penultimate:
                 train_feats = train_activations[penultimate]
 
@@ -397,7 +402,7 @@ def evaluate(
                     test_feats = test_activations[f"{last_linear_name}.input"]
                 elif penultimate and penultimate in test_activations:
                     test_feats = test_activations[penultimate]
-                
+
                 if test_feats is not None and test_feats.ndim > 2:
                     test_feats = test_feats.reshape(test_feats.size(0), -1)
 
@@ -419,6 +424,11 @@ def evaluate(
                     metrics["nc/within_class_variance/test"] = nc_test.within_class_variance
                 elif metrics_config.rnc1:
                     metrics["nc/rnc1/test"] = compute_rnc1(test_feats, test_labels.long())
+
+                if metrics_config.rnc1_train_mean:
+                    metrics["nc/rnc1_train_mean/test"] = compute_rnc1_train_mean(
+                        test_feats, test_labels.long(), train_feats, train_labels.long()
+                    )
 
             # --- nHSIC metrics ---
             if metrics_config.nhsic:
@@ -460,20 +470,20 @@ def evaluate(
 
             if metrics_config.attack_distance_to_class_mean and test_feats is not None:
                 from privacy_and_grokking.metrics.mia import distances_to_class_mean
-                
+
                 num_classes = int(train_labels.max().item() + 1)
                 class_means = torch.zeros(num_classes, train_feats.shape[1], device=train_feats.device)
                 for c in range(num_classes):
                     mask = train_labels == c
                     if mask.sum() > 0:
                         class_means[c] = train_feats[mask].float().mean(dim=0)
-                
+
                 train_dists = distances_to_class_mean(train_feats, train_labels, class_means)
                 test_dists = distances_to_class_mean(test_feats, test_labels, class_means)
-                
+
                 all_train_flat = torch.cat(list(train_dists.values())) if train_dists else torch.tensor([])
                 all_test_flat = torch.cat(list(test_dists.values())) if test_dists else torch.tensor([])
-                
+
                 if len(all_train_flat) > 0 and len(all_test_flat) > 0:
                     m = compute_roc_metrics_single_step(-all_train_flat, -all_test_flat)
                     for key, value in m.items():
@@ -490,21 +500,21 @@ def evaluate(
 
             if metrics_config.attack_margin_distance_lf and test_feats is not None and last_linear_weight is not None:
                 from privacy_and_grokking.metrics.mia import margin_distance_lf
-                
+
                 num_classes = int(train_labels.max().item() + 1)
                 pool_features = torch.cat([train_feats.float(), test_feats.float()])
                 pool_mean_norm = pool_features.norm(dim=1).mean().item()
-                
+
                 train_dists_lf = margin_distance_lf(
                     train_feats, train_labels, last_linear_weight, last_linear_bias, pool_mean_norm
                 )
                 test_dists_lf = margin_distance_lf(
                     test_feats, test_labels, last_linear_weight, last_linear_bias, pool_mean_norm
                 )
-                
+
                 all_train_flat_lf = torch.cat(list(train_dists_lf.values())) if train_dists_lf else torch.tensor([])
                 all_test_flat_lf = torch.cat(list(test_dists_lf.values())) if test_dists_lf else torch.tensor([])
-                
+
                 if len(all_train_flat_lf) > 0 and len(all_test_flat_lf) > 0:
                     m = compute_roc_metrics_single_step(-all_train_flat_lf, -all_test_flat_lf)
                     for key, value in m.items():

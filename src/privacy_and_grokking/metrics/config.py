@@ -22,6 +22,7 @@ class MetricsConfig(BaseModel):
     gradient_norms: bool = True
     optimizer_internals: bool = True
     rnc1: bool = True
+    rnc1_train_mean: bool = True
     nhsic: bool = True
     nhsic_max_samples: int = 2048
 

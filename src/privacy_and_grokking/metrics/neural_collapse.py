@@ -129,6 +129,63 @@ def compute_rnc1(features: torch.Tensor, labels: torch.Tensor) -> float:
     return (total / N).item()
 
 
+def compute_rnc1_train_mean(
+    test_features: torch.Tensor,
+    test_labels: torch.Tensor,
+    train_features: torch.Tensor,
+    train_labels: torch.Tensor,
+) -> float:
+    """Compute RNC1 of test features using the class means and scaling from train features.
+
+    Args:
+        test_features: Tensor of shape (N_test, d).
+        test_labels:   Tensor of shape (N_test,).
+        train_features: Tensor of shape (N_train, d).
+        train_labels:   Tensor of shape (N_train,).
+
+    Returns:
+        Scalar float value of RNC1 using train means.
+    """
+    if test_features.shape[0] == 0 or train_features.shape[0] == 0:
+        return float("nan")
+
+    train_features = train_features.float()
+    test_features = test_features.float()
+
+    train_norms = train_features.norm(dim=1)
+    B_g = train_norms.max()
+    if B_g == 0:
+        return 0.0
+
+    train_features_scaled = train_features / B_g
+    test_features_scaled = test_features / B_g
+
+    # Compute train means
+    train_classes = train_labels.unique()
+    train_means = {}
+    for c in train_classes:
+        mask = train_labels == c
+        if mask.sum() > 0:
+            train_means[c.item()] = train_features_scaled[mask].mean(dim=0)
+
+    # Compute variance of test features around train means
+    test_classes = test_labels.unique()
+    N = test_features.shape[0]
+    total = torch.tensor(0.0, dtype=test_features_scaled.dtype, device=test_features_scaled.device)
+
+    for c in test_classes:
+        c_item = c.item()
+        if c_item not in train_means:
+            continue
+        mask = test_labels == c
+        class_features = test_features_scaled[mask]
+        train_mean = train_means[c_item]
+        diff = class_features - train_mean
+        total += (diff * diff).sum()
+
+    return (total / N).item()
+
+
 def compute_nc0(classifier_weight: torch.Tensor) -> float:
     """Compute NC0: zero-row-sum metric for the last-layer classifier weight.
 
@@ -208,14 +265,14 @@ def compute_nc2(features: torch.Tensor, labels: torch.Tensor) -> float:
     # Center class means
     centered = class_means - global_mean  # (K, d)
     sv = torch.linalg.svdvals(centered)
-    
+
     # Since there are K centered class means, the maximum rank is K-1.
-    # The last singular value (or beyond) is mathematically 0, but due to 
+    # The last singular value (or beyond) is mathematically 0, but due to
     # floating point precision might be slightly > 0. We take the top K-1.
     K = len(classes)
     sv_true = sv[:K-1]
     sv_pos = sv_true[sv_true > 1e-7]
-    
+
     if len(sv_pos) == 0:
         return float("inf")
     return (sv_pos[0] / sv_pos[-1]).item()
@@ -300,7 +357,7 @@ def compute_nc4(
     # Distances to each class mean: (N, K)
     dists = torch.cdist(features, class_means)  # (N, K)
     ncc_preds_idx = dists.argmin(dim=1)
-    
+
     # Map NCC indices back to actual class labels
     classes_tensor = torch.tensor(classes, device=features.device)
     ncc_preds = classes_tensor[ncc_preds_idx]
@@ -316,24 +373,24 @@ def compute_nc2_papyan(features: torch.Tensor, labels: torch.Tensor) -> tuple[fl
     class_means, global_mean, classes = _class_means_and_global(features, labels)
     if len(classes) < 2:
         return float("nan"), float("nan")
-    
+
     K = len(classes)
     centered = class_means - global_mean
     norms = centered.norm(dim=1)
-    
+
     # Equinorm: std(norms) / mean(norms)  -> should approach 0
     nc2_equinorm = (norms.std() / norms.mean()).item() if norms.mean() > 0 else float("inf")
-    
+
     # Equiangular: deviation from ideal cosine similarity
     normed = centered / torch.clamp(norms.unsqueeze(1), min=1e-8)
     cos_sim = normed @ normed.T
-    
+
     # Papyan: || M^T M / ||M^T M||_F - 1/sqrt(K-1) (I - 1/K 11^T) ||_F
     # Alternatively, the image provides the element-wise limit for cosine sim:
     # off-diagonals approach -1 / (K-1)
     ideal_cos = (float(K) / (K - 1)) * torch.eye(K, device=features.device) - (1.0 / (K - 1)) * torch.ones(K, K, device=features.device)
     nc2_equiangular = (cos_sim - ideal_cos).norm(p='fro').item()
-    
+
     return nc2_equinorm, nc2_equiangular
 
 def compute_nc3_papyan(
@@ -351,14 +408,14 @@ def compute_nc3_papyan(
         return float("nan")
 
     centered_means = class_means - global_mean  # (K, d)
-    
+
     # Only compare weights for classes that actually have samples
     present_weights = classifier_weight[classes]
-    
+
     # Normalize W and M_dot
     W_normed = present_weights / torch.clamp(present_weights.norm(p='fro'), min=1e-8)
     M_normed = centered_means / torch.clamp(centered_means.norm(p='fro'), min=1e-8)
-    
+
     # || W/||W||_F - M/||M||_F ||_F  -> should approach 0
     return (W_normed - M_normed).norm(p='fro').item()
 
