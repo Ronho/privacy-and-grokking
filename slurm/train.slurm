@@ -13,6 +13,9 @@
 
 mkdir -p logs
 
+echo "Running on host: $(hostname)"
+nvidia-smi
+
 export MLFLOW_TRACKING_URI="http://${1}:5050"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
