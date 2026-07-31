@@ -9,13 +9,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
 
-if [ -z "$1" ]; then
-    echo "====================================================" >&2
-    echo "ERROR: NO IP ADDRESS!" >&2
-    echo "USAGE: sbatch train.slurm <IP-ADDRESS>" >&2
-    echo "====================================================" >&2
-    exit 1
-fi
+
 
 export MLFLOW_TRACKING_URI="http://${1}:5000"
 export PATH="$HOME/storage/personal/bin:$PATH"
