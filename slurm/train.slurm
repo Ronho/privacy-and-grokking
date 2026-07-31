@@ -1,13 +1,15 @@
 #!/bin/bash
+#
 #SBATCH --job-name=pag_train
 #SBATCH --output=logs/train_%j.log
 #SBATCH --error=logs/train_%j.err
+#SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#SBATCH --mem=16G
+#SBATCH --time=00:15:00
+#SBATCH --gres=gpu:1
 
 cd $SLURM_SUBMIT_DIR
 mkdir -p logs
