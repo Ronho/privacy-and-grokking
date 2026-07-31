@@ -9,9 +9,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
 
-
-
-export MLFLOW_TRACKING_URI="http://${1}:5000"
+export MLFLOW_TRACKING_URI="http://${1}:5050"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 

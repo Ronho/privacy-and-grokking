@@ -8,10 +8,10 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-echo "Checking if MLflow is reachable at http://$1:5000..."
-if ! curl -s --connect-timeout 3 "http://$1:5000" > /dev/null; then
+echo "Checking if MLflow is reachable at http://$1:5050..."
+if ! curl -s --connect-timeout 3 "http://$1:5050" > /dev/null; then
     echo "====================================================" >&2
-    echo "ERROR: MLflow server not reachable at http://$1:5000" >&2
+    echo "ERROR: MLflow server not reachable at http://$1:5050" >&2
     echo "Please check the IP address and ensure MLflow is running." >&2
     echo "====================================================" >&2
     exit 1
