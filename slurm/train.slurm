@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=pag_train
-#SBATCH --output=train_%j.log
-#SBATCH --error=train_%j.err
+#SBATCH --job-name=train
+#SBATCH --output=logs/test_%j.out
+#SBATCH --error=logs/test_%j.err
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -10,7 +10,7 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:15:00
 #SBATCH --gres=gpu:1
-#cd $SLURM_SUBMIT_DIR
+
 mkdir -p logs
 
 export MLFLOW_TRACKING_URI="http://${1}:5050"
