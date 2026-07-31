@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 #SBATCH --job-name=pag_train
-#SBATCH --output=logs/train_%j.log
-#SBATCH --error=logs/train_%j.err
+#SBATCH --output=train_%j.log
+#SBATCH --error=train_%j.err
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
