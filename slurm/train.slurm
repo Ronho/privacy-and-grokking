@@ -10,8 +10,7 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:15:00
 #SBATCH --gres=gpu:1
-
-cd $SLURM_SUBMIT_DIR
+#cd $SLURM_SUBMIT_DIR
 mkdir -p logs
 
 export MLFLOW_TRACKING_URI="http://${1}:5050"
