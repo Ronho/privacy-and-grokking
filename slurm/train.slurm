@@ -12,6 +12,7 @@
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
+#SBATCH --container-writable
 
 mkdir -p logs
 
