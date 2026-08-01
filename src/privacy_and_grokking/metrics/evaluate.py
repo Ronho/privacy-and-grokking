@@ -195,8 +195,8 @@ def evaluate(
             metrics.update(get_optimizer_internals(optimizer))
 
         compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
-        collect_features = (
-            (compute_heavy_metrics and metrics_config.neural_collapse)
+        collect_features = compute_heavy_metrics and (
+            metrics_config.neural_collapse
             or metrics_config.rnc1
             or metrics_config.rnc1_train_mean
             or metrics_config.nhsic

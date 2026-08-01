@@ -6,7 +6,7 @@
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=25
 #SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --time=01:30:00
@@ -27,6 +27,6 @@ export PYTHONUNBUFFERED=1
 
 uv pip install --system --break-system-packages -e .
 
-pag process commands/sgd-grid-search.txt 4
+pag process commands/sgd-grid-search.txt 20
 
 echo "All training runs in the queue have completed!"

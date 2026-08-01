@@ -43,7 +43,7 @@
         "distribution_overlap": true,
         "distribution_overlap_adaptive": false,
         "distribution_overlap_kde": false,
-        "soft_overlap": true,
+        "soft_overlap": false,
         "kl_divergence": false,
         "kl_divergence_adaptive": false,
         "kl_divergence_kde": false,
