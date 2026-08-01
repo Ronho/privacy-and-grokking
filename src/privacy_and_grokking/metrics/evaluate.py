@@ -67,8 +67,8 @@ def _process_loader(
                 def _make_hook(k: str):
                     def _hook(_module: nn.Module, _inp: tuple, output: torch.Tensor) -> None:
                         if capture_state["enabled"]:
-                            buffers_accum[k].append(output.detach().cpu())
-                            buffers_accum[f"{k}.input"].append(_inp[0].detach().cpu())
+                            buffers_accum[k].append(output.detach())
+                            buffers_accum[f"{k}.input"].append(_inp[0].detach())
 
                     return _hook
 
@@ -81,29 +81,29 @@ def _process_loader(
         norm_std = torch.tensor(normalization.std, device=device).view(-1, 1, 1)
 
     for x, y in loader:
-        if _collect:
-            label_list_accum.append(y.cpu())
-        if collect_inputs:
-            input_list_accum.append(x.detach().cpu().reshape(x.size(0), -1))
         x, y = x.to(device), y.to(device)
+        if _collect:
+            label_list_accum.append(y)
+        if collect_inputs:
+            input_list_accum.append(x.detach().reshape(x.size(0), -1))
         if normalization is not None:
             x = (x - norm_mean) / norm_std
         logit = model(x)
         prob = F.softmax(logit, dim=1)
-        result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)).cpu())
-        result["max_logit"].append(logit.max(dim=1, keepdim=True).values.cpu())
-        result["min_logit"].append(logit.min(dim=1, keepdim=True).values.cpu())
-        result["true_class_prob"].append(prob.gather(1, y.view(-1, 1)).cpu())
-        result["max_prob"].append(prob.max(dim=1, keepdim=True).values.cpu())
-        result["min_prob"].append(prob.min(dim=1, keepdim=True).values.cpu())
-        result["ce_loss"].append(ce_criterion(logit, y).cpu())
+        result["true_class_logit"].append(logit.gather(1, y.view(-1, 1)))
+        result["max_logit"].append(logit.max(dim=1, keepdim=True).values)
+        result["min_logit"].append(logit.min(dim=1, keepdim=True).values)
+        result["true_class_prob"].append(prob.gather(1, y.view(-1, 1)))
+        result["max_prob"].append(prob.max(dim=1, keepdim=True).values)
+        result["min_prob"].append(prob.min(dim=1, keepdim=True).values)
+        result["ce_loss"].append(ce_criterion(logit, y))
         result["mse_loss"].append(
             mse_criterion(
                 logit,
                 F.one_hot(y, num_classes=logit.size(1)).float(),
-            ).gather(1, y.view(-1, 1)).cpu()
+            ).gather(1, y.view(-1, 1))
         )
-        result["correctness"].append((logit.argmax(dim=1) == y).float().cpu())
+        result["correctness"].append((logit.argmax(dim=1) == y).float())
 
         if compute_mm:
             mm_ce_votes = []
@@ -144,25 +144,25 @@ def _process_loader(
                 mm_ce_votes.append((noisy_ce > ce_loss_i).float().mean())
                 mm_mse_votes.append((noisy_mse > mse_loss_i).float().mean())
 
-            result["mm_ce"].append(torch.stack(mm_ce_votes).cpu())
-            result["mm_mse"].append(torch.stack(mm_mse_votes).cpu())
+            result["mm_ce"].append(torch.stack(mm_ce_votes))
+            result["mm_mse"].append(torch.stack(mm_mse_votes))
 
     if _collect:
         for h in handles:
             h.remove()
         # Convert list of tensors to single tensor per layer
-        buffers = {k: torch.cat(v, dim=0) for k, v in buffers_accum.items() if len(v) > 0}
-        label_list = torch.cat(label_list_accum, dim=0)
+        buffers = {k: torch.cat(v, dim=0).cpu() for k, v in buffers_accum.items() if len(v) > 0}
+        label_list = torch.cat(label_list_accum, dim=0).cpu()
     else:
         buffers = {}
         label_list = torch.tensor([])
 
     if collect_inputs and input_list_accum:
-        input_list = torch.cat(input_list_accum, dim=0)
+        input_list = torch.cat(input_list_accum, dim=0).cpu()
     else:
         input_list = torch.tensor([])
 
-    result = {k: torch.cat(v, dim=0) for k, v in result.items()}
+    result = {k: torch.cat(v, dim=0).cpu() for k, v in result.items()}
 
     return result, buffers, label_list, input_list
 
