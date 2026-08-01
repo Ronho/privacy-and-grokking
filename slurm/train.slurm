@@ -27,5 +27,18 @@ export PYTHONUNBUFFERED=1
 # Install package dependencies into the container's system Python
 uv pip install --system --break-system-packages -e .
 
-# Run the command using the container's environment (without uv run)
-pag train slurm-test MSE_CNNEXTENDED_MNIST_GROK.json 10000 0 --seed 0 --run-name my-slurm-test --checkpoint-frequency 25000
+# Start 4 parallel training runs on the same GPU!
+# The '&' puts the command in the background, allowing the loop to continue immediately.
+for i in {0..3}; do
+    echo "Starting run $i in the background..."
+    pag train slurm-test MSE_CNNEXTENDED_MNIST_GROK.json 10000 0 \
+        --seed $i \
+        --run-name "my-slurm-test-$i" \
+        --checkpoint-frequency 25000 &
+done
+
+# 'wait' tells the Slurm script not to finish until all background tasks complete.
+# Without this, Slurm would kill the job instantly after starting the loop!
+wait
+
+echo "All parallel training runs completed!"
