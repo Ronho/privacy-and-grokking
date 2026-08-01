@@ -11,7 +11,7 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:15:00
 #SBATCH --container-image=nvcr.io#nvidia/pytorch:23.12-py3
-#SBATCH --container-mounts=$PWD:/workspace,$HOME:$HOME
+#SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 
 mkdir -p logs
