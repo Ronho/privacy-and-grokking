@@ -24,7 +24,7 @@ export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 export PYTHONUNBUFFERED=1
 
 # Install package dependencies into the container's system Python
-uv pip install --system -e .
+uv pip install --system --break-system-packages -e .
 
 # Run the command using the container's environment (without uv run)
 pag train slurm-test MSE_CNNEXTENDED_MNIST_GROK.json 10000 0 --seed 0 --run-name my-slurm-test --checkpoint-frequency 25000
