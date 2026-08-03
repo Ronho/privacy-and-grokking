@@ -51,6 +51,7 @@ def apply_overrides(cfg: T, overrides: list[str] | None) -> T:
         return cfg
     
     cfg_dict = cfg.model_dump(mode="json")
+    parsed_overrides = []
     
     for override in overrides:
         if "=" not in override:
@@ -60,6 +61,7 @@ def apply_overrides(cfg: T, overrides: list[str] | None) -> T:
         keys = path.split(".")
         
         val = _parse_value(val_str)
+        parsed_overrides.append((path, keys))
             
         curr_dict = cfg_dict
         for key in keys[:-1]:
@@ -72,9 +74,14 @@ def apply_overrides(cfg: T, overrides: list[str] | None) -> T:
     validated = type(cfg).model_validate(cfg_dict)
     validated_dict = validated.model_dump(mode="json")
     
-    diff_path = _dicts_differ(cfg_dict, validated_dict)
-    if diff_path:
-        raise typer.BadParameter(f"Unknown config field: {diff_path}")
+    for path, keys in parsed_overrides:
+        curr = validated_dict
+        for key in keys[:-1]:
+            if key not in curr or curr[key] is None:
+                raise typer.BadParameter(f"Unknown config field: {path}")
+            curr = curr[key]
+        if keys[-1] not in curr:
+            raise typer.BadParameter(f"Unknown config field: {path}")
         
     return validated
 
