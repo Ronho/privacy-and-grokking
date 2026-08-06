@@ -155,21 +155,32 @@ def train_handle(
             return GpuDataset(dataset, device)
         return dataset
 
+    def get_loader_kwargs(dataset):
+        if isinstance(dataset, GpuDataset):
+            return {"num_workers": 0, "pin_memory": False}
+        return {"num_workers": 4, "pin_memory": True}
+
+    train_ds = maybe_gpu_dataset(train_subset)
     train_loader = torch.utils.data.DataLoader(
-        maybe_gpu_dataset(train_subset),
+        train_ds,
         batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
+        **get_loader_kwargs(train_ds)
     )
+    eval_train_ds = maybe_gpu_dataset(train_subset)
     eval_train_loader = torch.utils.data.DataLoader(
-        maybe_gpu_dataset(train_subset),
+        eval_train_ds,
         batch_size=config.batch_size,
         shuffle=False,
+        **get_loader_kwargs(eval_train_ds)
     )
+    eval_test_ds = maybe_gpu_dataset(test)
     eval_test_loader = torch.utils.data.DataLoader(
-        maybe_gpu_dataset(test),
+        eval_test_ds,
         batch_size=config.batch_size,
         shuffle=False,
+        **get_loader_kwargs(eval_test_ds)
     )
     
     epoch_log_frequency = None
@@ -249,6 +260,7 @@ def train_handle(
 
     logger.info("Preparing seeds and defaults.")
     torch.set_default_dtype(torch.float32)
+    torch.backends.cudnn.benchmark = True
     set_all_seeds(config.seed)
 
     if restart:
@@ -267,6 +279,7 @@ def train_handle(
         norm_std = torch.tensor(data_container.normalization.std, device=device).view(-1, 1, 1)
 
     logger.info("Starting training loop.")
+    model.train()
     enable_profiler = os.environ.get("PAG_PROFILE", "").lower() in ("1", "true", "yes")
     step = cfg.checkpoint if restart else 0
     with tqdm(total=optimization_steps) as pbar:
@@ -325,6 +338,7 @@ def train_handle(
                         out_canary_loader=out_canary_loader,
                         normalization=data_container.normalization,
                     )
+                    model.train()
                     metrics["epoch"] = step / max(1, len(train_loader))
                     mlflow.log_metrics(metrics, step=step)
 
@@ -357,7 +371,7 @@ def train_handle(
                 x, y = x.to(device), y.to(device)
                 if norm_mean is not None:
                     x = (x - norm_mean) / norm_std
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 task_loss = loss_fn(logits, y)
                 loss = task_loss

@@ -561,7 +561,7 @@ def evaluate(
         del metrics[key]
 
     # For safety
-    optimizer.zero_grad()
+    optimizer.zero_grad(set_to_none=True)
 
     mlflow.log_metrics(metrics, step=step)
     if last_step:
