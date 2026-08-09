@@ -12,7 +12,7 @@ class Canary(Protocol):
 
 class CanaryConfig(BaseModel):
     name: str
-    share: float = Field(ge=0, le=1, default=0)
+    num: int = Field(ge=0, default=0)
 
     @abstractmethod
     def __call__(self, dim: Sequence[int]) -> Canary: ...

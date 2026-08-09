@@ -1,7 +1,9 @@
 from pathlib import Path
 
-configs = Path("./configs")
-command_file =  Path("./commands") / "reproduction_nc_grokking.txt"
+SCRIPT_DIR = Path(__file__).parent
+configs = SCRIPT_DIR.parent / "configs"
+command_file =  SCRIPT_DIR / "reproduction_nc_grokking.txt"
+command_file.parent.mkdir(parents=True, exist_ok=True)
 
 available_gpus = [0, 1, 2, 3]
 lines = []

@@ -326,17 +326,27 @@ def evaluate(
                 for key, value in m.items():
                     metrics[f"attack/{prefix}/{key}"] = value
 
-        if metrics_config.one_run_audit and in_canary_indices and out_canary_loader:
-            from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
+        if in_canary_indices and out_canary_loader:
             in_canary_losses = train_results["ce_loss"][in_canary_indices]
+            in_canary_correctness = train_results["correctness"][in_canary_indices]
+            
             out_results, _, _, _ = _process_loader(
                 model, out_canary_loader, compute_mm=False, last_step=False, collect_features=False,
                 normalization=normalization,
             )
             out_canary_losses = out_results["ce_loss"]
-            audit_metrics = compute_empirical_epsilon(in_canary_losses, out_canary_losses, step)
-            for k, v in audit_metrics.items():
-                metrics[f"audit/{k}"] = v
+            out_canary_correctness = out_results["correctness"]
+            
+            if len(in_canary_correctness) > 0:
+                metrics["train/accuracy/canary"] = in_canary_correctness.float().mean().item()
+            if len(out_canary_correctness) > 0:
+                metrics["test/accuracy/canary"] = out_canary_correctness.float().mean().item()
+
+            if metrics_config.one_run_audit:
+                from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
+                audit_metrics = compute_empirical_epsilon(in_canary_losses, out_canary_losses, step)
+                for k, v in audit_metrics.items():
+                    metrics[f"audit/{k}"] = v
 
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))

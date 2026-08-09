@@ -49,7 +49,7 @@ def _class_means_and_global(
     class_means = torch.zeros(len(classes), d, dtype=features.dtype, device=features.device)
     for i, c in enumerate(classes):
         class_means[i] = features[labels == c].mean(dim=0)
-    global_mean = features.mean(dim=0)
+    global_mean = class_means.mean(dim=0)
     return class_means, global_mean, classes
 
 
@@ -170,7 +170,7 @@ def compute_rnc1_train_mean(
 
     # Compute variance of test features around train means
     test_classes = test_labels.unique()
-    N = test_features.shape[0]
+    evaluated_samples = 0
     total = torch.tensor(0.0, dtype=test_features_scaled.dtype, device=test_features_scaled.device)
 
     for c in test_classes:
@@ -179,11 +179,15 @@ def compute_rnc1_train_mean(
             continue
         mask = test_labels == c
         class_features = test_features_scaled[mask]
+        evaluated_samples += class_features.shape[0]
         train_mean = train_means[c_item]
         diff = class_features - train_mean
         total += (diff * diff).sum()
 
-    return (total / N).item()
+    if evaluated_samples == 0:
+        return float("nan")
+
+    return (total / evaluated_samples).item()
 
 
 def compute_nc0(classifier_weight: torch.Tensor) -> float:

@@ -20,8 +20,17 @@ from privacy_and_grokking.datasets.canaries.label_noise import (
     LabelNoiseCanaryConfig,
 )
 
+from privacy_and_grokking.datasets.canaries.ood_natural import (
+    OODNaturalCanary,
+    OODNaturalCanaryConfig,
+)
+
 CanaryType = Annotated[
-    UniformNoiseCanaryConfig | SquareWatermarkCanaryConfig | GaussianNoiseCanaryConfig | LabelNoiseCanaryConfig,
+    UniformNoiseCanaryConfig
+    | SquareWatermarkCanaryConfig
+    | GaussianNoiseCanaryConfig
+    | LabelNoiseCanaryConfig
+    | OODNaturalCanaryConfig,
     Field(discriminator="name"),
 ]
 
@@ -42,5 +51,7 @@ __all__ = [
     "GaussianNoiseCanaryConfig",
     "LabelNoiseCanary",
     "LabelNoiseCanaryConfig",
+    "OODNaturalCanary",
+    "OODNaturalCanaryConfig",
     "create_canary_generator",
 ]

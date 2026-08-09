@@ -107,7 +107,7 @@ class DatasetConfig(BaseModel):
         *,
         canary_lookup: dict[int, torch.Tensor] | None = None,
         raw_lookup: dict[int, torch.Tensor] | None = None,
-        share: float = 0.0,
+        num_canaries: int = 0,
     ) -> torch.Tensor:
         """Compute class-balanced subset indices, respecting train_size and canary splits."""
         if self.train_size is None:
@@ -128,7 +128,7 @@ class DatasetConfig(BaseModel):
             return torch.cat(parts)
 
         # With canaries: split each class budget between raw and canary samples
-        train_num_canaries = int(self.train_size * share)
+        train_num_canaries = min(num_canaries, self.train_size)
         train_canary_dist = distribute_a_across_b(train_num_canaries, num_classes)
         parts = []
         for cls, (amt_raw, amt_canary) in enumerate(
@@ -160,9 +160,9 @@ class DatasetConfig(BaseModel):
                 num_classes=num_classes,
             )
 
-        # Canary config present but share is zero — nothing to inject
-        share = self.canary.share
-        if share == 0:
+        # Canary config present but num is zero — nothing to inject
+        num_canaries = self.canary.num
+        if num_canaries == 0:
             if self.train_size is None:
                 return dataset
             rng = self._make_rng()
@@ -180,7 +180,6 @@ class DatasetConfig(BaseModel):
         rng = self._make_rng()
         labels = self._extract_labels(dataset, num_samples)
 
-        num_canaries = int(num_samples * share)
         canary_distribution = distribute_a_across_b(num_canaries, num_classes)
 
         # Partition each class into canary vs. raw indices
@@ -199,7 +198,7 @@ class DatasetConfig(BaseModel):
             rng,
             canary_lookup=canary_lookup,
             raw_lookup=raw_lookup,
-            share=share,
+            num_canaries=num_canaries,
         )
 
         # Build canary transform and deranged labels

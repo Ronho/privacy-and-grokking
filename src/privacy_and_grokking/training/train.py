@@ -184,7 +184,7 @@ def train_handle(
 
     in_canary_indices = []
     out_canary_loader = None
-    if config.metrics.one_run_audit:
+    if config.data.canary is not None:
         dataset_ptr = train_subset
         if isinstance(dataset_ptr, torch.utils.data.Subset):
             sub_idx = dataset_ptr.indices
@@ -201,10 +201,10 @@ def train_handle(
                 if orig_idx in canary_set:
                     in_canary_indices.append(i)
                     
-        if in_canary_indices and config.canary is not None:
+        if in_canary_indices and config.data.canary is not None:
             n_out = len(in_canary_indices)
             from privacy_and_grokking.datasets.canaries import create_canary_generator
-            canary_transform = create_canary_generator(config.canary, data_container.input_shape)
+            canary_transform = create_canary_generator(config.data.canary, data_container.input_shape)
             out_canaries_subset = torch.utils.data.Subset(test, range(min(n_out, len(test))))
             
             class OutCanaryDataset(torch.utils.data.Dataset):
