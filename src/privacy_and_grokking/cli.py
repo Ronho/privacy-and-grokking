@@ -124,8 +124,6 @@ def train(
     exp_name: str,
     model: str,
     total_steps: int,
-    mask_index: int,
-    seed: int | None = None,
     run_name: str | None = None,
     profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
     overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
@@ -133,10 +131,6 @@ def train(
     if profile:
         os.environ["PAG_PROFILE"] = "1"
     cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
-    if seed is not None:
-        cfg.seed = seed
-    if cfg.data.mask is not None:
-        cfg.data.mask.model_index = mask_index
     cfg = apply_overrides(cfg, overrides)
     training(
         exp_name=exp_name,
@@ -219,8 +213,6 @@ def pipeline(
     exp_name: str,
     model: str,
     total_steps: int,
-    mask_index: int,
-    seed: int | None = None,
     run_name: str | None = None,
     run_id: str | None = None,
     checkpoint: int | None = None,
@@ -242,10 +234,6 @@ def pipeline(
             )
         else:
             cfg = TrainConfig.model_validate_json((CONFIG_DIR / model).read_bytes())
-            if seed is not None:
-                cfg.seed = seed
-            if cfg.data.mask is not None:
-                cfg.data.mask.model_index = mask_index
             cfg = apply_overrides(cfg, overrides)
             logger.info("Running train step.")
         current_run_id = training(
@@ -303,13 +291,13 @@ def command():
 
     configs = Path("./configs")
     commands = Path("./commands")
-    command = commands / "train.txt"
+    command = commands / "reproduction_nc_grokking.txt"
     num_samples = 5
     lines = []
     for config in configs.iterdir():
         for i in range(num_samples):
             lines.append(
-                f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem}"
+                f"CUDA_VISIBLE_DEVICES=1 uv run pag train reproduction-nc-grokking {config.name} 150000 --run-name {config.stem}"
             )
     command.parent.mkdir(parents=True, exist_ok=True)
     command.write_text("\n".join(lines), encoding="utf-8")

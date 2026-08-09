@@ -1,0 +1,16 @@
+CUDA_VISIBLE_DEVICES=0 uv run pag train reproduction-nc-grokking GROK_MNIST_MSE_RESNET.json 150000 --run-name GROK_MNIST_MSE_RESNET
+CUDA_VISIBLE_DEVICES=1 uv run pag train reproduction-nc-grokking GROK_CIFAR10_CE_MLP.json 150000 --run-name GROK_CIFAR10_CE_MLP
+CUDA_VISIBLE_DEVICES=2 uv run pag train reproduction-nc-grokking GROK_CIFAR10_MSE_MLP.json 150000 --run-name GROK_CIFAR10_MSE_MLP
+CUDA_VISIBLE_DEVICES=3 uv run pag train reproduction-nc-grokking GROK_CIFAR10_MSE_RESNET.json 150000 --run-name GROK_CIFAR10_MSE_RESNET
+CUDA_VISIBLE_DEVICES=0 uv run pag train reproduction-nc-grokking GROK_CIFAR10_CE_VIT.json 150000 --run-name GROK_CIFAR10_CE_VIT
+CUDA_VISIBLE_DEVICES=1 uv run pag train reproduction-nc-grokking GROK_CIFAR10_MSE_VIT.json 150000 --run-name GROK_CIFAR10_MSE_VIT
+CUDA_VISIBLE_DEVICES=2 uv run pag train reproduction-nc-grokking GROK_CIFAR10_MSE_CNN.json 150000 --run-name GROK_CIFAR10_MSE_CNN
+CUDA_VISIBLE_DEVICES=3 uv run pag train reproduction-nc-grokking GROK_CIFAR10_CE_CNN.json 150000 --run-name GROK_CIFAR10_CE_CNN
+CUDA_VISIBLE_DEVICES=0 uv run pag train reproduction-nc-grokking GROK_CIFAR10_CE_RESNET.json 150000 --run-name GROK_CIFAR10_CE_RESNET
+CUDA_VISIBLE_DEVICES=1 uv run pag train reproduction-nc-grokking GROK_MNIST_CE_RESNET.json 150000 --run-name GROK_MNIST_CE_RESNET
+CUDA_VISIBLE_DEVICES=2 uv run pag train reproduction-nc-grokking GROK_MNIST_MSE_VIT.json 150000 --run-name GROK_MNIST_MSE_VIT
+CUDA_VISIBLE_DEVICES=3 uv run pag train reproduction-nc-grokking GROK_MNIST_MSE_CNN.json 150000 --run-name GROK_MNIST_MSE_CNN
+CUDA_VISIBLE_DEVICES=0 uv run pag train reproduction-nc-grokking GROK_MNIST_CE_MLP.json 150000 --run-name GROK_MNIST_CE_MLP
+CUDA_VISIBLE_DEVICES=1 uv run pag train reproduction-nc-grokking GROK_MNIST_CE_VIT.json 150000 --run-name GROK_MNIST_CE_VIT
+CUDA_VISIBLE_DEVICES=2 uv run pag train reproduction-nc-grokking GROK_MNIST_CE_CNN.json 150000 --run-name GROK_MNIST_CE_CNN
+CUDA_VISIBLE_DEVICES=3 uv run pag train reproduction-nc-grokking GROK_MNIST_MSE_MLP.json 150000 --run-name GROK_MNIST_MSE_MLP
