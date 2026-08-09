@@ -103,7 +103,6 @@ class RestartConfig(BaseModel):
 def train_handle(
     cfg: TrainConfig | RestartConfig,
     optimization_steps: int,
-    checkpoint_frequency: int = LOG_FREQUENCY,
 ) -> None:
     logger = Logger.get()
     if isinstance(cfg, RestartConfig):
@@ -136,6 +135,20 @@ def train_handle(
     data_container = config.data()
     train_subset = data_container.train
     test = data_container.test
+
+    mlflow.log_params(
+        {
+            "model_name": config.model.name,
+            "loss_function": config.loss.name,
+            "weight_decay": getattr(config.optimizer, "weight_decay", None),
+            "initialization_scale": getattr(config.model, "initialization_scale", None),
+            "learning_rate": getattr(config.optimizer, "lr", None),
+            "optimizer": config.optimizer.name,
+            "name": config.name,
+            "train_size": len(train_subset),
+            "batch_size": config.batch_size,
+        }
+    )
 
     def maybe_gpu_dataset(dataset):
         if keep_on_gpu and len(dataset) < 5000:
@@ -290,7 +303,13 @@ def train_handle(
                     or (step % log_frequency == 0)
                     or (epoch_log_frequency is not None and step % epoch_log_frequency == 0)
                 ):
-                    heavy_metrics = (step % heavy_metrics_log_frequency == 0) or (epoch_heavy_log_frequency is not None and step % epoch_heavy_log_frequency == 0)
+                    steps_per_epoch = max(1, len(train_loader))
+                    current_epoch = step / steps_per_epoch
+                    heavy_metrics = (step % heavy_metrics_log_frequency == 0) or (
+                        epoch_heavy_log_frequency is not None 
+                        and step % epoch_heavy_log_frequency == 0 
+                        and current_epoch <= 500
+                    )
                     metrics = evaluate(
                         model=model,
                         step=step,
@@ -318,7 +337,21 @@ def train_handle(
                         f"L: {train_loss_mean:1.1e}|{test_loss_mean:1.1e}. A: {train_accuracy * 100:2.1f}%|{test_accuracy * 100:2.1f}%"
                     )
 
-                if step % checkpoint_frequency == 0:
+                should_checkpoint = False
+
+                if config.checkpoint_frequency_step is not None and config.checkpoint_frequency_step > 0:
+                    if step % config.checkpoint_frequency_step == 0:
+                        should_checkpoint = True
+
+                if config.checkpoint_frequency_epoch is not None and config.checkpoint_frequency_epoch > 0:
+                    steps_per_epoch = max(1, len(train_loader))
+                    current_epoch = step / steps_per_epoch
+                    if current_epoch <= 500:
+                        epoch_interval = config.checkpoint_frequency_epoch * steps_per_epoch
+                        if step % epoch_interval == 0:
+                            should_checkpoint = True
+
+                if should_checkpoint:
                     save_model(model, optimizer, step)
 
                 x, y = x.to(device), y.to(device)
@@ -394,11 +427,8 @@ def train(
     total_steps: int,
     cfg: TrainConfig | RestartConfig,
     run_name: str | None = None,
-    checkpoint_frequency: int | None = None,
 ) -> str:
     run_name = run_name or (cfg.name if isinstance(cfg, TrainConfig) else cfg.run_id)
-    if checkpoint_frequency is None:
-        checkpoint_frequency = LOG_FREQUENCY
 
     setup_mlflow(exp_name)
 
@@ -411,7 +441,7 @@ def train(
         returned_run_id = mlflow_run.info.run_id
         try:
             logger.bind(run_id=returned_run_id)
-            train_handle(cfg, total_steps, checkpoint_frequency)
+            train_handle(cfg, total_steps)
         except Exception as e:
             logger.error(f"Training failed with error: {e}", exc_info=True)
         finally:

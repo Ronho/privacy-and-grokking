@@ -519,6 +519,14 @@ def evaluate(
                     m = compute_roc_metrics_single_step(-all_train_flat_lf, -all_test_flat_lf)
                     for key, value in m.items():
                         metrics[f"attack/margin_distance_lf/global/{key}"] = value
+                    
+                    train_median = all_train_flat_lf.median()
+                    m_centered = compute_roc_metrics_single_step(
+                        -torch.abs(all_train_flat_lf - train_median),
+                        -torch.abs(all_test_flat_lf - train_median)
+                    )
+                    for key, value in m_centered.items():
+                        metrics[f"attack/margin_distance_lf_centered/global/{key}"] = value
 
                 for c in range(num_classes):
                     if c in train_dists_lf and c in test_dists_lf:
@@ -528,6 +536,14 @@ def evaluate(
                             m = compute_roc_metrics_single_step(-train_c_lf, -test_c_lf)
                             for key, value in m.items():
                                 metrics[f"attack/margin_distance_lf/class_{c}/{key}"] = value
+
+                            train_median_c = train_c_lf.median()
+                            m_centered_c = compute_roc_metrics_single_step(
+                                -torch.abs(train_c_lf - train_median_c),
+                                -torch.abs(test_c_lf - train_median_c)
+                            )
+                            for key, value in m_centered_c.items():
+                                metrics[f"attack/margin_distance_lf_centered/class_{c}/{key}"] = value
 
     keys = list(metrics.keys())
     for key in keys:

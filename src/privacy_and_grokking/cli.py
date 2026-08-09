@@ -127,7 +127,6 @@ def train(
     mask_index: int,
     seed: int | None = None,
     run_name: str | None = None,
-    checkpoint_frequency: int = LOG_FREQUENCY,
     profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
     overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
 ):
@@ -144,7 +143,6 @@ def train(
         total_steps=total_steps,
         cfg=cfg,
         run_name=run_name,
-        checkpoint_frequency=checkpoint_frequency,
     )
 
 
@@ -154,7 +152,6 @@ def restart(
     run_id: str,
     checkpoint: int,
     total_steps: int,
-    checkpoint_frequency: int = LOG_FREQUENCY,
 ):
     cfg = RestartConfig(run_id=run_id, checkpoint=checkpoint)
     training(
@@ -162,7 +159,6 @@ def restart(
         total_steps=total_steps,
         cfg=cfg,
         run_name="",
-        checkpoint_frequency=checkpoint_frequency,
     )
 
 
@@ -228,7 +224,6 @@ def pipeline(
     run_name: str | None = None,
     run_id: str | None = None,
     checkpoint: int | None = None,
-    checkpoint_frequency: int = LOG_FREQUENCY,
     overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
 ):
     if checkpoint is not None and run_id is None:
@@ -258,7 +253,6 @@ def pipeline(
             total_steps=total_steps,
             cfg=cfg,
             run_name=run_name,
-            checkpoint_frequency=checkpoint_frequency,
         )
         logger.info("Train step complete.", extra={"run_id": current_run_id})
 
@@ -315,7 +309,7 @@ def command():
     for config in configs.iterdir():
         for i in range(num_samples):
             lines.append(
-                f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem} --checkpoint-frequency 25000"
+                f"CUDA_VISIBLE_DEVICES=1 uv run pag train v5.0.0 {config.name} 10000000 {i} --seed {i} --run-name {config.stem}"
             )
     command.parent.mkdir(parents=True, exist_ok=True)
     command.write_text("\n".join(lines), encoding="utf-8")

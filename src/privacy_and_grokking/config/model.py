@@ -20,6 +20,8 @@ class TrainConfig(BaseModel):
     scheduler: Scheduler
     data: DatasetConfig
     metrics: MetricsConfig = MetricsConfig()
+    checkpoint_frequency_step: int | None = None
+    checkpoint_frequency_epoch: int | None = None
 
     @property
     def name(self) -> str:

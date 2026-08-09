@@ -12,9 +12,10 @@ from .resnet import ResNetConfig
 from .resnet_torchvision import ResNetTorchvisionConfig
 from .vgg import VGGConfig
 from .vit import ViTConfig
+from .vit_torchvision import ViTTorchvisionConfig
 
 Model = Annotated[
-    MLPConfig | MLPBatchNormConfig | MLPExtendedConfig | MLPNCConfig | CNNConfig | CNNExtendedConfig | ResNetConfig | ResNetTorchvisionConfig | VGGConfig | ViTConfig,
+    MLPConfig | MLPBatchNormConfig | MLPExtendedConfig | MLPNCConfig | CNNConfig | CNNExtendedConfig | ResNetConfig | ResNetTorchvisionConfig | VGGConfig | ViTConfig | ViTTorchvisionConfig,
     Field(discriminator="name"),
 ]
 
@@ -30,4 +31,5 @@ __all__ = [
     "ResNetTorchvisionConfig",
     "VGGConfig",
     "ViTConfig",
+    "ViTTorchvisionConfig",
 ]

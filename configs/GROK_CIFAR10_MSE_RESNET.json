@@ -1,0 +1,72 @@
+{
+    "model": {
+        "name": "resnet_torchvision",
+        "initialization_scale": 9.0
+    },
+    "seed": 0,
+    "batch_size": 200,
+    "loss": {
+        "name": "mse"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "AdamW",
+        "lr": 0.001,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "data": {
+            "name": "cifar10"
+        },
+        "mask": {
+            "name": "independent_stratified",
+            "num_models": 256,
+            "p": 0.5,
+            "seed": 0,
+            "model_index": 0
+        },
+        "train_size": 1000,
+        "seed": 0
+    },
+    "checkpoint_frequency_step": 10000,
+    "checkpoint_frequency_epoch": 10,
+    "metrics": {
+        "log_frequency": 1000,
+        "heavy_metrics_log_frequency": 10000,
+        "log_every_n_epochs": 10,
+        "heavy_log_every_n_epochs": 10,
+        "loss_stats": true,
+        "accuracy": true,
+        "weight_norms": true,
+        "gradient_norms": true,
+        "optimizer_internals": false,
+        "rnc1": true,
+        "rnc1_train_mean": true,
+        "nhsic": false,
+        "nhsic_max_samples": 2048,
+        "distribution_overlap": true,
+        "distribution_overlap_adaptive": false,
+        "distribution_overlap_kde": false,
+        "soft_overlap": false,
+        "kl_divergence": false,
+        "kl_divergence_adaptive": false,
+        "kl_divergence_kde": false,
+        "js_distance": false,
+        "js_distance_adaptive": false,
+        "js_distance_kde": false,
+        "mmd": false,
+        "attack_true_class_prob": true,
+        "attack_true_class_logit": true,
+        "attack_ce_loss": true,
+        "attack_mse_loss": true,
+        "attack_correctness": true,
+        "attack_distance_to_class_mean": true,
+        "curvature": false,
+        "merlin_morgan": false,
+        "neural_collapse": true,
+        "one_run_audit": false,
+        "attack_margin_distance_lf": true
+    }
+}
