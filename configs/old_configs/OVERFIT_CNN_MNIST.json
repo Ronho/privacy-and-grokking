@@ -1,0 +1,56 @@
+{
+    "model": {
+        "name": "cnn-extended"
+    },
+    "seed": 42,
+    "batch_size": 10,
+    "loss": {
+        "name": "cross_entropy"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "Adam",
+        "lr": 0.001,
+        "weight_decay": 0.0
+    },
+    "data": {
+        "data": {
+            "name": "mnist"
+        },
+        "train_size": 10,
+        "seed": 42
+    },
+    "metrics": {
+        "loss_stats": true,
+        "accuracy": true,
+        "weight_norms": true,
+        "gradient_norms": true,
+        "optimizer_internals": true,
+        "rnc1": true,
+        "nhsic": false,
+        "nhsic_max_samples": 2048,
+        "distribution_overlap": true,
+        "distribution_overlap_adaptive": false,
+        "distribution_overlap_kde": false,
+        "soft_overlap": true,
+        "kl_divergence": false,
+        "kl_divergence_adaptive": false,
+        "kl_divergence_kde": false,
+        "js_distance": false,
+        "js_distance_adaptive": false,
+        "js_distance_kde": false,
+        "mmd": false,
+        "attack_true_class_prob": true,
+        "attack_true_class_logit": true,
+        "attack_ce_loss": true,
+        "attack_mse_loss": true,
+        "attack_correctness": true,
+        "attack_distance_to_class_mean": true,
+        "curvature": false,
+        "merlin_morgan": false,
+        "neural_collapse": true,
+        "one_run_audit": false
+    }
+}
