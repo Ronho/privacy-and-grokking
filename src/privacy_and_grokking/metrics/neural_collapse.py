@@ -417,7 +417,8 @@ def compute_nc3_papyan(
     present_weights = classifier_weight[classes]
 
     # Normalize W and M_dot
-    W_normed = present_weights / torch.clamp(present_weights.norm(p='fro'), min=1e-8)
+    # W is normalized by its global Frobenius norm to strictly match the NC3 definition
+    W_normed = present_weights / torch.clamp(classifier_weight.norm(p='fro'), min=1e-8)
     M_normed = centered_means / torch.clamp(centered_means.norm(p='fro'), min=1e-8)
 
     # || W/||W||_F - M/||M||_F ||_F  -> should approach 0

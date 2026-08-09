@@ -1,0 +1,2 @@
+uv run pag process ./commands/reproduction_nc_grokking.txt 8
+uv run pag process ./commands/canary_selection.txt 8
