@@ -310,17 +310,18 @@ def train_handle(
                 if step >= optimization_steps:
                     break
 
+                steps_per_epoch = max(1, len(train_loader))
+                current_epoch = step / steps_per_epoch
+
                 if (
                     (step < 50)
                     or (step < log_frequency and step % 100 == 0)
                     or (step % log_frequency == 0)
-                    or (epoch_log_frequency is not None and step % epoch_log_frequency == 0)
+                    or (epoch_log_frequency is not None and step % epoch_log_frequency == 0 and current_epoch <= 500)
                 ):
-                    steps_per_epoch = max(1, len(train_loader))
-                    current_epoch = step / steps_per_epoch
                     heavy_metrics = (step % heavy_metrics_log_frequency == 0) or (
-                        epoch_heavy_log_frequency is not None 
-                        and step % epoch_heavy_log_frequency == 0 
+                            epoch_heavy_log_frequency is not None 
+                            and step % epoch_heavy_log_frequency == 0
                         and current_epoch <= 500
                     )
                     metrics = evaluate(
