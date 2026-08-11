@@ -155,32 +155,35 @@ def train_handle(
             return GpuDataset(dataset, device)
         return dataset
 
-    def get_loader_kwargs(dataset):
-        if isinstance(dataset, GpuDataset):
-            return {"num_workers": 0, "pin_memory": False}
-        return {"num_workers": 4, "pin_memory": True}
+    def get_dl_kwargs(dataset):
+        is_gpu = isinstance(dataset, GpuDataset)
+        return {
+            "batch_size": config.batch_size,
+            "num_workers": 0 if is_gpu else config.num_workers,
+            "pin_memory": (config.num_workers > 0 and keep_on_gpu and not is_gpu),
+            "persistent_workers": (config.num_workers > 0 and not is_gpu),
+        }
 
     train_ds = maybe_gpu_dataset(train_subset)
     train_loader = torch.utils.data.DataLoader(
         train_ds,
-        batch_size=config.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
-        **get_loader_kwargs(train_ds)
+        **get_dl_kwargs(train_ds)
     )
+    
     eval_train_ds = maybe_gpu_dataset(train_subset)
     eval_train_loader = torch.utils.data.DataLoader(
         eval_train_ds,
-        batch_size=config.batch_size,
         shuffle=False,
-        **get_loader_kwargs(eval_train_ds)
+        **get_dl_kwargs(eval_train_ds)
     )
+    
     eval_test_ds = maybe_gpu_dataset(test)
     eval_test_loader = torch.utils.data.DataLoader(
         eval_test_ds,
-        batch_size=config.batch_size,
         shuffle=False,
-        **get_loader_kwargs(eval_test_ds)
+        **get_dl_kwargs(eval_test_ds)
     )
     
     epoch_log_frequency = None
@@ -230,10 +233,11 @@ def train_handle(
                     return img, lbl
 
             out_ds = OutCanaryDataset(out_canaries_subset, canary_transform)
+            out_canary_ds = maybe_gpu_dataset(out_ds)
             out_canary_loader = torch.utils.data.DataLoader(
-                maybe_gpu_dataset(out_ds),
-                batch_size=config.batch_size,
+                out_canary_ds,
                 shuffle=False,
+                **get_dl_kwargs(out_canary_ds)
             )
 
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0

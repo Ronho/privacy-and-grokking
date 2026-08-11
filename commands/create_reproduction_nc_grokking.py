@@ -8,6 +8,7 @@ command_file.parent.mkdir(parents=True, exist_ok=True)
 available_gpus = [0, 1, 2, 3]
 lines = []
 configs_list = list(configs.glob("*.json"))
+configs_list = [c for c in configs_list if not c.name.startswith("_")]
 
 for idx, config in enumerate(configs_list):
     gpu = available_gpus[idx % len(available_gpus)]

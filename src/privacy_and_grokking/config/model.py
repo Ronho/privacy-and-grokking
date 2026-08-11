@@ -14,6 +14,7 @@ class TrainConfig(BaseModel):
     model: Model
     seed: int
     batch_size: int
+    num_workers: int = 0
     loss: Loss
     regularizer: SelfContainedTwoSampleRegularizer | None = None
     optimizer: Optimizer

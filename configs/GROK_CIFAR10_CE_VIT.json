@@ -27,7 +27,7 @@
             "seed": 0,
             "model_index": 0
         },
-        "train_size": 1000,
+        "train_size": 2000,
         "seed": 0
     },
     "checkpoint_frequency_step": 10000,

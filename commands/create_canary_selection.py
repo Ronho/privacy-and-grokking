@@ -20,6 +20,7 @@ lines = []
 
 idx = 0
 configs_list = list(configs.glob("*.json"))
+configs_list = [c for c in configs_list if not c.name.startswith("_")]
 
 for config in configs_list:
     for canary_name in canary_types:
