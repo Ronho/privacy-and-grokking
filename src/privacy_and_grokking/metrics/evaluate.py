@@ -197,8 +197,6 @@ def evaluate(
         compute_mm = compute_heavy_metrics and metrics_config.merlin_morgan
         collect_features = compute_heavy_metrics and (
             metrics_config.neural_collapse
-            or metrics_config.rnc1
-            or metrics_config.rnc1_train_mean
             or metrics_config.nhsic
             or metrics_config.attack_distance_to_class_mean
             or metrics_config.attack_margin_distance_lf
@@ -351,7 +349,7 @@ def evaluate(
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
 
-    if train_activations and ((compute_heavy_metrics and metrics_config.neural_collapse) or metrics_config.rnc1 or metrics_config.rnc1_train_mean):
+    if train_activations and ((compute_heavy_metrics and metrics_config.neural_collapse)):
         # Find the last linear layer's weight (classifier head).
         last_linear_name = None
         last_linear_weight = None
@@ -383,38 +381,37 @@ def evaluate(
 
             if penultimate:
                 train_feats = train_activations[penultimate]
+        
+        test_feats = None
+        if test_activations and len(test_labels) > 0:
+            if last_linear_name and f"{last_linear_name}.input" in test_activations:
+                test_feats = test_activations[f"{last_linear_name}.input"]
+            elif penultimate and penultimate in test_activations:
+                test_feats = test_activations[penultimate]
 
-        if train_feats is not None:
+            if test_feats is not None and test_feats.ndim > 2:
+                test_feats = test_feats.reshape(test_feats.size(0), -1)
+
+        if train_feats is not None and test_feats is not None:
             if train_feats.ndim > 2:
                 train_feats = train_feats.reshape(train_feats.size(0), -1)
 
             if compute_heavy_metrics and metrics_config.neural_collapse:
                 nc = compute_all_nc_metrics(
-                    train_feats, train_labels.long(), last_linear_weight, last_linear_bias
+                    train_feats, train_labels.long(), test_feats,  last_linear_weight, last_linear_bias
                 )
-                metrics["nc/nc0/train"] = nc.nc0
                 metrics["nc/rnc1/train"] = nc.rnc1
                 metrics["nc/nc1/train"] = nc.nc1
-                metrics["nc/nc2/train"] = nc.nc2
                 metrics["nc/nc2_equinorm/train"] = nc.nc2_equinorm
-                metrics["nc/nc2_equiangular/train"] = nc.nc2_equiangular
+                metrics["nc/nc2_equinorm_weights/train"] = nc.nc2_equinorm_weights
+                metrics["nc/nc2_equiangularity/train"] = nc.nc2_equiangularity
+                metrics["nc/nc2_equiangularity_weights/train"] = nc.nc2_equiangularity_weights
+                metrics["nc/nc2_maximal_angle_equiangularity/train"] = nc.nc2_maximal_angle_equiangularity
+                metrics["nc/nc2_maximal_angle_equiangularity_weights/train"] = nc.nc2_maximal_angle_equiangularity_weights
                 metrics["nc/nc3/train"] = nc.nc3
-                metrics["nc/nc3_papyan/train"] = nc.nc3_papyan
                 metrics["nc/nc4/train"] = nc.nc4
-                metrics["nc/between_class_variance/train"] = nc.between_class_variance
-                metrics["nc/within_class_variance/train"] = nc.within_class_variance
             elif metrics_config.rnc1:
                 metrics["nc/rnc1/train"] = compute_rnc1(train_feats, train_labels.long())
-
-            test_feats = None
-            if test_activations and len(test_labels) > 0:
-                if last_linear_name and f"{last_linear_name}.input" in test_activations:
-                    test_feats = test_activations[f"{last_linear_name}.input"]
-                elif penultimate and penultimate in test_activations:
-                    test_feats = test_activations[penultimate]
-
-                if test_feats is not None and test_feats.ndim > 2:
-                    test_feats = test_feats.reshape(test_feats.size(0), -1)
 
             if test_feats is not None:
                 if compute_heavy_metrics and metrics_config.neural_collapse:
