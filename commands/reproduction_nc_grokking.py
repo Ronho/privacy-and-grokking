@@ -10,7 +10,7 @@ available_gpus = []
 load_all_to_gpu = True
 lines = []
 # Use this to avoid running out of memory.
-shuffle = False
+shuffle = True
 num_repetitions=5
 seed=4711
 random.seed(seed)
