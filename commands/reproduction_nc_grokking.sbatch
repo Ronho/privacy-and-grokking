@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=grid-search-sgd
-#SBATCH --output=logs/grid-search-sgd_%j.out
-#SBATCH --error=logs/grid-search-sgd_%j.err
+#SBATCH --job-name=reproduction_nc_grokking
+#SBATCH --output=logs/reproduction_nc_grokking_%j.log
+#SBATCH --error=logs/reproduction_nc_grokking_%j.err
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -16,8 +16,13 @@
 
 mkdir -p logs
 
-echo "Running on host: $(hostname)"
+echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
+echo "Allocated GPUs: $CUDA_VISIBLE_DEVICES"
 nvidia-smi
+
+nvidia-cuda-mps-control -d
+
+CONCURRENT_JOBS=20
 
 export MLFLOW_TRACKING_URI="http://${1}:5051"
 export PATH="$HOME/storage/personal/bin:$PATH"
@@ -26,6 +31,11 @@ export PYTHONUNBUFFERED=1
 
 uv pip install --system --break-system-packages -e .
 
-pag process commands/reproduction_nc_grokking.txt 20
 
-echo "All training runs in the queue have completed!"
+echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
+
+cat commands/reproduction_nc_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "{}"
+
+echo "All jobs finished. Shutting down MPS."
+echo quit | nvidia-cuda-mps-control
+echo "Done."

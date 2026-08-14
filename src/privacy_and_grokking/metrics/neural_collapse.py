@@ -23,6 +23,9 @@ class NeuralCollapseMetrics:
     rnc1_train: float
     rnc1_test: float
     rnc1_train_mean_test_variance: float
+    rnc1_train_impl: float
+    rnc1_test_impl: float
+    rnc1_train_mean_test_variance_impl: float
     nc1: float
     nc2_equinorm: float
     nc2_equinorm_weights: float
@@ -113,7 +116,7 @@ def compute_all_nc_metrics(
     mismatch_mask = (test_predictions != ncc_predictions)
     nc4 = torch.mean(mismatch_mask.float()).item()
 
-    # rnc1_train_mean_test_variance
+    # RNC1 according to the paper
     B_g_train = train_features.norm(p=2, dim=1).max()
     g_tilde_train = train_features / B_g_train
     B_g_test = test_features.norm(p=2, dim=1).max()
@@ -145,10 +148,42 @@ def compute_all_nc_metrics(
     rnc1_test = (test_total / test_features.shape[0]).item()
     rnc1_test_all = (test_all_total / test_features.shape[0]).item()
 
+    # RNC1 According to the Implementation in their GitHub Repo
+    scale_mean_train = train_features.norm(p=2, dim=1).mean()
+    scale_mean_test = test_features.norm(p=2, dim=1).mean()
+    scale_mean_all = torch.cat([train_features, test_features]).norm(p=2, dim=1).mean()
+
+    train_total = 0
+    test_total = 0
+    test_all_total = 0
+
+    for c in classes:
+        train_mask = train_labels == c
+        test_mask = test_labels == c
+        train_class_features = train_features[train_mask]
+        test_class_features = test_features[test_mask]
+        train_class_mean = train_class_features.mean(dim=0)
+        test_class_mean = test_class_features.mean(dim=0)
+
+        train_diff = (train_class_features - train_class_mean).norm(p=2, dim=1)**2
+        test_diff = (test_class_features - test_class_mean).norm(p=2, dim=1)**2
+        test_all_diff = (test_class_features - train_class_mean).norm(p=2, dim=1)**2
+        
+        train_total += train_diff.sum()
+        test_total += test_diff.sum()
+        test_all_total += test_all_diff.sum()
+
+    rnc1_train_impl = (train_total / train_features.shape[0] / (scale_mean_train**2 + 1e-10)).item()
+    rnc1_test_impl = (test_total / test_features.shape[0] / (scale_mean_test**2 + 1e-10)).item()
+    rnc1_test_all_impl = (test_all_total / test_features.shape[0] / (scale_mean_all**2 + 1e-10)).item()
+
     return NeuralCollapseMetrics(
         rnc1_train=rnc1_train,
         rnc1_test=rnc1_test,
         rnc1_train_mean_test_variance=rnc1_test_all,
+        rnc1_train_impl=rnc1_train_impl,
+        rnc1_test_impl=rnc1_test_impl,
+        rnc1_train_mean_test_variance_impl=rnc1_test_all_impl,
         nc1=nc1,
         nc2_equinorm=nc2_equinorm,
         nc2_equinorm_weights=nc2_equinorm_weights,

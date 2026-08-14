@@ -232,6 +232,9 @@ def evaluate(
         metrics["nc/rnc1/train"] = nc.rnc1_train
         metrics["nc/rnc1/test"] = nc.rnc1_test
         metrics["nc/rnc1/train_mean_test_variance"] = nc.rnc1_train_mean_test_variance
+        metrics["nc/rnc1/train_impl"] = nc.rnc1_train_impl
+        metrics["nc/rnc1/test_impl"] = nc.rnc1_test_impl
+        metrics["nc/rnc1/train_mean_test_variance_impl"] = nc.rnc1_train_mean_test_variance_impl
         metrics["nc/nc1"] = nc.nc1
         metrics["nc/nc2_equinorm"] = nc.nc2_equinorm
         metrics["nc/nc2_equinorm_weights"] = nc.nc2_equinorm_weights

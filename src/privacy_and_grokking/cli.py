@@ -127,6 +127,7 @@ def train(
     run_name: str | None = None,
     profile: bool = typer.Option(False, "--profile", help="Enable PyTorch profiler."),
     overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
+    load_all_to_gpu: bool = typer.Option(False, "--load-all-to-gpu", help="Load the whole dataset to the GPU"),
 ):
     if profile:
         os.environ["PAG_PROFILE"] = "1"
@@ -137,6 +138,7 @@ def train(
         total_steps=total_steps,
         cfg=cfg,
         run_name=run_name,
+        load_all_to_gpu=load_all_to_gpu,
     )
 
 
@@ -217,6 +219,7 @@ def pipeline(
     run_id: str | None = None,
     checkpoint: int | None = None,
     overrides: list[str] | None = typer.Option(None, "--override", "-o", help="Override config fields (e.g. data.batch_size=32)"),
+    load_all_to_gpu: bool = typer.Option(False, "--load-all-to-gpu", help="Load the whole dataset to the GPU"),
 ):
     if checkpoint is not None and run_id is None:
         raise typer.BadParameter("--run-id is required when --checkpoint is provided.")
@@ -241,6 +244,7 @@ def pipeline(
             total_steps=total_steps,
             cfg=cfg,
             run_name=run_name,
+            load_all_to_gpu=load_all_to_gpu,
         )
         logger.info("Train step complete.", extra={"run_id": current_run_id})
 

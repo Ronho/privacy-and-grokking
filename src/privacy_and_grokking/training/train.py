@@ -103,6 +103,7 @@ class RestartConfig(BaseModel):
 def train_handle(
     cfg: TrainConfig | RestartConfig,
     optimization_steps: int,
+    load_all_to_gpu: bool = False,
 ) -> None:
     logger = Logger.get()
     if isinstance(cfg, RestartConfig):
@@ -151,7 +152,7 @@ def train_handle(
     )
 
     def maybe_gpu_dataset(dataset):
-        if keep_on_gpu and len(dataset) < 5000:
+        if keep_on_gpu and (load_all_to_gpu or len(dataset) < 5000):
             return GpuDataset(dataset, device)
         return dataset
 
@@ -446,6 +447,7 @@ def train(
     total_steps: int,
     cfg: TrainConfig | RestartConfig,
     run_name: str | None = None,
+    load_all_to_gpu: bool = False,
 ) -> str:
     run_name = run_name or (cfg.name if isinstance(cfg, TrainConfig) else cfg.run_id)
 
@@ -460,7 +462,7 @@ def train(
         returned_run_id = mlflow_run.info.run_id
         try:
             logger.bind(run_id=returned_run_id)
-            train_handle(cfg, total_steps)
+            train_handle(cfg, total_steps, load_all_to_gpu=load_all_to_gpu)
         except Exception as e:
             logger.error(f"Training failed with error: {e}", exc_info=True)
         finally:
