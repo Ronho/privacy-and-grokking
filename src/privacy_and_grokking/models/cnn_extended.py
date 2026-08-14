@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -8,7 +9,7 @@ from privacy_and_grokking.models.base import ModelConfig
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/toy_cnn.py
 
 
-class CNNExtended(nn.Module):
+class CNNExtended(ModelBase):
     """An extended CNN model based on toy_cnn from collapse-dynamics."""
 
     def __init__(

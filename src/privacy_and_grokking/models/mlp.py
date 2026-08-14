@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -7,7 +8,7 @@ import torch.nn.functional as F
 from privacy_and_grokking.models.base import ModelConfig
 
 
-class MLP(nn.Module):
+class MLP(ModelBase):
     def __init__(self, input_dim: torch.Size, num_classes: int):
         super().__init__()
         input = int(torch.prod(torch.tensor(input_dim)).item())

@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 import torch
 from torch import Tensor, nn
 from typing import Literal
@@ -51,7 +52,7 @@ class BasicBlock(nn.Module):
         return nn.functional.relu(out)
 
 
-class ResNet(nn.Module):
+class ResNet(ModelBase):
     """ResNet model."""
 
     def __init__(

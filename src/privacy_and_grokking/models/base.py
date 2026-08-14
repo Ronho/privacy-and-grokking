@@ -25,3 +25,12 @@ class ModelConfig(BaseModel):
         if self.initialization_scale is not None:
             self._apply_initialization_scale(model, self.initialization_scale)
         return model
+
+class ModelBase(nn.Module):
+    def forward(
+        self, x: torch.Tensor, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError
+
+    def classifier(self) -> nn.Module:
+        raise NotImplementedError

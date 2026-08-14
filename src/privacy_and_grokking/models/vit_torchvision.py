@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -7,7 +8,7 @@ from torchvision.models.vision_transformer import VisionTransformer
 from privacy_and_grokking.models.base import ModelConfig
 
 
-class ViTTorchvision(nn.Module):
+class ViTTorchvision(ModelBase):
     def __init__(
         self,
         input_dim: torch.Size,

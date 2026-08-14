@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 import torch
 from torch import Tensor, nn
 import torchvision.models as models
@@ -5,7 +6,7 @@ from typing import Literal
 
 from privacy_and_grokking.models.base import ModelConfig
 
-class TorchvisionResNet(nn.Module):
+class TorchvisionResNet(ModelBase):
     """Wrapper for torchvision's ResNet18 modified for MNIST/CIFAR-sized images."""
 
     def __init__(self, input_dim: torch.Size, num_classes: int = 10) -> None:

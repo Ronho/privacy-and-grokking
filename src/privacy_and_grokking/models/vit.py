@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -19,7 +20,7 @@ class PatchEmbed(nn.Module):
         return x.flatten(2).transpose(1, 2)
 
 
-class ViT(nn.Module):
+class ViT(ModelBase):
     def __init__(
         self,
         input_dim: torch.Size,

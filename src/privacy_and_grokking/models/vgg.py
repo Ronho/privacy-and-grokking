@@ -8,6 +8,7 @@ the classifier is a single linear layer applied to the global-average-pooled
 feature map. Default ``cfg='A'`` yields VGG-11.
 """
 
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -84,7 +85,7 @@ def _make_layers(cfg: list[int | str], in_channels: int, batch_norm: bool) -> nn
     return nn.Sequential(*layers)
 
 
-class VGG(nn.Module):
+class VGG(ModelBase):
     def __init__(
         self,
         input_dim: torch.Size,

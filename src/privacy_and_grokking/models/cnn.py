@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from math import floor
 from typing import Literal
 
@@ -8,7 +9,7 @@ import torch.nn.functional as F
 from privacy_and_grokking.models.base import ModelConfig
 
 
-class CNN(nn.Module):
+class CNN(ModelBase):
     def __init__(self, input_dim: torch.Size, num_classes: int):
         super().__init__()
         c, h, w = input_dim

@@ -1,3 +1,4 @@
+from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
@@ -9,7 +10,7 @@ from privacy_and_grokking.models.base import ModelConfig
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/toy_mlp.py
 
 
-class MLPExtended(nn.Module):
+class MLPExtended(ModelBase):
     def __init__(self, input_dim: torch.Size, num_classes: int, alpha: float | None = None):
         super().__init__()
         self.alpha = alpha

@@ -3,18 +3,6 @@ from privacy_and_grokking.metrics.evaluate import evaluate
 from privacy_and_grokking.metrics.neural_collapse import (
     NeuralCollapseMetrics,
     compute_all_nc_metrics,
-    compute_nc0,
-    compute_nc1,
-    compute_nc2,
-    compute_nc3,
-    compute_nc4,
-    compute_rnc1,
-)
-from privacy_and_grokking.metrics.nhsic import (
-    compute_hsic,
-    compute_nhsic,
-    nhsic_features_vs_inputs,
-    nhsic_features_vs_labels,
 )
 
 
@@ -35,16 +23,6 @@ __all__ = [
     "MetricsConfig",
     "NeuralCollapseMetrics",
     "compute_all_nc_metrics",
-    "compute_hsic",
-    "compute_nc0",
-    "compute_nc1",
-    "compute_nc2",
-    "compute_nc3",
-    "compute_nc4",
-    "compute_nhsic",
-    "compute_rnc1",
     "evaluate",
     "extraction_handler",
-    "nhsic_features_vs_inputs",
-    "nhsic_features_vs_labels",
 ]
