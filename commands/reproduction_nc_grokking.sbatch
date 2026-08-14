@@ -29,6 +29,13 @@ export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 export PYTHONUNBUFFERED=1
 
+# Limit threads per process to avoid CPU thrashing with concurrent PyTorch jobs
+export OMP_NUM_THREADS=2
+export MKL_NUM_THREADS=2
+export OPENBLAS_NUM_THREADS=2
+export VECLIB_MAXIMUM_THREADS=2
+export NUMEXPR_NUM_THREADS=2
+
 uv pip install --system --break-system-packages -e .
 
 
