@@ -24,3 +24,5 @@ print('Checking MNIST...')
 MNISTConfig()()
 "
 ```
+
+srun --jobid=19462 --pty nvidia-smi

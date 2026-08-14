@@ -24,7 +24,7 @@ nvidia-cuda-mps-control -d
 
 CONCURRENT_JOBS=20
 
-export MLFLOW_TRACKING_URI="http://${1}:5051"
+export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 export PYTHONUNBUFFERED=1
@@ -41,7 +41,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/reproduction_nc_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "{}"
+cat commands/reproduction_nc_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control
