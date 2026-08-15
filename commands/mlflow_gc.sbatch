@@ -11,19 +11,14 @@
 #SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
-#SBATCH --container-writable
 
 mkdir -p logs
 
 echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
 
-export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 
 uv pip install --system --break-system-packages -e .
 
-echo "Running mlflow gc..."
-mlflow gc --backend-store-uri $MLFLOW_TRACKING_URI
-
-echo "Done."
+uv run mlflow gc --backend-store-uri file:///workspace/mlruns
