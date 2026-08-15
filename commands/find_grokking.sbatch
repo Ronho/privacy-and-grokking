@@ -22,7 +22,7 @@ nvidia-smi
 
 nvidia-cuda-mps-control -d
 
-CONCURRENT_JOBS=40
+CONCURRENT_JOBS=20
 
 export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
