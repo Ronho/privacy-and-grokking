@@ -16,9 +16,10 @@ mkdir -p logs
 
 echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
 
+export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 
 uv pip install --system --break-system-packages -e .
 
-uv run mlflow gc --backend-store-uri file:///workspace/mlruns
+uv run mlflow gc --backend-store-uri $MLFLOW_TRACKING_URI
