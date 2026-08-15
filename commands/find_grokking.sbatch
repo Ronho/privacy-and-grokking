@@ -6,7 +6,7 @@
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=60
+#SBATCH --cpus-per-task=40
 #SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
@@ -22,7 +22,7 @@ nvidia-smi
 
 nvidia-cuda-mps-control -d
 
-CONCURRENT_JOBS=30
+CONCURRENT_JOBS=40
 
 export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
