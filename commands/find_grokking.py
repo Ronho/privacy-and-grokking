@@ -1,29 +1,33 @@
 from pathlib import Path
 import random
+import itertools
 
 SCRIPT_DIR = Path(__file__).parent
 configs = SCRIPT_DIR.parent / "configs"
-command_file =  SCRIPT_DIR / "reproduction_nc_grokking.txt"
+command_file =  SCRIPT_DIR / "find_grokking.txt"
 command_file.parent.mkdir(parents=True, exist_ok=True)
 
 available_gpus = []
 load_all_to_gpu = True
 # Use this to avoid running out of memory.
-shuffle = True
-num_repetitions=5
-seed=4711
+shuffle = False
+seed=4713
+
+initialization_scale = [2.0, 3.0, 6.0, 9.0, 12.0]
+weight_decay = [1.0, 0.5, 0.1, 0.05, 0.01, 0.001, 0.0001]
+train_size = [10_000, 5_000, 2_000, 1_000, 500]
 
 
 # Start of main script
 random.seed(seed)
+permutations = list(itertools.product(initialization_scale, weight_decay, train_size))
 
 lines = []
 configs_list = list(configs.glob("*.json"))
-configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
+configs_list = [c for c in configs_list if not c.name.startswith("_") and not c.name.startswith("+")]
 
 def cmd(config, seed, name_prefix="", postfix=None):
-    # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train reproduction-nc-grokking {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={seed}"
+    cmd_str = f"pag train find-grokking {config.name} 150000 --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={seed}"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
@@ -31,15 +35,9 @@ def cmd(config, seed, name_prefix="", postfix=None):
     return cmd_str
 
 for config in configs_list:
-    for _ in range(num_repetitions):
+    for scale, decay, size in permutations:
         seed = random.randint(0, 1000000)
-        lines.append(cmd(config, seed, postfix=f" -o data.mask.seed={seed}"))
-
-        # None grokking training i.e. no initialization scale, full train size.
-        seed = random.randint(0, 1000000)
-        lines.append(
-            cmd(config, seed, "NO_", postfix=" --override model.initialization_scale=None -o data.train_size=None -o data.mask=None")
-        )
+        lines.append(cmd(config, seed, postfix=f" -o data.mask.seed={seed} -o model.initialization_scale={scale} -o optimizer.weight_decay={decay} -o data.train_size={size}"))
 
 if shuffle:
     random.shuffle(lines)

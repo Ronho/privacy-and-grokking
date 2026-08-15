@@ -14,11 +14,11 @@
     "optimizer": {
         "name": "AdamW",
         "lr": 0.001,
-        "weight_decay": 0.01
+        "weight_decay": 0.0001
     },
     "data": {
         "data": {
-            "name": "mnist"
+            "name": "cifar10"
         },
         "mask": {
             "name": "independent_stratified",

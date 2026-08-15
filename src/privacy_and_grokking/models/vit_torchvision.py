@@ -80,10 +80,6 @@ class ViTTorchvisionConfig(ModelConfig):
         return ViTTorchvision(
             input_dim,
             num_classes,
-            patch_size=4,
-            embed_dim=128,
-            num_heads=4,
-            num_layers=1,
         )
 
     def _apply_initialization_scale(self, model: nn.Module, scale: float) -> None:

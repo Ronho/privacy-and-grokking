@@ -13,41 +13,36 @@ class CNN(ModelBase):
     def __init__(self, input_dim: torch.Size, num_classes: int):
         super().__init__()
         c, h, w = input_dim
-        self.conv1 = nn.Conv2d(c, 6, 3)
-        self.conv2 = nn.Conv2d(6, 16, 3)
+        CHANNEL_DIM = 32
+        self.conv1 = nn.Conv2d(c, CHANNEL_DIM, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(CHANNEL_DIM, CHANNEL_DIM * 2, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(CHANNEL_DIM * 2, CHANNEL_DIM * 2, kernel_size=3, padding=1)
 
-        def _conv_out_dim(in_dim, kernel_size=3, stride=1, padding=0):
-            return floor((in_dim + 2 * padding - (kernel_size - 1) - 1) / stride + 1)
+        conv_output_dim = CHANNEL_DIM * 2 * floor(h / 8) * floor(w / 8)
 
-        def _pool_out_dim(in_dim, kernel_size=2, stride=2, padding=0):
-            return floor((in_dim + 2 * padding - (kernel_size - 1) - 1) / stride + 1)
-
-        h = _conv_out_dim(h)
-        w = _conv_out_dim(w)
-        h = _pool_out_dim(h)
-        w = _pool_out_dim(w)
-        h = _conv_out_dim(h)
-        w = _conv_out_dim(w)
-        h = _pool_out_dim(h)
-        w = _pool_out_dim(w)
-
-        conv_output_size = 16 * h * w
-
-        self.fc1 = nn.Linear(conv_output_size, 200)
+        self.fc1 = nn.Linear(conv_output_dim, 200)
         self.fc2 = nn.Linear(200, num_classes)
 
     def forward(
         self, input, verbose: bool = False
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        y = self.conv1(input)
-        y = F.relu(y)
+        # Block 1
+        y = F.relu(self.conv1(input))
         y = F.max_pool2d(y, 2, 2)
-        y = self.conv2(y)
-        y = F.relu(y)
+
+        # Block 2
+        y = F.relu(self.conv2(y))
         y = F.max_pool2d(y, 2, 2)
+
+        # Block 3
+        y = F.relu(self.conv3(y))
+        y = F.max_pool2d(y, 2, 2)
+
+        # Block 4
         y = torch.flatten(y, 1)
-        y = self.fc1(y)
-        z = F.relu(y)
+        y = F.relu(self.fc1(y))
+
+        z = y
         y = self.fc2(z)
         if verbose:
             return y, z
