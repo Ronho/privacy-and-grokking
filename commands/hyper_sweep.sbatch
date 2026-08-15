@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-#SBATCH --job-name=find_grokking
-#SBATCH --output=logs/find_grokking_%j.log
-#SBATCH --error=logs/find_grokking_%j.err
+#SBATCH --job-name=hyper_sweep
+#SBATCH --output=logs/hyper_sweep_%j.log
+#SBATCH --error=logs/hyper_sweep_%j.err
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=60
+#SBATCH --cpus-per-task=40
 #SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
@@ -22,7 +22,7 @@ nvidia-smi
 
 nvidia-cuda-mps-control -d
 
-CONCURRENT_JOBS=30
+CONCURRENT_JOBS=20
 
 export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
@@ -41,7 +41,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/find_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
+cat commands/hyper_sweep.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control
