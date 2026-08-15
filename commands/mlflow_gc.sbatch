@@ -8,7 +8,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
+#SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 
