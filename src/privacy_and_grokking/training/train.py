@@ -159,7 +159,7 @@ def train_handle(
     def get_dl_kwargs(dataset):
         is_gpu = isinstance(dataset, GpuDataset)
         return {
-            "batch_size": config.batch_size,
+            "batch_size": config.batch_size if config.batch_size != -1 else len(train_subset),
             "num_workers": 0 if is_gpu else config.num_workers,
             "pin_memory": (config.num_workers > 0 and keep_on_gpu and not is_gpu),
             "persistent_workers": (config.num_workers > 0 and not is_gpu),
@@ -380,7 +380,7 @@ def train_handle(
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 task_loss = loss_fn(logits, y)
-                loss = task_loss
+                loss = task_loss # For MSE with Transformer: * data_container.num_classes
 
                 reg_value = None
                 if regularizer_fn is not None:

@@ -1,0 +1,32 @@
+{
+    "model": {
+        "name": "modular_transformer",
+        "embed_dim": 128,
+        "num_heads": 4,
+        "hidden_dim": 512,
+        "initialization_scale": 3.0
+    },
+    "seed": 0,
+    "batch_size": -1,
+    "loss": {
+        "name": "mse"
+    },
+    "scheduler": {
+        "name": "None"
+    },
+    "optimizer": {
+        "name": "AdamW",
+        "lr": 0.001,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "data": {
+            "name": "modular_addition",
+            "p": 113,
+            "train_fraction": 0.3
+        },
+        "seed": 0
+    },
+    "checkpoint_frequency_step": 10000,
+    "checkpoint_frequency_epoch": 1000
+}

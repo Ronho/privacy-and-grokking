@@ -21,7 +21,7 @@ class DataContainer:
     test: Dataset
     num_classes: int
     input_shape: torch.Size
-    normalization: Normalization
+    normalization: Normalization | None
 
 
 class DatasetConfig(BaseModel):

@@ -25,14 +25,18 @@ def _process_loader(
     model: ModelBase,
     loader: torch.utils.data.DataLoader,
     collect_penultimate_layer_features: bool,
-    normalization: Normalization,
+    normalization: Normalization | None,
 ):
     device = get_device()
     ce_criterion = nn.CrossEntropyLoss(reduction="none")
     mse_criterion = nn.MSELoss(reduction="none")
 
-    norm_mean = torch.tensor(normalization.mean, device=device).view(-1, 1, 1)
-    norm_std = torch.tensor(normalization.std, device=device).view(-1, 1, 1)
+    if normalization is not None:
+        norm_mean = torch.tensor(normalization.mean, device=device).view(-1, 1, 1)
+        norm_std = torch.tensor(normalization.std, device=device).view(-1, 1, 1)
+    else:
+        norm_mean = None
+        norm_std = None
 
     label_list_accum: list[torch.Tensor] = []
     feature_list_accum: list[torch.Tensor] = []
@@ -41,7 +45,8 @@ def _process_loader(
 
     for x, y in loader:
         x, y = x.to(device), y.to(device)
-        x = (x - norm_mean) / norm_std
+        if normalization is not None:
+            x = (x - norm_mean) / norm_std
         label_list_accum.append(y)
         logit, features = model(x, verbose=True)
         prob = F.softmax(logit, dim=1)
@@ -88,7 +93,7 @@ def evaluate(
     metrics_config: MetricsConfig | None = None,
     in_canary_indices: list[int] | None = None,
     out_canary_loader: torch.utils.data.DataLoader | None = None,
-    normalization = None,
+    normalization: Normalization | None = None,
 ) -> dict[str, float]:
     if metrics_config is None:
         metrics_config = MetricsConfig()
