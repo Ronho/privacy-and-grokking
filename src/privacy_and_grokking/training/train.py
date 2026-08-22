@@ -207,13 +207,13 @@ def train_handle(
             if hasattr(inner, "canary_indices"):
                 canary_set = set(inner.canary_indices.tolist())
                 for i, idx in enumerate(sub_idx):
-                    orig_idx = inner.subset_indices[idx]
+                    orig_idx = inner.subset_indices[idx].item()
                     if orig_idx in canary_set:
                         in_canary_indices.append(i)
         elif hasattr(dataset_ptr, "canary_indices"):
             canary_set = set(dataset_ptr.canary_indices.tolist())
             for i, orig_idx in enumerate(dataset_ptr.subset_indices):
-                if orig_idx in canary_set:
+                if orig_idx.item() in canary_set:
                     in_canary_indices.append(i)
                     
         if in_canary_indices and config.data.canary is not None:

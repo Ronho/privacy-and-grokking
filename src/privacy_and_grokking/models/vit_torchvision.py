@@ -38,6 +38,15 @@ class ViTTorchvision(ModelBase):
             num_classes=num_classes,
         )
         
+        # Remove/deactivate LayerNorm
+        def _remove_layernorm(module: nn.Module):
+            for name, child in module.named_children():
+                if isinstance(child, nn.LayerNorm):
+                    setattr(module, name, nn.Identity())
+                else:
+                    _remove_layernorm(child)
+        _remove_layernorm(self.vit)
+        
         # Torchvision ViT by default expects 3 channels. 
         # If input has different channels (e.g. 1 for MNIST), we override the conv projection.
         if c != 3:
