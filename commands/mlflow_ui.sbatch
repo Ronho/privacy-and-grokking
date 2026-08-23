@@ -30,4 +30,4 @@ export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 # Only install if needed, otherwise just start it
 uv pip install --system --break-system-packages -e .
 
-uv run mlflow ui --backend-store-uri file:///workspace/mlruns --host 0.0.0.0 --port 5051
+uv run mlflow ui --backend-store-uri file:///workspace/mlruns --artifacts-destination /workspace/mlruns --serve-artifacts --host 0.0.0.0 --port 5051
