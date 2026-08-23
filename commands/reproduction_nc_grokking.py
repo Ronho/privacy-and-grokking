@@ -21,9 +21,9 @@ lines = []
 configs_list = list(configs.glob("*.json"))
 configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
 
-def cmd(config, seed, name_prefix="", postfix=None):
+def cmd(config, seed, data_seed, model_index, name_prefix="", postfix=None):
     # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train reproduction-nc-grokking {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={seed}"
+    cmd_str = f"pag train reproduction-nc-grokking {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={i}"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
@@ -31,14 +31,15 @@ def cmd(config, seed, name_prefix="", postfix=None):
     return cmd_str
 
 for config in configs_list:
-    for _ in range(num_repetitions):
+    data_seed = random.randint(0, 1000000)
+    for i in range(num_repetitions):
         seed = random.randint(0, 1000000)
-        lines.append(cmd(config, seed, postfix=f" -o data.mask.seed={seed}"))
+        lines.append(cmd(config, seed, data_seed, i))
 
         # None grokking training i.e. no initialization scale, full train size.
         seed = random.randint(0, 1000000)
         lines.append(
-            cmd(config, seed, "NO_", postfix=" --override model.initialization_scale=None -o data.train_size=None -o data.mask=None")
+            cmd(config, seed, data_seed, i, "NO_", postfix=" --override model.initialization_scale=None -o data.train_size=None")
         )
 
 if shuffle:

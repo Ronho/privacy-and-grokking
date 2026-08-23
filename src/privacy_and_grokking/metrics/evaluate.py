@@ -91,8 +91,8 @@ def evaluate(
     compute_heavy_metrics: bool,
     num_classes: int,
     metrics_config: MetricsConfig | None = None,
-    in_canary_indices: list[int] | None = None,
-    out_canary_indices: list[int] | None = None,
+    train_canary_loader: torch.utils.data.DataLoader | None = None,
+    test_canary_loader: torch.utils.data.DataLoader | None = None,
     normalization: Normalization | None = None,
 ) -> dict[str, float]:
     if metrics_config is None:
@@ -205,14 +205,23 @@ def evaluate(
                 for key, value in m.items():
                     metrics[f"attack/{prefix}/{key}"] = value
 
-        if in_canary_indices and out_canary_indices: 
-            out_canary_losses = test_results["ce_loss"][out_canary_indices]
-            out_canary_correctness = test_results["correctness"][out_canary_indices]
-            in_canary_losses = train_results["ce_loss"][in_canary_indices]
-            in_canary_correctness = train_results["correctness"][in_canary_indices]
-            
+        if train_canary_loader is not None:
+            train_canary_results, _, _, _ = _process_loader(
+                model, train_canary_loader,
+                collect_penultimate_layer_features=False,
+                normalization=normalization,
+            )
+            in_canary_correctness = train_canary_results["correctness"]
             if len(in_canary_correctness) > 0:
                 metrics["train/canary_accuracy"] = in_canary_correctness.float().mean().item()
+                
+        if test_canary_loader is not None:
+            test_canary_results, _, _, _ = _process_loader(
+                model, test_canary_loader,
+                collect_penultimate_layer_features=False,
+                normalization=normalization,
+            )
+            out_canary_correctness = test_canary_results["correctness"]
             if len(out_canary_correctness) > 0:
                 metrics["test/canary_accuracy"] = out_canary_correctness.float().mean().item()
 

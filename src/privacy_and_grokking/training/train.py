@@ -134,7 +134,14 @@ def train_handle(
     logger.info("Preparing dataset.")
     keep_on_gpu = torch.cuda.is_available()
     data_container = config.data()
-    train_subset = data_container.train
+    
+    train_raw = data_container.train
+    train_canary = data_container.train_canary
+    if train_canary is not None:
+        train_subset = torch.utils.data.ConcatDataset([train_raw, train_canary])
+    else:
+        train_subset = train_raw
+        
     test = data_container.test
 
     mlflow.log_params(
@@ -173,7 +180,7 @@ def train_handle(
         **get_dl_kwargs(train_ds)
     )
     
-    eval_train_ds = maybe_gpu_dataset(train_subset)
+    eval_train_ds = maybe_gpu_dataset(train_raw)
     eval_train_loader = torch.utils.data.DataLoader(
         eval_train_ds,
         shuffle=False,
@@ -187,6 +194,24 @@ def train_handle(
         **get_dl_kwargs(eval_test_ds)
     )
     
+    eval_train_canary_loader = None
+    if train_canary is not None:
+        eval_train_canary_ds = maybe_gpu_dataset(train_canary)
+        eval_train_canary_loader = torch.utils.data.DataLoader(
+            eval_train_canary_ds,
+            shuffle=False,
+            **get_dl_kwargs(eval_train_canary_ds)
+        )
+        
+    eval_test_canary_loader = None
+    if data_container.test_canary is not None:
+        eval_test_canary_ds = maybe_gpu_dataset(data_container.test_canary)
+        eval_test_canary_loader = torch.utils.data.DataLoader(
+            eval_test_canary_ds,
+            shuffle=False,
+            **get_dl_kwargs(eval_test_canary_ds)
+        )
+    
     epoch_log_frequency = None
     if metrics_config.log_every_n_epochs is not None:
         epoch_log_frequency = metrics_config.log_every_n_epochs * len(train_loader)
@@ -196,33 +221,6 @@ def train_handle(
     if metrics_config.heavy_log_every_n_epochs is not None:
         epoch_heavy_log_frequency = metrics_config.heavy_log_every_n_epochs * len(train_loader)
         logger.info(f"Adding epoch_heavy_log_frequency: {epoch_heavy_log_frequency} ({metrics_config.heavy_log_every_n_epochs} epochs)")
-
-    in_canary_indices = []
-    out_canary_indices = []
-    if config.data.canary is not None:
-        dataset_ptr = train_subset
-        if isinstance(dataset_ptr, torch.utils.data.Subset):
-            sub_idx = dataset_ptr.indices
-            inner = dataset_ptr.dataset
-            if hasattr(inner, "canary_indices"):
-                canary_set = set(inner.canary_indices.tolist())
-                for i, idx in enumerate(sub_idx):
-                    orig_idx = inner.subset_indices[idx].item()
-                    if orig_idx in canary_set:
-                        in_canary_indices.append(i)
-        elif hasattr(dataset_ptr, "canary_indices"):
-            canary_set = set(dataset_ptr.canary_indices.tolist())
-            for i, orig_idx in enumerate(dataset_ptr.subset_indices):
-                if orig_idx.item() in canary_set:
-                    in_canary_indices.append(i)
-                    
-        # Extract out_canary_indices from the test set
-        test_ptr = test
-        if hasattr(test_ptr, "canary_indices"):
-            canary_set = set(test_ptr.canary_indices.tolist())
-            for i, orig_idx in enumerate(test_ptr.subset_indices):
-                if orig_idx.item() in canary_set:
-                    out_canary_indices.append(i)
 
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
@@ -320,11 +318,11 @@ def train_handle(
                         key_prefix="eval",
                         train_loader=eval_train_loader,
                         test_loader=eval_test_loader,
+                        train_canary_loader=eval_train_canary_loader,
+                        test_canary_loader=eval_test_canary_loader,
                         compute_heavy_metrics=heavy_metrics,
                         num_classes=data_container.num_classes,
                         metrics_config=metrics_config,
-                        in_canary_indices=in_canary_indices,
-                        out_canary_indices=out_canary_indices,
                         normalization=data_container.normalization,
                     )
                     model.train()
@@ -413,11 +411,11 @@ def train_handle(
         key_prefix="eval",
         train_loader=eval_train_loader,
         test_loader=eval_test_loader,
+        train_canary_loader=eval_train_canary_loader,
+        test_canary_loader=eval_test_canary_loader,
         compute_heavy_metrics=heavy_metrics,
         num_classes=data_container.num_classes,
         metrics_config=metrics_config,
-        in_canary_indices=in_canary_indices,
-        out_canary_indices=out_canary_indices,
         normalization=data_container.normalization,
     )
     save_model(model, optimizer, step)
