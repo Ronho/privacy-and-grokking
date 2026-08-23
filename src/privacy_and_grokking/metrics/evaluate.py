@@ -215,9 +215,9 @@ def evaluate(
             in_canary_correctness = train_results["correctness"][in_canary_indices]
             
             if len(in_canary_correctness) > 0:
-                metrics["train/accuracy/canary"] = in_canary_correctness.float().mean().item()
+                metrics["train/canary_accuracy"] = in_canary_correctness.float().mean().item()
             if len(out_canary_correctness) > 0:
-                metrics["test/accuracy/canary"] = out_canary_correctness.float().mean().item()
+                metrics["test/canary_accuracy"] = out_canary_correctness.float().mean().item()
 
             # TODO: check
             # if metrics_config.one_run_audit:
