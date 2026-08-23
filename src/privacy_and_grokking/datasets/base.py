@@ -108,15 +108,19 @@ class DatasetConfig(BaseModel):
         canary_lookup: dict[int, torch.Tensor] | None = None,
         raw_lookup: dict[int, torch.Tensor] | None = None,
         num_canaries: int = 0,
+        target_size: int | None = -1,
     ) -> torch.Tensor:
         """Compute class-balanced subset indices, respecting train_size and canary splits."""
-        if self.train_size is None:
+        if target_size == -1:
+            target_size = self.train_size
+
+        if target_size is None:
             return torch.arange(num_samples)
 
-        if self.train_size > num_samples:
-            raise ValueError("train_size exceeds dataset size.")
+        if target_size > num_samples:
+            raise ValueError("target_size exceeds dataset size.")
 
-        train_dist = distribute_a_across_b(self.train_size, num_classes)
+        train_dist = distribute_a_across_b(target_size, num_classes)
 
         # Without canaries: simple class-balanced subsetting
         if canary_lookup is None or raw_lookup is None:
@@ -138,22 +142,25 @@ class DatasetConfig(BaseModel):
             parts.append(canary_lookup[cls][:amt_canary])
         return torch.cat(parts)
 
-    def apply_canary(self, dataset: Dataset, num_classes: int) -> "Dataset | CanaryDataset":
+    def apply_canary(self, dataset: Dataset, num_classes: int, target_size: int | None = -1) -> "Dataset | CanaryDataset":
         """Wrap the dataset in a CanaryDataset, optionally injecting canary samples.
 
         When no canary config is set, this still handles train_size subsetting.
         When canaries are configured, designated samples get their images modified
         and labels reassigned via derangement.
         """
+        if target_size == -1:
+            target_size = self.train_size
+
         num_samples = len(dataset)  # type: ignore[arg-type]
 
         # No canary config at all
         if self.canary is None:
-            if self.train_size is None:
+            if target_size is None:
                 return dataset
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng)
+            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng, target_size=target_size)
             return CanaryDataset(
                 dataset=dataset,
                 subset_indices=subset_indices,
@@ -163,11 +170,11 @@ class DatasetConfig(BaseModel):
         # Canary config present but num is zero — nothing to inject
         num_canaries = self.canary.num
         if num_canaries == 0:
-            if self.train_size is None:
+            if target_size is None:
                 return dataset
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng)
+            subset_indices = self._compute_subset_indices(labels, num_samples, num_classes, rng, target_size=target_size)
             return CanaryDataset(
                 dataset=dataset,
                 subset_indices=subset_indices,
@@ -199,6 +206,7 @@ class DatasetConfig(BaseModel):
             canary_lookup=canary_lookup,
             raw_lookup=raw_lookup,
             num_canaries=num_canaries,
+            target_size=target_size,
         )
 
         # Build canary transform and deranged labels
@@ -224,10 +232,11 @@ class DatasetConfig(BaseModel):
         container = self.data()
         train = self.apply_canary(container.train, container.num_classes)
         train = self.apply_mask(train, container.num_classes)
+        test = self.apply_canary(container.test, container.num_classes, target_size=None)
 
         return DataContainer(
             train=train,  # type: ignore[arg-type]
-            test=container.test,
+            test=test,  # type: ignore[arg-type]
             num_classes=container.num_classes,
             input_shape=container.input_shape,
             normalization=container.normalization,

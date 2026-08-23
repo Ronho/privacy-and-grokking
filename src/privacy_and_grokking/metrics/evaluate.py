@@ -92,7 +92,7 @@ def evaluate(
     num_classes: int,
     metrics_config: MetricsConfig | None = None,
     in_canary_indices: list[int] | None = None,
-    out_canary_loader: torch.utils.data.DataLoader | None = None,
+    out_canary_indices: list[int] | None = None,
     normalization: Normalization | None = None,
 ) -> dict[str, float]:
     if metrics_config is None:
@@ -205,12 +205,9 @@ def evaluate(
                 for key, value in m.items():
                     metrics[f"attack/{prefix}/{key}"] = value
 
-        if in_canary_indices and out_canary_loader: 
-            out_results, _, _, _ = _process_loader(
-                model, out_canary_loader, False, normalization=normalization,
-            )
-            out_canary_losses = out_results["ce_loss"]
-            out_canary_correctness = out_results["correctness"]
+        if in_canary_indices and out_canary_indices: 
+            out_canary_losses = test_results["ce_loss"][out_canary_indices]
+            out_canary_correctness = test_results["correctness"][out_canary_indices]
             in_canary_losses = train_results["ce_loss"][in_canary_indices]
             in_canary_correctness = train_results["correctness"][in_canary_indices]
             

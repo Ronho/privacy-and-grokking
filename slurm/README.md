@@ -26,3 +26,12 @@ MNISTConfig()()
 ```
 
 srun --jobid=19462 --pty nvidia-smi
+
+Note: When the following error occurs, make sure that you created the experiment and provided a proper path for the files in the creation process, i.e. file:///workspace/mlruns/canary-selection
+
+```
+raise MlflowException(
+mlflow.exceptions.MlflowException: When an mlflow-artifacts URI was supplied, the tracking URI must be a valid http or https URI, but it was currently set to file:///workspace/mlruns. Perhaps you forgot to set the tracking URI to the running MLflow server. To set the tracking URI, use either of the following methods:
+1. Set the MLFLOW_TRACKING_URI environment variable to the desired tracking URI. `export MLFLOW_TRACKING_URI=http://localhost:5000`
+2. Set the tracking URI programmatically by calling `mlflow.set_tracking_uri`. `mlflow.set_tracking_uri('http://localhost:5000')`
+```

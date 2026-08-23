@@ -198,7 +198,7 @@ def train_handle(
         logger.info(f"Adding epoch_heavy_log_frequency: {epoch_heavy_log_frequency} ({metrics_config.heavy_log_every_n_epochs} epochs)")
 
     in_canary_indices = []
-    out_canary_loader = None
+    out_canary_indices = []
     if config.data.canary is not None:
         dataset_ptr = train_subset
         if isinstance(dataset_ptr, torch.utils.data.Subset):
@@ -216,30 +216,13 @@ def train_handle(
                 if orig_idx.item() in canary_set:
                     in_canary_indices.append(i)
                     
-        if in_canary_indices and config.data.canary is not None:
-            n_out = len(in_canary_indices)
-            from privacy_and_grokking.datasets.canaries import create_canary_generator
-            canary_transform = create_canary_generator(config.data.canary, data_container.input_shape)
-            out_canaries_subset = torch.utils.data.Subset(test, range(min(n_out, len(test))))
-            
-            class OutCanaryDataset(torch.utils.data.Dataset):
-                def __init__(self, ds, transform):
-                    self.ds = ds
-                    self.transform = transform
-                def __len__(self):
-                    return len(self.ds)
-                def __getitem__(self, i):
-                    img, lbl = self.ds[i]
-                    img = self.transform(img)
-                    return img, lbl
-
-            out_ds = OutCanaryDataset(out_canaries_subset, canary_transform)
-            out_canary_ds = maybe_gpu_dataset(out_ds)
-            out_canary_loader = torch.utils.data.DataLoader(
-                out_canary_ds,
-                shuffle=False,
-                **get_dl_kwargs(out_canary_ds)
-            )
+        # Extract out_canary_indices from the test set
+        test_ptr = test
+        if hasattr(test_ptr, "canary_indices"):
+            canary_set = set(test_ptr.canary_indices.tolist())
+            for i, orig_idx in enumerate(test_ptr.subset_indices):
+                if orig_idx.item() in canary_set:
+                    out_canary_indices.append(i)
 
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
@@ -341,7 +324,7 @@ def train_handle(
                         num_classes=data_container.num_classes,
                         metrics_config=metrics_config,
                         in_canary_indices=in_canary_indices,
-                        out_canary_loader=out_canary_loader,
+                        out_canary_indices=out_canary_indices,
                         normalization=data_container.normalization,
                     )
                     model.train()
@@ -434,7 +417,7 @@ def train_handle(
         num_classes=data_container.num_classes,
         metrics_config=metrics_config,
         in_canary_indices=in_canary_indices,
-        out_canary_loader=out_canary_loader,
+        out_canary_indices=out_canary_indices,
         normalization=data_container.normalization,
     )
     save_model(model, optimizer, step)
