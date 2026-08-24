@@ -190,15 +190,15 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
         population_out = test_perm[out_size : out_size + pop_size]
         
         if has_canary:
-            target_canary_in = torch.randperm(len(target_data_container.canary_train), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.canary_train))]
-            test_canary_perm = torch.randperm(len(target_data_container.canary_test), generator=rng)
-            canary_out_size, canary_pop_size = get_splits(len(target_data_container.canary_test), NUM_MAX_CANARY_SAMPLES)
+            target_canary_in = torch.randperm(len(target_data_container.train_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.train_canary))]
+            test_canary_perm = torch.randperm(len(target_data_container.test_canary), generator=rng)
+            canary_out_size, canary_pop_size = get_splits(len(target_data_container.test_canary), NUM_MAX_CANARY_SAMPLES)
             target_canary_out = test_canary_perm[:canary_out_size]
             population_canary_out = test_canary_perm[canary_out_size : canary_out_size + canary_pop_size]
 
         target_in_indices = set(torch.tensor(target_data_container.train.indices)[target_in].tolist())
         if has_canary:
-            target_canary_in_indices = set(torch.tensor(target_data_container.canary_train.indices)[target_canary_in].tolist())
+            target_canary_in_indices = set(torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist())
         
         target_memberships = torch.zeros(len(run_ids)-1, len(target_in))
         target_memberships[-1, :] = 1.0
@@ -213,9 +213,9 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
                 dtype=torch.float
             )
             if has_canary:
-                ref_canary_in_indices = set(reference_data_container.canary_train.indices)
+                ref_canary_in_indices = set(reference_data_container.train_canary.indices)
                 target_memberships_canary[idx, :] = torch.tensor(
-                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(target_data_container.canary_train.indices)[target_canary_in].tolist()],
+                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist()],
                     dtype=torch.float
                 )
             
@@ -233,15 +233,15 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
         val_population_out = val_test_perm[val_out_size : val_out_size + val_pop_size]
         
         if has_canary:
-            val_canary_in = torch.randperm(len(val_data_container.canary_train), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.canary_train))]
-            val_test_canary_perm = torch.randperm(len(val_data_container.canary_test), generator=rng)
-            val_canary_out_size, val_canary_pop_size = get_splits(len(val_data_container.canary_test), NUM_MAX_CANARY_SAMPLES)
+            val_canary_in = torch.randperm(len(val_data_container.train_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.train_canary))]
+            val_test_canary_perm = torch.randperm(len(val_data_container.test_canary), generator=rng)
+            val_canary_out_size, val_canary_pop_size = get_splits(len(val_data_container.test_canary), NUM_MAX_CANARY_SAMPLES)
             val_canary_out = val_test_canary_perm[:val_canary_out_size]
             val_population_canary_out = val_test_canary_perm[val_canary_out_size : val_canary_out_size + val_canary_pop_size]
 
         val_in_indices = set(torch.tensor(val_data_container.train.indices)[val_in].tolist())
         if has_canary:
-            val_canary_in_indices = set(torch.tensor(val_data_container.canary_train.indices)[val_canary_in].tolist())
+            val_canary_in_indices = set(torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist())
         
         val_memberships = torch.zeros(len(run_ids)-1, len(val_in))
         val_memberships[-1, :] = 1.0
@@ -256,9 +256,9 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
                 dtype=torch.float
             )
             if has_canary:
-                ref_canary_in_indices = set(reference_data_container.canary_train.indices)
+                ref_canary_in_indices = set(reference_data_container.train_canary.indices)
                 val_memberships_canary[idx, :] = torch.tensor(
-                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(val_data_container.canary_train.indices)[val_canary_in].tolist()],
+                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist()],
                     dtype=torch.float
                 )
 
@@ -308,13 +308,13 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
                 )
                 if has_canary:
                     target_canary_in_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.canary_train, target_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, target_data_container.train_canary, target_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     target_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.canary_test, target_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, target_data_container.test_canary, target_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     target_canary_population_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.canary_test, population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, target_data_container.test_canary, population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
 
             # Inference for validation model data
@@ -355,13 +355,13 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
                 )
                 if has_canary:
                     val_canary_in_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.canary_train, val_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, val_data_container.train_canary, val_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     val_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.canary_test, val_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, val_data_container.test_canary, val_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     val_canary_population_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.canary_test, val_population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, val_data_container.test_canary, val_population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
 
             # Get optimal a

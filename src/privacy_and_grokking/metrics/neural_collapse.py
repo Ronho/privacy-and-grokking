@@ -41,7 +41,7 @@ def compute_all_nc_metrics(
     train_labels: torch.Tensor,
     test_features: torch.Tensor,
     test_labels: torch.Tensor,
-    test_predictions: torch.Tensor,
+    train_predictions: torch.Tensor,
     classifier_weight: torch.Tensor,
 ) -> NeuralCollapseMetrics:
     """Compute all neural collapse metrics at once.
@@ -56,11 +56,11 @@ def compute_all_nc_metrics(
         NeuralCollapseMetrics dataclass with all metrics.
     """
     classifier_weight = classifier_weight.detach().to(train_features.device)
-    if isinstance(test_predictions, list):
-        test_predictions = torch.cat(test_predictions, dim=0)
-    test_predictions = test_predictions.to(train_features.device)
-    if test_predictions.dim() > 1:
-        test_predictions = test_predictions.argmax(dim=1)
+    if isinstance(train_predictions, list):
+        train_predictions = torch.cat(train_predictions, dim=0)
+    train_predictions = train_predictions.to(train_features.device)
+    if train_predictions.dim() > 1:
+        train_predictions = train_predictions.argmax(dim=1)
 
     classes = torch.unique(train_labels)
     C = len(classes)
@@ -111,9 +111,9 @@ def compute_all_nc_metrics(
     nc3 = (torch.linalg.matrix_norm(w_tilde - m_tilde, ord="fro")**2).item()
 
     # NC 4 - nearest class center convergence
-    distances = torch.cdist(test_features, mu_c, p=2.0)
-    ncc_predictions = torch.argmin(distances, dim=1)
-    mismatch_mask = (test_predictions != ncc_predictions)
+    distances = torch.cdist(train_features, mu_c, p=2.0)
+    ncc_predictions_idx = torch.argmin(distances, dim=1)
+    mismatch_mask = (train_predictions != ncc_predictions_idx)
     nc4 = torch.mean(mismatch_mask.float()).item()
 
     # RNC1 according to the paper

@@ -111,7 +111,7 @@ def evaluate(
             or metrics_config.attack_margin_distance_lf
         )
 
-        train_results, train_activations, train_labels, _ = _process_loader(
+        train_results, train_activations, train_labels, train_logits = _process_loader(
             model, train_loader,
             collect_penultimate_layer_features=collect_features,
             normalization=normalization,
@@ -236,9 +236,9 @@ def evaluate(
         metrics.update(curvature(model, loss_fn, train_loader))
 
     if train_activations.numel() > 0 and test_activations.numel() > 0 and compute_heavy_metrics and metrics_config.neural_collapse:
-        test_predictions = test_logits.argmax(dim=1) if test_logits.numel() > 0 else torch.tensor([])
+        train_predictions = train_logits.argmax(dim=1) if train_logits.numel() > 0 else torch.tensor([])
         nc = compute_all_nc_metrics(
-            train_activations, train_labels, test_activations, test_labels, test_predictions, model.classifier().weight
+            train_activations, train_labels, test_activations, test_labels, train_predictions, model.classifier().weight
         )
         metrics["nc/rnc1/train"] = nc.rnc1_train
         metrics["nc/rnc1/test"] = nc.rnc1_test
