@@ -67,20 +67,33 @@ def run_informia(
     target_signals = all_signals[-1, :] # target/val model is -1
     out_signals = get_rmia_out_signals(all_signals, all_memberships) # (NUM_MODELS - 1, NUM_SAMPLES)
     
-    mean_out_x = torch.mean(out_signals, dim=0) # P_out(x) - (NUM_SAMPLES,)
+    non_members_x = ~all_memberships[:-1, :].to(torch.bool)
+    counts_x = non_members_x.sum(dim=0)
+    mean_out_x = out_signals.sum(dim=0) / torch.clamp(counts_x, min=1) # P_out(x) - (NUM_SAMPLES,)
+
     mean_x = (  ((1 + offline_a) / 2) * mean_out_x + ((1 - offline_a) / 2) ) # Offline estimation of P(x) according to RMIA
     mean_x = torch.clamp(mean_x, min=1e-12)
     
     # log (p(x|theta) / p(x))
     log_ratio_x = torch.log(torch.clamp(target_signals.ravel() / mean_x, min=1e-12))
-    population_memberships = torch.zeros_like(  population_signals, dtype=torch.bool, ) # population samples are OUT
-    z_signals = population_signals[-1, :] # target/val model is -1
-    z_out_signals = get_rmia_out_signals(  population_signals, population_memberships)
-    mean_out_z = torch.mean(z_out_signals, dim=0)
-    mean_z = (  ((1 + offline_a) / 2) * mean_out_z + ((1 - offline_a) / 2) )
-    mean_z = torch.clamp(mean_z, min=1e-12)
-    prob_ratio_z = torch.clamp(z_signals.ravel() / mean_z, min=1e-12)
-    test_statistic = (  log_ratio_x - torch.sum(mean_z * torch.log(prob_ratio_z)) / mean_z.sum() )
+    
+    if population_signals.numel() == 0:
+        expectation = 0.0
+    else:
+        population_memberships = torch.zeros_like(  population_signals, dtype=torch.bool, ) # population samples are OUT
+        z_signals = population_signals[-1, :] # target/val model is -1
+        z_out_signals = get_rmia_out_signals(  population_signals, population_memberships)
+        
+        non_members_z = ~population_memberships[:-1, :].to(torch.bool)
+        counts_z = non_members_z.sum(dim=0)
+        mean_out_z = z_out_signals.sum(dim=0) / torch.clamp(counts_z, min=1)
+
+        mean_z = (  ((1 + offline_a) / 2) * mean_out_z + ((1 - offline_a) / 2) )
+        mean_z = torch.clamp(mean_z, min=1e-12)
+        prob_ratio_z = torch.clamp(z_signals.ravel() / mean_z, min=1e-12)
+        expectation = torch.sum(mean_z * torch.log(prob_ratio_z)) / mean_z.sum()
+        
+    test_statistic = (  log_ratio_x - expectation )
 
     fpr_list, tpr_list, _ = roc_curve(
         all_memberships[-1, :].cpu().numpy(), test_statistic.cpu().numpy()
@@ -169,14 +182,22 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
     target_data_container = cfgs[run_ids[0]].data()
     has_canary = target_data_container.train_canary and target_data_container.test_canary
     target_in = torch.randperm(len(target_data_container.train), generator=rng)[:min(NUM_MAX_SAMPLES,len(target_data_container.train))]
+    def get_splits(num_samples, max_samples):
+        if num_samples >= 2 * max_samples:
+            return max_samples, max_samples
+        return num_samples // 2, num_samples - (num_samples // 2)
+
     test_perm = torch.randperm(len(target_data_container.test), generator=rng)
-    target_out = test_perm[:min(NUM_MAX_SAMPLES,len(target_data_container.test))]
-    population_out = test_perm[min(NUM_MAX_SAMPLES,len(target_data_container.test)):min(NUM_MAX_SAMPLES,len(target_data_container.test))+NUM_MAX_SAMPLES]
+    out_size, pop_size = get_splits(len(target_data_container.test), NUM_MAX_SAMPLES)
+    target_out = test_perm[:out_size]
+    population_out = test_perm[out_size : out_size + pop_size]
+    
     if has_canary:
         target_canary_in = torch.randperm(len(target_data_container.canary_train), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.canary_train))]
         test_canary_perm = torch.randperm(len(target_data_container.canary_test), generator=rng)
-        target_canary_out = test_canary_perm[:min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.canary_test))]
-        population_canary_out = test_canary_perm[min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.canary_test)):min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.canary_test))+NUM_MAX_CANARY_SAMPLES]
+        canary_out_size, canary_pop_size = get_splits(len(target_data_container.canary_test), NUM_MAX_CANARY_SAMPLES)
+        target_canary_out = test_canary_perm[:canary_out_size]
+        population_canary_out = test_canary_perm[canary_out_size : canary_out_size + canary_pop_size]
 
     target_in_indices = set(torch.tensor(target_data_container.train.indices)[target_in].tolist())
     if has_canary:
@@ -210,13 +231,16 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
     val_data_container = cfgs[run_ids[1]].data()
     val_in = torch.randperm(len(val_data_container.train), generator=rng)[:min(NUM_MAX_SAMPLES,len(val_data_container.train))]
     val_test_perm = torch.randperm(len(val_data_container.test), generator=rng)
-    val_out = val_test_perm[:min(NUM_MAX_SAMPLES,len(val_data_container.test))]
-    val_population_out = val_test_perm[min(NUM_MAX_SAMPLES,len(val_data_container.test)):min(NUM_MAX_SAMPLES,len(val_data_container.test))+NUM_MAX_SAMPLES]
+    val_out_size, val_pop_size = get_splits(len(val_data_container.test), NUM_MAX_SAMPLES)
+    val_out = val_test_perm[:val_out_size]
+    val_population_out = val_test_perm[val_out_size : val_out_size + val_pop_size]
+    
     if has_canary:
         val_canary_in = torch.randperm(len(val_data_container.canary_train), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.canary_train))]
         val_test_canary_perm = torch.randperm(len(val_data_container.canary_test), generator=rng)
-        val_canary_out = val_test_canary_perm[:min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.canary_test))]
-        val_population_canary_out = val_test_canary_perm[min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.canary_test)):min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.canary_test))+NUM_MAX_CANARY_SAMPLES]
+        val_canary_out_size, val_canary_pop_size = get_splits(len(val_data_container.canary_test), NUM_MAX_CANARY_SAMPLES)
+        val_canary_out = val_test_canary_perm[:val_canary_out_size]
+        val_population_canary_out = val_test_canary_perm[val_canary_out_size : val_canary_out_size + val_canary_pop_size]
 
     val_in_indices = set(torch.tensor(val_data_container.train.indices)[val_in].tolist())
     if has_canary:
@@ -258,13 +282,13 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
             target_canary_out_probs = torch.zeros(len(run_ids) - 1, len(target_canary_out))
             target_canary_population_out_probs = torch.zeros(len(run_ids) - 1, len(population_canary_out))
 
-        for idx, r_id in enumerate(run_ids[:-1]):
-            if idx == 0:
+        for enum_idx, r_id in enumerate(run_ids):
+            if enum_idx == 0:
                 idx = -1
-            elif idx == 1:
+            elif enum_idx == 1:
                 continue
             else:
-                idx -= 2
+                idx = enum_idx - 2
 
             reference_model_path = models[r_id]
             reference_model_config = cfgs[r_id]
@@ -305,13 +329,13 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
             val_canary_out_probs = torch.zeros(len(run_ids) - 1, len(val_canary_out))
             val_canary_population_out_probs = torch.zeros(len(run_ids) - 1, len(val_population_canary_out))
 
-        for idx, r_id in enumerate(run_ids[:-1]):
-            if idx == 0:
+        for enum_idx, r_id in enumerate(run_ids):
+            if enum_idx == 0:
                 continue
-            elif idx == 1:
+            elif enum_idx == 1:
                 idx = -1
             else:
-                idx -= 2
+                idx = enum_idx - 2
 
             reference_model_path = models[r_id]
             reference_model_config = cfgs[r_id]
