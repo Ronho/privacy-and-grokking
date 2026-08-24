@@ -11,7 +11,7 @@ class IndependentStratifiedMasking(Masking):
     def _generate_mask(self, classes: torch.Tensor) -> torch.Tensor:
         mask = torch.zeros((self.num_samples, self.num_models), dtype=torch.bool)
         for c in range(self.num_classes):
-            class_indices = (classes == c).nonzero().squeeze()
+            class_indices = (classes == c).nonzero().squeeze(-1)
             n_to_pick = int(len(class_indices) * self.p)
             for model_idx in range(self.num_models):
                 choosen = torch.randperm(len(class_indices), generator=self.rng)[:n_to_pick]

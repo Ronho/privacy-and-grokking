@@ -7,6 +7,11 @@ class GpuDataset(Dataset):
         all_imgs = []
         all_lbls = []
 
+        if len(dataset) == 0:
+            self.images = torch.tensor([]).to(device)
+            self.labels = torch.tensor([], dtype=torch.long).to(device)
+            return
+
         for i in range(len(dataset)):
             img, lbl = dataset[i]
             all_imgs.append(img.unsqueeze(0))
