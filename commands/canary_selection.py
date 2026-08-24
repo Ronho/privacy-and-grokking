@@ -42,7 +42,10 @@ for config in configs_list:
     for canary_name in canary_types:
         data_seed = random.randint(0, 1000000)
         for i in range(num_repetitions):
-            canary_json = json.dumps({"name": canary_name, "num": num_canaries})
+            canary_dict = {"name": canary_name, "num": num_canaries}
+            if canary_name == "square_watermark":
+                canary_dict["square_size"] = 5
+            canary_json = json.dumps(canary_dict)
             seed = random.randint(0, 1000000)
             lines.append(cmd(config, seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
 
