@@ -25,10 +25,10 @@ permutations = list(itertools.product(initialization_scale, weight_decay, train_
 
 lines = []
 configs_list = list(configs.glob("*.json"))
-configs_list = [c for c in configs_list if c.name.startswith("-")]
+configs_list = [c for c in configs_list if c.name.startswith("F_")]
 
 def cmd(config, seed, name_prefix="", postfix=None):
-    cmd_str = f"pag train find-grokking {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed=4711"
+    cmd_str = f"pag train find-grokking {config.name} 150000 --run-name {name_prefix}{config.stem[2:]} -o seed={seed} -o data.seed=4711"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
