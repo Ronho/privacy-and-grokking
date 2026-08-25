@@ -26,6 +26,16 @@ class MNISTConfig(DatasetConfig):
 
         CACHE_PATH.mkdir(exist_ok=True)
         train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
+        
+        # NOTE: Deterministically sample a perfectly balanced 50k dataset (5000 per class).
+        # This ensures every run selects the exact same 50k samples.
+        import torch
+        balanced_indices = []
+        for c in range(10):
+            c_indices = (train.targets == c).nonzero().view(-1)
+            balanced_indices.append(c_indices[:5000])
+        train = Subset(train, torch.cat(balanced_indices).tolist())
+
         if self.subset_size is not None:
             train = Subset(train, list(range(self.subset_size)))
         test = datasets.MNIST(root=CACHE_PATH, train=False, download=True, transform=transform)

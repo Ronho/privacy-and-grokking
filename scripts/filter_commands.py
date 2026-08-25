@@ -84,8 +84,8 @@ def main():
         overrides = []
         
         for i, part in enumerate(parts):
-            if part.startswith("+") and part.endswith(".json"):
-                config_name = part  # keep the '+' since it is part of the filename
+            if part.endswith(".json") and not part.startswith("--"):
+                config_name = part
             elif part in ("-o", "--override") and i + 1 < len(parts):
                 overrides.append(parts[i+1])
         

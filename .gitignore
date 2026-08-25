@@ -5,3 +5,9 @@ __pycache__/
 .venv/
 cache/
 data/
+*.png
+*.pdf
+*.parquet
+*.npy
+*.pth
+*.db
