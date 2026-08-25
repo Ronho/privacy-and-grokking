@@ -1,0 +1,28 @@
+{
+    "model": {
+        "name": "resnet_torchvision"
+    },
+    "seed": 0,
+    "batch_size": 128,
+    "loss": {
+        "name": "cross_entropy"
+    },
+    "scheduler": {
+        "name": "CosineAnnealingLR",
+        "min_lr": 0.0
+    },
+    "optimizer": {
+        "name": "SGD",
+        "lr": 0.1,
+        "momentum": 0.9,
+        "weight_decay": 0.0005
+    },
+    "data": {
+        "data": {
+            "name": "cifar10"
+        },
+        "seed": 0
+    },
+    "checkpoint_frequency_step": 10000,
+    "checkpoint_frequency_epoch": 10
+}
