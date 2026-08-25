@@ -1,5 +1,6 @@
 from pathlib import Path
 import random
+import hashlib
 
 SCRIPT_DIR = Path(__file__).parent
 configs = SCRIPT_DIR.parent / "configs"
@@ -9,10 +10,15 @@ command_file.parent.mkdir(parents=True, exist_ok=True)
 available_gpus = []
 load_all_to_gpu = True
 # Use this to avoid running out of memory.
-shuffle = True
+shuffle = False
 num_repetitions=5
 seed=4711
 
+
+def get_deterministic_seed(*args, salt=seed):
+    """Generates a deterministic integer seed from arguments to ensure idempotency."""
+    s = str(salt) + "_" + "_".join(str(a) for a in args)
+    return int(hashlib.sha256(s.encode('utf-8')).hexdigest(), 16) % 1000000
 
 # Start of main script
 random.seed(seed)
@@ -31,15 +37,16 @@ def cmd(config, seed, data_seed, model_index, name_prefix="", postfix=None):
     return cmd_str
 
 for config in configs_list:
-    data_seed = random.randint(0, 1000000)
+    data_seed = get_deterministic_seed(config.name, "data_seed")
     for i in range(num_repetitions):
-        seed = random.randint(0, 1000000)
-        lines.append(cmd(config, seed, data_seed, i))
+        if not "MADD" in config.name: # Modular Addition does not work with grokking parameter
+            run_seed = get_deterministic_seed(config.name, i, "grokking")
+            lines.append(cmd(config, run_seed, data_seed, i))
 
         # None grokking training i.e. no initialization scale, full train size.
-        seed = random.randint(0, 1000000)
+        run_seed = get_deterministic_seed(config.name, i, "no_grokking")
         lines.append(
-            cmd(config, seed, data_seed, i, "NO_", postfix=" --override model.initialization_scale=None -o data.train_size=None")
+            cmd(config, run_seed, data_seed, i, "NO_", postfix=" --override model.initialization_scale=None -o data.train_size=None")
         )
 
 if shuffle:

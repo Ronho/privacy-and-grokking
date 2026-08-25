@@ -14,8 +14,6 @@ from pydantic import BaseModel
 from privacy_and_grokking.cli import _parse_value, apply_overrides
 from privacy_and_grokking.config import TrainConfig
 
-logging.basicConfig(level=logging.INFO)
-
 CONFIG_DIR = Path(__file__).parent.parent / "configs"
 def fetch_json_artifact(tracking_uri: str, run_id: str, artifact_path: str) -> dict:
     base_uri = tracking_uri.rstrip('/')

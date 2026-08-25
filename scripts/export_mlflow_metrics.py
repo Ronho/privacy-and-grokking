@@ -112,7 +112,7 @@ def export_experiment(experiment_name: str, output_file: str, tracking_uri: str,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export MLflow metrics of all models in an experiment to a Parquet file.")
-    parser.add_argument("experiment-name", type=str, dest="experiment_name", help="Name of the MLflow experiment")
+    parser.add_argument("experiment_name", type=str, help="Name of the MLflow experiment")
     parser.add_argument("--output", "-o", type=str, default=None, help="Output Parquet file path (e.g. data.parquet)")
     parser.add_argument("--uri", "-u", type=str, default="http://localhost:5051", help="MLflow tracking URI")
     parser.add_argument("--history", action="store_true", help="Download the full metric history over time (learning curves) instead of just the final values.")

@@ -1,5 +1,6 @@
 import json
 import random
+import hashlib
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
@@ -22,6 +23,11 @@ seed=4712
 shuffle=False
 
 
+def get_deterministic_seed(*args, salt=seed):
+    """Generates a deterministic integer seed from arguments to ensure idempotency."""
+    s = str(salt) + "_" + "_".join(str(a) for a in args)
+    return int(hashlib.sha256(s.encode('utf-8')).hexdigest(), 16) % 1000000
+
 # Start of main script
 random.seed(seed)
 
@@ -40,18 +46,22 @@ def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postf
 
 for config in configs_list:
     for canary_name in canary_types:
-        data_seed = random.randint(0, 1000000)
+        # TODO: Remove the [1:] from config.stem once finished.
+        data_seed = get_deterministic_seed(config.name[1:], canary_name, "data_seed")
         for i in range(num_repetitions):
             canary_dict = {"name": canary_name, "num": num_canaries}
             if canary_name == "square_watermark":
                 canary_dict["square_size"] = 5
             canary_json = json.dumps(canary_dict)
-            seed = random.randint(0, 1000000)
-            lines.append(cmd(config, seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
+            if not "MADD" in config.name: # Modular Addition does not work with grokking parameter
+                run_seed = get_deterministic_seed(config.name, canary_name, i, "grokking")
+                lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
 
             # None grokking training i.e. no initialization scale, full train size
-            seed = random.randint(0, 1000000)
-            lines.append(cmd(config, seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_NO_", postfix=f" --override model.initialization_scale=None -o data.train_size=None"))
+            if "MADD" in config.name and canary_name != "square_watermark": # Modular Addition does not work with other canaries
+                continue
+            run_seed = get_deterministic_seed(config.name, canary_name, i, "no_grokking")
+            lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_NO_", postfix=f" --override model.initialization_scale=None -o data.train_size=None"))
 
 if shuffle:
     random.shuffle(lines)

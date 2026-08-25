@@ -454,11 +454,17 @@ def get_runs(args, existing_df):
         ignored = {'params.seed', 'params.data.seed', 'params.data.mask.seed', 'params.data.mask.model_index'}
         return {k: v for k, v in params.items() if k not in ignored}
 
+    handled_ids = set()
+    if not existing_df.empty and "id" in existing_df.columns:
+        handled_ids = set(existing_df["id"].astype(str))
+
     groups = {}
     for idx, run in runs_df.iterrows():
         ignored_params = get_ignored_params(run)
         # Sort keys to ensure deterministic tuple creation
         key = tuple(sorted(ignored_params.items()))
+        if str(key) in handled_ids:
+            continue
         if key not in groups:
             groups[key] = []
         groups[key].append(run['run_id'])
