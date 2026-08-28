@@ -59,7 +59,7 @@ for config in configs_list:
                 lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
 
             # None grokking training i.e. no initialization scale, full train size
-            if "MADD" in config.name and canary_name != "square_watermark": # Modular Addition does not work with other canaries
+            if "MADD" in config.name and canary_name != "label_noise": # Modular Addition does not work with other canaries
                 continue
             run_seed = get_deterministic_seed(config.name, canary_name, i, "no_grokking")
             lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_NO_", postfix=f" --override model.initialization_scale=None -o data.train_size=None"))
