@@ -18,7 +18,7 @@ canary_types = [
     "label_noise",
     "ood_natural"
 ]
-num_repetitions=5
+num_repetitions=6
 seed=4712
 shuffle=False
 
