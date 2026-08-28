@@ -12,12 +12,16 @@ from privacy_and_grokking.datasets.masking.partitioned_stratified import (
     PartitionedStratifiedMaskingConfig,
 )
 from privacy_and_grokking.datasets.masking.uniform import UniformMaskingConfig
+from privacy_and_grokking.datasets.masking.paired_stratified import (
+    PairedStratifiedMaskingConfig,
+)
 
 Mask = Annotated[
     UniformMaskingConfig
     | IndependentStratifiedMaskingConfig
     | PartitionedStratifiedMaskingConfig
-    | BalancedStratifiedMaskingConfig,
+    | BalancedStratifiedMaskingConfig
+    | PairedStratifiedMaskingConfig,
     Field(discriminator="name"),
 ]
 

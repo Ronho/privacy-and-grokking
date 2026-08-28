@@ -23,28 +23,24 @@ CACHE_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "cache"))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-def get_rmia_out_signals(
+def get_rmia_mean_out_signals(
     all_signals: torch.Tensor,
     all_memberships: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Get average prediction probability of samples over offline reference models (excluding the target model).
-
-    Args:
-        ref_signals (np.ndarray): Softmax value of all samples in all reference model.  Shape: (num_samples * num_models)
-        ref_memberships (np.ndarray): Membership matrix for all reference models (if a sample is used for training a model).  Shape: (num_samples * num_models)
-        num_reference_models (Optional[int]): Number of reference models used for the attack. Defaults to half reference models if None.
-        offline_a (float): Coefficient offline_a is used to approximate p(x) using P_out in the offline setting.
-
-    Returns:
-        np.ndarray: Average softmax value for each sample over OUT reference models.
+    Get average prediction probability of samples over offline reference models (excluding the target model),
+    correctly accounting for the number of OUT models per sample.
     """
     # Exclude target model (which is the last one, index -1)
     ref_signals = all_signals[:-1, :]
     ref_memberships = all_memberships[:-1, :]
     non_members = ~ref_memberships.to(torch.bool)
     out_signals = ref_signals * non_members
-    return out_signals
+    
+    sums = out_signals.sum(dim=0)
+    counts = non_members.sum(dim=0).float()
+    counts = torch.clamp(counts, min=1.0) # avoid division by zero
+    return sums / counts
 
 def run_informia(
     all_signals: torch.Tensor,
@@ -65,9 +61,7 @@ def run_informia(
     """
     # Target model signals
     target_signals = all_signals[-1, :] # target/val model is -1
-    out_signals = get_rmia_out_signals(all_signals, all_memberships) # (NUM_MODELS - 1, NUM_SAMPLES)
-
-    mean_out_x = out_signals.mean(dim=0)
+    mean_out_x = get_rmia_mean_out_signals(all_signals, all_memberships)
 
     mean_x = (  ((1 + offline_a) / 2) * mean_out_x + ((1 - offline_a) / 2) ) # Offline estimation of P(x) according to RMIA
     mean_x = torch.clamp(mean_x, min=1e-12)
@@ -80,9 +74,7 @@ def run_informia(
     else:
         population_memberships = torch.zeros_like(  population_signals, dtype=torch.bool, ) # population samples are OUT
         z_signals = population_signals[-1, :] # target/val model is -1
-        z_out_signals = get_rmia_out_signals(  population_signals, population_memberships)
-
-        mean_out_z = z_out_signals.mean(dim=0)
+        mean_out_z = get_rmia_mean_out_signals(  population_signals, population_memberships)
 
         mean_z = (  ((1 + offline_a) / 2) * mean_out_z + ((1 - offline_a) / 2) )
         mean_z = torch.clamp(mean_z, min=1e-12)
@@ -457,6 +449,10 @@ def get_runs(args, existing_df):
     handled_ids = set()
     if not existing_df.empty and "id" in existing_df.columns:
         handled_ids = set(existing_df["id"].astype(str))
+
+    if "params.data.mask.model_index" in runs_df.columns:
+        runs_df["params.data.mask.model_index"] = pd.to_numeric(runs_df["params.data.mask.model_index"], errors="coerce")
+        runs_df = runs_df.sort_values(by="params.data.mask.model_index")
 
     groups = {}
     for idx, run in runs_df.iterrows():

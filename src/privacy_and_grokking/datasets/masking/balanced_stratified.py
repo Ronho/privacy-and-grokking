@@ -47,7 +47,7 @@ class BalancedStratifiedMasking(Masking):
 
         for c in range(self.num_classes):
             class_mask_rows = (classes == c).nonzero().view(-1)
-            n_swaps = 5 * self.num_models
+            n_swaps = 25 * len(class_mask_rows)
 
             for _ in range(n_swaps):
                 m1, m2 = torch.randint(0, self.num_models, (2,), generator=self.rng).tolist()

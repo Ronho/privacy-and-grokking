@@ -21,8 +21,8 @@
             "name": "mnist"
         },
         "mask": {
-            "name": "independent_stratified",
-            "num_models": 256,
+            "name": "paired_stratified",
+            "num_models": 6,
             "p": 0.5,
             "seed": 0,
             "model_index": 0
