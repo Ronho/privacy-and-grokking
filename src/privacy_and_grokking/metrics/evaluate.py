@@ -43,6 +43,10 @@ def _process_loader(
     logits_accum: list[torch.Tensor] = []
     result = defaultdict(list)
 
+    expected_keys = ["true_class_logit", "max_logit", "min_logit", "true_class_prob", "max_prob", "min_prob", "ce_loss", "mse_loss", "correctness"]
+    for k in expected_keys:
+        result[k] = []
+
     for x, y in loader:
         x, y = x.to(device), y.to(device)
         if normalization is not None:
@@ -68,14 +72,14 @@ def _process_loader(
         if collect_penultimate_layer_features:
             feature_list_accum.append(features)
 
-    label_list = torch.cat(label_list_accum, dim=0).cpu()
+    label_list = torch.cat(label_list_accum, dim=0).cpu() if label_list_accum else torch.tensor([], dtype=torch.long)
     if collect_penultimate_layer_features:
-        feature = torch.cat(feature_list_accum, dim=0).cpu()
+        feature = torch.cat(feature_list_accum, dim=0).cpu() if feature_list_accum else torch.tensor([])
     else:
         feature = torch.tensor([])
 
     logits = torch.cat(logits_accum, dim=0).cpu() if logits_accum else torch.tensor([])
-    result = {k: torch.cat(v, dim=0).cpu() for k, v in result.items()}
+    result = {k: torch.cat(v, dim=0).cpu() if v else torch.tensor([]) for k, v in result.items()}
 
     return result, feature, label_list, logits
 

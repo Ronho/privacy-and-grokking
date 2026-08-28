@@ -47,7 +47,8 @@ for config in configs_list:
         # TODO: Remove the [1:] from config.stem once finished.
         data_seed = get_deterministic_seed(config.name[1:], scale, decay, size, "data_seed")
         for i in range(num_repetitions):
-            canary_dict = {"name": f"{canary_type}", "num": num_canaries}
+            c_num = 113 if "MADD" in config.name else num_canaries
+            canary_dict = {"name": f"{canary_type}", "num": c_num}
             canary_json = json.dumps(canary_dict)
             run_seed = get_deterministic_seed(config.name[1:], scale, decay, size, i, "run_seed")
             lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{scale}_{decay}_{size}_"))

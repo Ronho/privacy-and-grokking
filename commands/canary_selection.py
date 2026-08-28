@@ -49,7 +49,8 @@ for config in configs_list:
         # TODO: Remove the [1:] from config.stem once finished.
         data_seed = get_deterministic_seed(config.name[1:], canary_name, "data_seed")
         for i in range(num_repetitions):
-            canary_dict = {"name": canary_name, "num": num_canaries}
+            c_num = 113 if "MADD" in config.name else num_canaries
+            canary_dict = {"name": canary_name, "num": c_num}
             if canary_name == "square_watermark":
                 canary_dict["square_size"] = 5
             canary_json = json.dumps(canary_dict)
