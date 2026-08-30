@@ -35,3 +35,5 @@ mlflow.exceptions.MlflowException: When an mlflow-artifacts URI was supplied, th
 1. Set the MLFLOW_TRACKING_URI environment variable to the desired tracking URI. `export MLFLOW_TRACKING_URI=http://localhost:5000`
 2. Set the tracking URI programmatically by calling `mlflow.set_tracking_uri`. `mlflow.set_tracking_uri('http://localhost:5000')`
 ```
+
+rclone copy ":sftp,host=login.ai-lab.uni-luebeck.de,user=ronholzapfel,ask_password=true:privacy-and-grokking/mlruns" D:\privacy-and-grokking\cache\mlruns -P

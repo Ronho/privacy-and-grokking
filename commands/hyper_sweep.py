@@ -16,7 +16,7 @@ canary_type = "label_noise"
 initialization_scale = [2.0, 3.0, 6.0, 9.0, 12.0]
 weight_decay = [1.0, 0.1, 0.01, 0.001, 0.0001]
 train_size = [10_000, 5_000, 2_000, 1_000, 500]
-num_repetitions=1
+num_repetitions=6
 seed=4712
 shuffle=False
 

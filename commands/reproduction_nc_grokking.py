@@ -25,7 +25,7 @@ random.seed(seed)
 
 lines = []
 configs_list = list(configs.glob("*.json"))
-configs_list = [c for c in configs_list if "_RESNET_PAPER" in c.name or not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
+configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
 
 def cmd(config, seed, data_seed, model_index, name_prefix="", postfix=None):
     # TODO: Remove the [1:] from config.stem once finished.

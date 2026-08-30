@@ -31,16 +31,28 @@ class ModularAdditionDataset(Dataset):
         # stack into sequence [a, b, =] with shape (p*p, 3, p+1)
         features = torch.stack([a_one_hot, b_one_hot, eq_one_hot], dim=1)
         
-        # shuffle and split
+        # Stratified train/test split
         rng = torch.Generator().manual_seed(seed)
-        indices = torch.randperm(p * p, generator=rng)
         
-        num_train = int(p * p * train_fraction)
+        train_indices_list = []
+        test_indices_list = []
         
+        # We know each class has exactly p samples
+        num_train_per_class = int(p * train_fraction)
+        
+        for c in range(p):
+            class_indices = (labels == c).nonzero().view(-1)
+            # Shuffle indices for this class
+            perm = torch.randperm(len(class_indices), generator=rng)
+            shuffled_indices = class_indices[perm]
+            
+            train_indices_list.append(shuffled_indices[:num_train_per_class])
+            test_indices_list.append(shuffled_indices[num_train_per_class:])
+            
         if train:
-            self.indices = indices[:num_train]
+            self.indices = torch.cat(train_indices_list)
         else:
-            self.indices = indices[num_train:]
+            self.indices = torch.cat(test_indices_list)
             
         self.features = features[self.indices]
         self.labels = labels[self.indices]

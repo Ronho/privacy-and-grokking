@@ -21,13 +21,6 @@
         "data": {
             "name": "cifar10"
         },
-        "mask": {
-            "name": "paired_stratified",
-            "num_models": 6,
-            "p": 0.5,
-            "seed": 0,
-            "model_index": 0
-        },
         "seed": 0
     },
     "checkpoint_frequency_step": 10000,

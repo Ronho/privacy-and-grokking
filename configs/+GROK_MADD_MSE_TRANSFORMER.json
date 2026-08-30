@@ -22,8 +22,8 @@
     "data": {
         "data": {
             "name": "modular_addition",
-            "p": 113,
-            "train_fraction": 0.3
+            "p": 100,
+            "train_fraction": 0.9
         },
         "mask": {
             "name": "paired_stratified",
