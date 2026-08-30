@@ -29,7 +29,7 @@ def get_deterministic_seed(*args, salt=seed):
 # Start of main script
 random.seed(seed)
 
-lines = []
+lines = {i: [] for i in range(num_repetitions)}
 configs_list = list(configs.glob("*.json"))
 configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
 
@@ -47,19 +47,22 @@ for config in configs_list:
         # TODO: Remove the [1:] from config.stem once finished.
         data_seed = get_deterministic_seed(config.name[1:], scale, decay, size, "data_seed")
         for i in range(num_repetitions):
-            c_num = 113 if "MADD" in config.name else num_canaries
+            c_num = 100 if "MADD" in config.name else num_canaries
             canary_dict = {"name": f"{canary_type}", "num": c_num}
             canary_json = json.dumps(canary_dict)
             run_seed = get_deterministic_seed(config.name[1:], scale, decay, size, i, "run_seed")
-            lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{scale}_{decay}_{size}_"))
-
-if shuffle:
-    random.shuffle(lines)
+            lines[i].append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{scale}_{decay}_{size}_"))
 
 N_gpus = len(available_gpus)
-if N_gpus > 0:
-    for idx, line in enumerate(lines):
-        line = f"CUDA_VISIBLE_DEVICES={available_gpus[idx % N_gpus]} " + line
-        lines[idx] = line
+for i in range(num_repetitions):
+    rep_lines = lines[i]
+    if shuffle:
+        random.shuffle(rep_lines)
+    
+    if N_gpus > 0:
+        for idx, line in enumerate(rep_lines):
+            line = f"CUDA_VISIBLE_DEVICES={available_gpus[idx % N_gpus]} " + line
+            rep_lines[idx] = line
 
-command_file.write_text("\n".join(lines), encoding="utf-8")
+    cmd_file = SCRIPT_DIR / f"hyper_sweep_{i}.txt"
+    cmd_file.write_text("\n".join(rep_lines), encoding="utf-8")

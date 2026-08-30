@@ -1,8 +1,9 @@
 #!/bin/bash
 #
 #SBATCH --job-name=hyper_sweep
-#SBATCH --output=logs/hyper_sweep_%j.log
-#SBATCH --error=logs/hyper_sweep_%j.err
+#SBATCH --output=logs/hyper_sweep_%A_%a.log
+#SBATCH --error=logs/hyper_sweep_%A_%a.err
+#SBATCH --array=0-5
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -16,7 +17,7 @@
 
 mkdir -p logs
 
-echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
+echo "Starting job $SLURM_JOB_ID (Array Task $SLURM_ARRAY_TASK_ID) on $HOSTNAME"
 echo "Allocated GPUs: $CUDA_VISIBLE_DEVICES"
 nvidia-smi
 
@@ -39,9 +40,9 @@ export NUMEXPR_NUM_THREADS=2
 uv pip install --system --break-system-packages -e .
 
 
-echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
+echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs for task $SLURM_ARRAY_TASK_ID..."
 
-cat commands/hyper_sweep.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
+cat commands/hyper_sweep_${SLURM_ARRAY_TASK_ID}.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control
