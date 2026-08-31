@@ -11,7 +11,14 @@ from privacy_and_grokking.datasets.sets.base import (
 
 
 class ModularAdditionDataset(Dataset):
-    def __init__(self, p: int, train: bool, train_fraction: float = 0.3, seed: int = 42):
+    def __init__(
+        self,
+        p: int,
+        train: bool,
+        num_train_per_class: int,
+        num_test_per_class: int,
+        seed: int = 42,
+    ):
         self.p = p
         
         # generate all pairs (a, b)
@@ -38,7 +45,6 @@ class ModularAdditionDataset(Dataset):
         test_indices_list = []
         
         # We know each class has exactly p samples
-        num_train_per_class = int(p * train_fraction)
         
         for c in range(p):
             class_indices = (labels == c).nonzero().view(-1)
@@ -47,7 +53,7 @@ class ModularAdditionDataset(Dataset):
             shuffled_indices = class_indices[perm]
             
             train_indices_list.append(shuffled_indices[:num_train_per_class])
-            test_indices_list.append(shuffled_indices[num_train_per_class:])
+            test_indices_list.append(shuffled_indices[num_train_per_class : num_train_per_class + num_test_per_class])
             
         if train:
             self.indices = torch.cat(train_indices_list)
@@ -67,20 +73,23 @@ class ModularAdditionDataset(Dataset):
 class ModularAdditionConfig(DatasetConfig):
     name: Literal["modular_addition"] = "modular_addition"
     p: int = Field(default=113)
-    train_fraction: float = Field(default=0.3)
+    num_train_per_class: int | None = Field(default=None)
+    num_test_per_class: int | None = Field(default=None)
     seed: int = Field(default=42)
 
     def __call__(self) -> DataContainer:
         train = ModularAdditionDataset(
             p=self.p, 
-            train=True, 
-            train_fraction=self.train_fraction, 
+            train=True,
+            num_train_per_class=self.num_train_per_class,
+            num_test_per_class=self.num_test_per_class,
             seed=self.seed
         )
         test = ModularAdditionDataset(
             p=self.p, 
-            train=False, 
-            train_fraction=self.train_fraction, 
+            train=False,
+            num_train_per_class=self.num_train_per_class,
+            num_test_per_class=self.num_test_per_class,
             seed=self.seed
         )
         

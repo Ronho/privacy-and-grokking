@@ -11,6 +11,8 @@ import numpy as np
 from sklearn.metrics import auc, roc_curve
 
 from collections import defaultdict
+import concurrent.futures
+import multiprocessing as mp
 
 from privacy_and_grokking.utils.logger import Logger
 
@@ -101,31 +103,8 @@ def run_informia(
 
     return metrics
 
-def fetch_json_artifact(tracking_uri: str, run_id: str, artifact_path: str, cache_path: str) -> dict:
-    if os.path.exists(cache_path):
-        with open(cache_path, "r") as f:
-            config_dict = json.load(f)
-        return config_dict
-
-    base_uri = tracking_uri.rstrip('/')
-    url = f"{base_uri}/get-artifact?path={artifact_path}&run_uuid={run_id}"
-    response = requests.get(url)
-    response.raise_for_status()
-    result = response.json()
-    with open(cache_path, "w") as f:
-        json.dump(result, f)
-    return result
-
-def download_artifact(tracking_uri: str, run_id: str, artifact_path: str, cache_path: str) -> None:
-    if os.path.exists(cache_path):
-        return
-    base_uri = tracking_uri.rstrip('/')
-    url = f"{base_uri}/get-artifact?path={artifact_path}&run_uuid={run_id}"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    with open(cache_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+def get_local_artifact_path(experiment_name: str, run_id: str, artifact_path: str, mlruns_dir: str) -> str:
+    return os.path.join(mlruns_dir, experiment_name, run_id, "artifacts", artifact_path)
 
 @torch.no_grad()
 def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, norm_std=None, batch_size=1024):
@@ -149,11 +128,8 @@ def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, 
         all_probs.append(true_prob.cpu())
     return torch.cat(all_probs) if all_probs else torch.tensor([])
 
-def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
+def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir):
     try:
-        group_hash = hashlib.sha256(str(group_id).encode('utf-8')).hexdigest()[:16]
-        group_path = os.path.join(cache_path, group_hash)
-        os.makedirs(group_path, exist_ok=True)
         rng = torch.Generator()
         
         if len(run_ids) < 3:
@@ -163,9 +139,10 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
 
         cfgs: dict[str, TrainConfig] = {}
         for r_id in run_ids:
-            config_path = os.path.join(group_path, r_id, f"train_config.json")
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            cfgs[r_id] = TrainConfig.model_validate(fetch_json_artifact(tracking_uri, r_id, "training_config.json", config_path))
+            local_config_path = get_local_artifact_path(experiment_name, r_id, "training_config.json", mlruns_dir)
+            with open(local_config_path, "r") as f:
+                config_dict = json.load(f)
+            cfgs[r_id] = TrainConfig.model_validate(config_dict)
         
         # Get Dataset for Target Model
         target_data_container = cfgs[run_ids[0]].data()
@@ -258,9 +235,15 @@ def handle_group_runs(group_id, run_ids, cache_path, tracking_uri):
         for step in range(0, MAX_STEPS, STEP_SIZE):
             models = {}
             for id in run_ids:
-                model_path = os.path.join(group_path, id, f"{step}.pth")
-                download_artifact(tracking_uri, id, f"checkpoints/{step}/model.pth", str(model_path))
+                model_path = get_local_artifact_path(experiment_name, id, f"checkpoints/{step}/model.pth", mlruns_dir)
+                if not os.path.exists(model_path):
+                    print(f"Warning: model path {model_path} does not exist. Skipping step {step}.")
+                    continue
                 models[id] = model_path
+            
+            if len(models) < len(run_ids):
+                continue
+
             
             # Inference for target model data
             target_in_probs = torch.zeros(len(run_ids) - 1, len(target_in))
@@ -473,9 +456,12 @@ def main():
     parser.add_argument("--model-name", required=False, default=None, help="Optional model name to filter runs. If omitted, evaluates all models in the experiment.")
     parser.add_argument("--tracking-uri", default="http://localhost:5051")
     parser.add_argument("--num-samples", type=int, default=500, help="Number of samples to evaluate on (per member/non-member class)")
+    parser.add_argument("--mlruns-dir", default=os.path.join(CACHE_DIR, "mlruns"), help="Base directory for mlruns")
+    parser.add_argument("--workers", type=int, default=1, help="Number of concurrent workers for parallel processing")
     args = parser.parse_args()
 
     cache_path = os.path.join(CACHE_DIR, args.experiment_name)
+    os.makedirs(cache_path, exist_ok=True)
         
     Logger().setup()
     mlflow.set_tracking_uri(args.tracking_uri)
@@ -492,19 +478,31 @@ def main():
         print("No groups")
         return
 
-    all_metrics = []
-    for group_id, run_ids in groups.items():
-        metrics = handle_group_runs(group_id, run_ids, cache_path, args.tracking_uri)
-        if metrics:
-            all_metrics.extend(metrics)
-            
-    if all_metrics:
-        new_df = pd.DataFrame(all_metrics)
-        # convert tuple id to string to allow saving to parquet if it exists
-        if "id" in new_df.columns:
-            new_df["id"] = new_df["id"].astype(str)
-        existing_df = pd.concat([existing_df, new_df], ignore_index=True)
-        existing_df.to_parquet(output_path)
+    if args.workers > 1:
+        mp.set_start_method('spawn', force=True)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers, mp_context=mp.get_context('spawn')) as executor:
+            futures = {
+                executor.submit(handle_group_runs, group_id, run_ids, args.experiment_name, args.mlruns_dir): group_id
+                for group_id, run_ids in groups.items()
+            }
+            for future in concurrent.futures.as_completed(futures):
+                metrics = future.result()
+                if metrics:
+                    new_df = pd.DataFrame(metrics)
+                    if "id" in new_df.columns:
+                        new_df["id"] = new_df["id"].astype(str)
+                    existing_df = pd.concat([existing_df, new_df], ignore_index=True)
+                    existing_df.to_parquet(output_path)
+    else:
+        for group_id, run_ids in groups.items():
+            metrics = handle_group_runs(group_id, run_ids, args.experiment_name, args.mlruns_dir)
+            if metrics:
+                new_df = pd.DataFrame(metrics)
+                # convert tuple id to string to allow saving to parquet if it exists
+                if "id" in new_df.columns:
+                    new_df["id"] = new_df["id"].astype(str)
+                existing_df = pd.concat([existing_df, new_df], ignore_index=True)
+                existing_df.to_parquet(output_path)
 
 
 
