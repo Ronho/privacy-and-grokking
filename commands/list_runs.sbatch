@@ -26,6 +26,7 @@ export PYTHONUNBUFFERED=1
 
 uv pip install --system --break-system-packages -e .
 
+# sbatch list_runs.sbatch reproduction-nc-grokking -o /workspace/reproduction-nc-grokking_runs.parquet
 echo "Running: uv run python scripts/list_mlflow_runs.py $@"
 uv run python scripts/list_mlflow_runs.py "$@"
 

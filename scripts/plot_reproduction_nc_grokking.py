@@ -91,7 +91,7 @@ def plot_aggregated(ax, df_plot, metric_names, title, ylabel, twin_ax=None, twin
 def main():
     parser = argparse.ArgumentParser(description="Generate plots for reproduction-nc-grokking experiment")
     parser.add_argument("--input", "-i", type=str, default="cache/reproduction-nc-grokking_mlflow_export.parquet", help="Path to parquet export")
-    parser.add_argument("--output_dir", "-o", type=str, default="plots", help="Directory to save the generated PDF plots")
+    parser.add_argument("--output_dir", "-o", type=str, default="plots/reproduction_nc_grokking", help="Directory to save the generated PDF plots")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)

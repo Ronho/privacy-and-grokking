@@ -79,12 +79,12 @@ def alternative_derange_balanced_indices(
 
 
 def random_derange_indices(canary_lookup: dict[int, list[int]], seed: int) -> torch.Tensor:
-    """Uses a random shift."""
+    """Uses a random shift for each sample."""
     canary_lbls = torch.Tensor(list(canary_lookup.keys())).to(torch.int64)
     canary_class_amt = torch.Tensor([len(vals) for vals in canary_lookup.values()]).to(torch.int64)
     original_canary_labels = torch.repeat_interleave(canary_lbls, canary_class_amt)
     rng = torch.Generator()
     rng.manual_seed(seed)
-    shift = torch.randint(1, len(original_canary_labels), (1,), generator=rng).item()
-    assigned_canary_labels = (original_canary_labels + shift) % len(canary_lbls)
+    shifts = torch.randint(1, len(canary_lbls), (len(original_canary_labels),), generator=rng)
+    assigned_canary_labels = (original_canary_labels + shifts) % len(canary_lbls)
     return assigned_canary_labels
