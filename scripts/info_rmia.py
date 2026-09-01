@@ -116,13 +116,14 @@ def get_default_tracking_uri() -> str:
 
 def get_default_mlruns_dir(tracking_uri: str) -> str:
     """Derives local mlruns folder path from tracking URI if file-based."""
-    if tracking_uri.startswith("file:///"):
-        raw = tracking_uri[8:]
-        if len(raw) > 2 and raw[1] == ":" and raw[0] == "/":
+    if tracking_uri.startswith("file://"):
+        raw = tracking_uri[7:]
+        # On Windows, file:///D:/path gives raw = "/D:/path"
+        if len(raw) > 2 and raw[0] == "/" and raw[2] == ":":
             raw = raw[1:]
         return os.path.normpath(raw)
-    elif tracking_uri.startswith("file://"):
-        return os.path.normpath(tracking_uri[7:])
+    if os.path.isdir(tracking_uri):
+        return os.path.abspath(tracking_uri)
     workspace_mlruns = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "mlruns"))
     if os.path.isdir(workspace_mlruns):
         return workspace_mlruns
@@ -136,14 +137,13 @@ def get_local_artifact_path(
     mlruns_dir: str,
     experiment_id: str | None = None,
 ) -> str:
-    candidates = []
+    candidates = [
+        os.path.join(mlruns_dir, str(experiment_name), run_id, "artifacts", artifact_path),
+    ]
     if experiment_id:
         candidates.append(
             os.path.join(mlruns_dir, str(experiment_id), run_id, "artifacts", artifact_path)
         )
-    candidates.append(
-        os.path.join(mlruns_dir, str(experiment_name), run_id, "artifacts", artifact_path)
-    )
     candidates.append(os.path.join(mlruns_dir, run_id, "artifacts", artifact_path))
     for p in candidates:
         if os.path.exists(p):
