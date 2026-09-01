@@ -174,6 +174,7 @@ def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, 
 
 def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment_id=None):
     try:
+        Logger().setup()
         rng = torch.Generator()
 
         if len(run_ids) < 3:
