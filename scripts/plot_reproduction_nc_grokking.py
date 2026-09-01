@@ -15,6 +15,16 @@ def get_model_name(row, param_cols):
         return "Default_Model"
     return "_".join(parts).replace("/", "-").replace(":", "-").replace(" ", "_")
 
+def parse_frequency(val):
+    if isinstance(val, int):
+        return val
+    val_s = str(val).strip().lower()
+    if val_s.endswith('k'):
+        return int(float(val_s[:-1]) * 1000)
+    elif val_s.endswith('m'):
+        return int(float(val_s[:-1]) * 1000000)
+    return int(val_s)
+
 def get_polished_name(m):
     if m == 'eval/train/accuracy': return 'Train'
     if m == 'eval/test/accuracy': return 'Test'
@@ -25,7 +35,9 @@ def get_polished_name(m):
     if m == 'eval/nc/nc1': return 'NC1'
     if m == 'eval/nc/rnc1/train': return 'RNC1'
     if m == 'eval/nc/rnc1/test': return 'RNC1 Test'
-    if m.startswith('eval/nc/nc2'): return m.replace('eval/nc/', '').replace('_', ' ').title()
+    if m.startswith('eval/nc/nc2'):
+        name = m.replace('eval/nc/', '').replace('_', ' ').title()
+        return name.replace('Nc2', 'NC2')
     if m.startswith('eval/nc/nc3'): return 'NC3'
     if m.startswith('eval/nc/nc4'): return 'NC4'
     return m
@@ -92,11 +104,35 @@ def main():
     parser = argparse.ArgumentParser(description="Generate plots for reproduction-nc-grokking experiment")
     parser.add_argument("--input", "-i", type=str, default="cache/reproduction-nc-grokking_mlflow_export.parquet", help="Path to parquet export")
     parser.add_argument("--output_dir", "-o", type=str, default="plots/reproduction_nc_grokking", help="Directory to save the generated PDF plots")
+    parser.add_argument(
+        "--same-resolution",
+        "--uniform-resolution",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Filter datapoints so every graph has the same resolution ((step < 50) or (step < log_frequency and step %% 100 == 0) or (step %% log_frequency == 0)). Enabled by default.",
+    )
+    parser.add_argument(
+        "--log-frequency",
+        type=parse_frequency,
+        default=1000,
+        help="Log frequency (e.g. 1000 or 1k) used when --same-resolution is enabled (default: 1000).",
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
     print(f"Loading data from {args.input}...")
     df = pd.read_parquet(args.input)
+
+    if args.same_resolution:
+        log_frequency = args.log_frequency
+        initial_len = len(df)
+        mask = (
+            (df['step'] < 50)
+            | ((df['step'] < log_frequency) & (df['step'] % 100 == 0))
+            | (df['step'] % log_frequency == 0)
+        )
+        df = df[mask].copy()
+        print(f"Applied same-resolution filter (log_frequency={log_frequency}): retained {len(df)}/{initial_len} rows ({len(df['step'].unique())} unique steps).")
     
     if 'run_name' in df.columns:
         group_cols = ['run_name']
