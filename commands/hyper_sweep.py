@@ -30,12 +30,37 @@ def get_deterministic_seed(*args, salt=seed):
 random.seed(seed)
 
 lines = {i: [] for i in range(num_repetitions)}
+def config_priority(config_path):
+    name = config_path.name.lstrip("+_")
+    if "MNIST" in name and "MSE" in name and "MLP" in name:
+        return 0
+    if "MNIST" in name and "CE" in name and "MLP" in name:
+        return 1
+    if "VIT" in name:
+        return 2
+    if "MADD" in name and "CE" in name:
+        return 3
+    if "MADD" in name and "MSE" in name:
+        return 4
+    return 99
+
+def get_steps(config_path):
+    name = config_path.name
+    if "MADD" in name:
+        return 50000
+    if "MNIST" in name:
+        return 100000
+    return 100000
+
 configs_list = list(configs.glob("*.json"))
 configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
+configs_list.sort(key=config_priority)
 
-def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postfix=None):
+def cmd(config, seed, data_seed, model_index, canary_json, steps=None, name_prefix="", postfix=None):
+    if steps is None:
+        steps = get_steps(config)
     # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train hyper-sweep {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
+    cmd_str = f"pag train hyper-sweep {config.name} {steps} --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
@@ -43,6 +68,7 @@ def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postf
     return cmd_str
 
 for config in configs_list:
+    steps = get_steps(config)
     for scale, decay, size in itertools.product(initialization_scale, weight_decay, train_size):
         # TODO: Remove the [1:] from config.stem once finished.
         data_seed = get_deterministic_seed(config.name[1:], scale, decay, size, "data_seed")
@@ -51,7 +77,7 @@ for config in configs_list:
             canary_dict = {"name": f"{canary_type}", "num": c_num}
             canary_json = json.dumps(canary_dict)
             run_seed = get_deterministic_seed(config.name[1:], scale, decay, size, i, "run_seed")
-            lines[i].append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{scale}_{decay}_{size}_"))
+            lines[i].append(cmd(config, run_seed, data_seed, i, canary_json, steps=steps, name_prefix=f"{scale}_{decay}_{size}_"))
 
 N_gpus = len(available_gpus)
 for i in range(num_repetitions):
