@@ -94,12 +94,17 @@ def plot_canary_subplot(ax, df_plot, metric_names, title, ylabel='Accuracy', lin
 
 def main():
     parser = argparse.ArgumentParser(description="Generate aggregated canary accuracy plots per model configuration")
-    parser.add_argument("--input", "-i", type=str, default="cache/canary-selection_mlflow_export.parquet", help="Path to parquet export")
+    default_input = "cache/canary-selection_mlflow_export.parquet"
+    if not os.path.exists(default_input) and os.path.exists("canary-selection_mlflow_export.parquet"):
+        default_input = "canary-selection_mlflow_export.parquet"
+    parser.add_argument("--input", "-i", type=str, default=default_input, help="Path to parquet export")
     parser.add_argument("--output_dir", "-o", type=str, default="plots/canary_accuracy", help="Directory to save the generated PDF plots")
     parser.add_argument("--linear_x", action="store_true", help="Use linear scale for x-axis instead of log scale")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
+    if not os.path.exists(args.input) and os.path.exists("canary-selection_mlflow_export.parquet"):
+        args.input = "canary-selection_mlflow_export.parquet"
     print(f"Loading data from {args.input}...")
     df = pd.read_parquet(args.input)
     
@@ -150,24 +155,33 @@ def main():
         if n_canaries == 0:
             continue
             
-        fig, axes = plt.subplots(1, n_canaries, figsize=(4.5 * n_canaries, 4.0), sharey=True, squeeze=False)
-        axes_flat = axes[0]
+        n_rows, n_cols = 2, 3
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(14.0, 7.5), sharey=True)
+        axes_flat = axes.flatten()
         
         for idx, canary_name in enumerate(ordered_canaries):
+            if idx >= len(axes_flat):
+                break
             ax = axes_flat[idx]
             canary_df = model_df[model_df['canary_label'] == canary_name]
             
             letter_prefix = chr(ord('a') + idx)
             subplot_title = f"({letter_prefix}) {canary_name}"
             
+            show_ylabel = (idx % n_cols == 0)
+            
             plot_canary_subplot(
                 ax, canary_df, target_accuracy_metrics,
                 title=subplot_title,
                 ylabel='Accuracy',
                 linear_x=args.linear_x,
-                show_ylabel=(idx == 0),
-                show_legend=(idx == n_canaries - 1 or n_canaries == 1)
+                show_ylabel=show_ylabel,
+                show_legend=(idx == 0 or idx == n_canaries - 1)
             )
+            
+        # Turn off any unused subplots (e.g., the 6th cell when 5 canaries are present)
+        for idx in range(n_canaries, len(axes_flat)):
+            axes_flat[idx].axis("off")
             
         plt.tight_layout()
         out_pdf = os.path.join(args.output_dir, f"{clean_model_name}_canary_accuracy.pdf")

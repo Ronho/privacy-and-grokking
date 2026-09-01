@@ -37,3 +37,7 @@ mlflow.exceptions.MlflowException: When an mlflow-artifacts URI was supplied, th
 ```
 
 rclone copy ":sftp,host=login.ai-lab.uni-luebeck.de,user=ronholzapfel,ask_password=true:privacy-and-grokking/mlruns" D:\privacy-and-grokking\cache\mlruns -P
+
+```bash
+sbatch --exclude=BCM-DGX-H100-2 commands/info_rmia.sbatch --experiment-name canary-selection
+```

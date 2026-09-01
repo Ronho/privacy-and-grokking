@@ -545,7 +545,9 @@ def main():
         default=1,
         help="Number of concurrent workers for parallel processing",
     )
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"Warning: ignoring unknown arguments: {unknown}")
 
     if args.mlruns_dir is None:
         args.mlruns_dir = get_default_mlruns_dir(args.tracking_uri)

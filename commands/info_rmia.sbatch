@@ -20,8 +20,10 @@ echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
 echo "Allocated GPUs: $CUDA_VISIBLE_DEVICES"
 nvidia-smi
 
-# Start MPS to allow parallel CUDA usage on the single GPU
-nvidia-cuda-mps-control -d
+# Start MPS to allow parallel CUDA usage on the single GPU (if available)
+if command -v nvidia-cuda-mps-control &> /dev/null; then
+    nvidia-cuda-mps-control -d
+fi
 
 CONCURRENT_JOBS=20
 
@@ -29,6 +31,7 @@ export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
 export PYTHONUNBUFFERED=1
+unset VIRTUAL_ENV
 
 # Limit threads per process to avoid CPU thrashing with concurrent PyTorch jobs
 export OMP_NUM_THREADS=2
@@ -41,11 +44,13 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting info_rmia.py with $CONCURRENT_JOBS concurrent workers..."
 if [ $# -gt 0 ]; then
-    uv run python scripts/info_rmia.py --workers $CONCURRENT_JOBS "$@"
+    python3 scripts/info_rmia.py --workers $CONCURRENT_JOBS "$@"
 else
-    uv run python scripts/info_rmia.py --experiment-name hyper-sweep --workers $CONCURRENT_JOBS
+    python3 scripts/info_rmia.py --experiment-name hyper-sweep --workers $CONCURRENT_JOBS
 fi
 
 echo "All jobs finished. Shutting down MPS."
-echo quit | nvidia-cuda-mps-control
+if command -v nvidia-cuda-mps-control &> /dev/null; then
+    echo quit | nvidia-cuda-mps-control
+fi
 echo "Done."
