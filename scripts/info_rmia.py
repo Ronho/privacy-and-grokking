@@ -301,8 +301,13 @@ def handle_group_runs(
         run_name = (
             target_run_info.info.run_name
             if target_run_info and target_run_info.info
-            else None
+            else str(group_id)
         )
+        target_run_id = str(run_ids[0])
+        val_run_id = str(run_ids[1])
+        ref_run_ids = [str(r) for r in run_ids[2:]]
+        all_run_ids = [str(r) for r in run_ids]
+        print(f"Processing group '{group_id}': target={target_run_id}, val={val_run_id}, refs={ref_run_ids}")
         
         # Get Dataset for Target Model
         target_data_container = cfgs[run_ids[0]].data()
@@ -594,6 +599,10 @@ def handle_group_runs(
             target_metrics["canary"] = False
             target_metrics["run_name"] = run_name
             target_metrics["id"] = group_id
+            target_metrics["target_run_id"] = target_run_id
+            target_metrics["val_run_id"] = val_run_id
+            target_metrics["ref_run_ids"] = ref_run_ids
+            target_metrics["run_ids"] = all_run_ids
             if step in step_metadata_map:
                 target_metrics.update(step_metadata_map[step])
 
@@ -629,6 +638,10 @@ def handle_group_runs(
                 target_canary_metrics["optimal_a_auc"] = float(optimal_canary_auc)
                 target_canary_metrics["canary"] = True
                 target_canary_metrics["run_name"] = run_name
+                target_canary_metrics["target_run_id"] = target_run_id
+                target_canary_metrics["val_run_id"] = val_run_id
+                target_canary_metrics["ref_run_ids"] = ref_run_ids
+                target_canary_metrics["run_ids"] = all_run_ids
                 if step in step_metadata_map:
                     target_canary_metrics.update(step_metadata_map[step])
 
