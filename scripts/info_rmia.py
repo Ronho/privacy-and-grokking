@@ -659,6 +659,13 @@ def get_runs(args, existing_df):
         print("No runs found.")
         return {}, primary_exp_id
 
+    handled_ids = set()
+    if not existing_df.empty:
+        if "id" in existing_df.columns:
+            handled_ids.update(existing_df["id"].astype(str))
+        if "run_name" in existing_df.columns:
+            handled_ids.update(existing_df["run_name"].dropna().astype(str))
+
     def get_ignored_params(run):
         params = {k: v for k, v in run.items() if isinstance(k, str) and k.startswith("params.")}
         ignored = {
@@ -669,10 +676,6 @@ def get_runs(args, existing_df):
         }
         return {k: v for k, v in params.items() if k not in ignored}
 
-    handled_ids = set()
-    if not existing_df.empty and "id" in existing_df.columns:
-        handled_ids = set(existing_df["id"].astype(str))
-
     if "params.data.mask.model_index" in runs_df.columns:
         runs_df["params.data.mask.model_index"] = pd.to_numeric(
             runs_df["params.data.mask.model_index"], errors="coerce"
@@ -681,10 +684,15 @@ def get_runs(args, existing_df):
 
     groups = {}
     for idx, run in runs_df.iterrows():
-        ignored_params = get_ignored_params(run)
-        # Sort keys to ensure deterministic tuple creation
-        key = tuple(sorted(ignored_params.items()))
-        if str(key) in handled_ids:
+        run_name = run.get("tags.mlflow.runName") or run.get("run_name")
+        if not run_name or pd.isna(run_name):
+            # Fallback to params tuple if run_name is missing
+            ignored_params = get_ignored_params(run)
+            key = str(tuple(sorted(ignored_params.items())))
+        else:
+            key = str(run_name)
+
+        if key in handled_ids:
             continue
         if key not in groups:
             groups[key] = []
