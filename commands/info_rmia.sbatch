@@ -42,11 +42,14 @@ export NUMEXPR_NUM_THREADS=2
 
 uv pip install --system --break-system-packages -e .
 
+# Usage examples:
+#   sbatch commands/info_rmia.sbatch
+#   sbatch commands/info_rmia.sbatch --experiment-name hyper-sweeps --static-eval-points
 echo "Starting info_rmia.py with $CONCURRENT_JOBS concurrent workers..."
 if [ $# -gt 0 ]; then
     python3 scripts/info_rmia.py --workers $CONCURRENT_JOBS "$@"
 else
-    python3 scripts/info_rmia.py --experiment-name hyper-sweep --workers $CONCURRENT_JOBS
+    python3 scripts/info_rmia.py --experiment-name hyper-sweeps --workers $CONCURRENT_JOBS
 fi
 
 echo "All jobs finished. Shutting down MPS."

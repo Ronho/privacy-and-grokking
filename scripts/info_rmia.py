@@ -25,6 +25,106 @@ CACHE_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "cache"))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# ==============================================================================
+# Static / Targeted Checkpoint Evaluation Configuration
+# ==============================================================================
+# Define target checkpoints per configuration for use with --static-eval-points / --static-points.
+# Keys can be:
+#   1) A substring matching run_name or config name (e.g. "MNIST_CE_MLP", "MADD_CE_TRANSFORMER")
+#   2) A tuple (dataset, model, loss) in lowercase: e.g. ("mnist", "mlp", "cross_entropy")
+#
+# Values are dictionaries with:
+#   - "mode": "epoch" or "step"
+#   - "points": list of target points (e.g. [200, 5000] for epochs, or [10000, 50000] for steps)
+# ==============================================================================
+STATIC_EVAL_POINTS = {
+    # --- MNIST Models ---
+    "MNIST_CE_MLP": {
+        "mode": "epoch",
+        "points": [80, 400],
+    },
+    "MNIST_MSE_MLP": {
+        "mode": "epoch",
+        "points": [40, 400],
+    },
+    "MNIST_CE_VIT": {
+        "mode": "epoch",
+        "points": [80, 500],
+    },
+    # --- Modular Addition Models ---
+    # Note: With full-batch training (batch_size=-1), 1 step = 1 epoch
+    "MADD_CE_TRANSFORMER": {
+        "mode": "step",
+        "points": [5000, 50000],
+    },
+    "MADD_MSE_TRANSFORMER": {
+        "mode": "step",
+        "points": [4000, 50000],
+    },
+}
+
+
+def get_available_checkpoint_steps(
+    experiment_name: str,
+    run_id: str,
+    mlruns_dir: str,
+    experiment_id: str | None = None,
+) -> list[int]:
+    """Returns sorted list of available checkpoint step integers for a given run."""
+    checkpoints_base = get_local_artifact_path(
+        experiment_name, run_id, "checkpoints", mlruns_dir, experiment_id
+    )
+    if os.path.exists(checkpoints_base) and os.path.isdir(checkpoints_base):
+        steps = [int(p) for p in os.listdir(checkpoints_base) if p.isdigit()]
+        if steps:
+            return sorted(steps)
+    # Fallback to MlflowClient
+    try:
+        client = mlflow.tracking.MlflowClient()
+        artifacts = client.list_artifacts(run_id, path="checkpoints")
+        steps = []
+        for art in artifacts:
+            parts = art.path.split("/")
+            if len(parts) >= 2 and parts[1].isdigit():
+                steps.append(int(parts[1]))
+        return sorted(set(steps))
+    except Exception:
+        return []
+
+
+def resolve_eval_spec(cfg: TrainConfig, run_name: str | None) -> dict | None:
+    """Finds matching configuration from STATIC_EVAL_POINTS for the given run/config."""
+    dataset = cfg.data.data.name.lower()
+    model = cfg.model.name.lower()
+    loss = cfg.loss.name.lower()
+
+    # 1. Exact tuple match (dataset, model, loss)
+    if (dataset, model, loss) in STATIC_EVAL_POINTS:
+        return STATIC_EVAL_POINTS[(dataset, model, loss)]
+
+    # 2. String search strings
+    candidates = []
+    if run_name:
+        candidates.append(run_name.upper())
+    if hasattr(cfg, "name") and cfg.name:
+        candidates.append(cfg.name.upper())
+    candidates.append(f"{dataset}_{loss}_{model}".upper())
+    candidates.append(f"{dataset}_{model}_{loss}".upper())
+
+    for key, spec in STATIC_EVAL_POINTS.items():
+        if isinstance(key, str):
+            key_clean = key.strip().upper().replace("-", "_")
+            for c in candidates:
+                c_clean = c.replace("-", "_")
+                if key_clean in c_clean:
+                    return spec
+
+    if "DEFAULT" in STATIC_EVAL_POINTS:
+        return STATIC_EVAL_POINTS["DEFAULT"]
+
+    return None
+
+
 def get_rmia_mean_out_signals(
     all_signals: torch.Tensor,
     all_memberships: torch.Tensor,
@@ -172,7 +272,14 @@ def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, 
         all_probs.append(true_prob.cpu())
     return torch.cat(all_probs) if all_probs else torch.tensor([])
 
-def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment_id=None):
+def handle_group_runs(
+    group_id,
+    run_ids,
+    experiment_name,
+    mlruns_dir,
+    experiment_id=None,
+    static_eval_points: bool = False,
+):
     try:
         Logger().setup()
         rng = torch.Generator()
@@ -189,6 +296,13 @@ def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment
             with open(local_config_path, "r") as f:
                 config_dict = json.load(f)
             cfgs[r_id] = TrainConfig.model_validate(config_dict)
+        
+        target_run_info = mlflow.get_run(run_ids[0])
+        run_name = (
+            target_run_info.info.run_name
+            if target_run_info and target_run_info.info
+            else None
+        )
         
         # Get Dataset for Target Model
         target_data_container = cfgs[run_ids[0]].data()
@@ -277,8 +391,65 @@ def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment
                     dtype=torch.float
                 )
 
+        step_metadata_map = {}
+        if static_eval_points:
+            target_cfg = cfgs[run_ids[0]]
+            eval_spec = resolve_eval_spec(target_cfg, run_name)
+            if eval_spec is None:
+                print(
+                    f"Warning: No matching specification in STATIC_EVAL_POINTS for {run_name} "
+                    f"({target_cfg.name}). Skipping group."
+                )
+                return []
+
+            mode = eval_spec.get("mode", "step").lower()
+            target_points = eval_spec.get("points", [])
+            if not target_points:
+                print(f"Warning: Empty target points in STATIC_EVAL_POINTS for {run_name}. Skipping group.")
+                return []
+
+            train_size = len(target_data_container.train)
+            batch_size = target_cfg.batch_size
+            if batch_size == -1 or batch_size >= train_size:
+                steps_per_epoch = 1
+            else:
+                steps_per_epoch = max(1, (train_size + batch_size - 1) // batch_size)
+
+            available_per_run = [
+                set(get_available_checkpoint_steps(experiment_name, r_id, mlruns_dir, experiment_id))
+                for r_id in run_ids
+            ]
+            common_steps = (
+                sorted(set.intersection(*available_per_run))
+                if available_per_run and all(available_per_run)
+                else []
+            )
+
+            steps_to_evaluate = []
+            for pt in target_points:
+                raw_step = int(pt * steps_per_epoch) if mode == "epoch" else int(pt)
+                if common_steps:
+                    chosen_step = min(common_steps, key=lambda s: abs(s - raw_step))
+                    if chosen_step != raw_step:
+                        print(
+                            f"[{run_name}] Target {mode} {pt} (raw step {raw_step}) "
+                            f"mapped to nearest available checkpoint step {chosen_step}."
+                        )
+                else:
+                    chosen_step = raw_step
+
+                if chosen_step not in steps_to_evaluate:
+                    steps_to_evaluate.append(chosen_step)
+                    step_metadata_map[chosen_step] = {
+                        "eval_mode": mode,
+                        "eval_target_point": pt,
+                        "eval_epoch": round(chosen_step / steps_per_epoch, 2),
+                    }
+        else:
+            steps_to_evaluate = list(range(0, MAX_STEPS, STEP_SIZE))
+
         metrics = []
-        for step in range(0, MAX_STEPS, STEP_SIZE):
+        for step in steps_to_evaluate:
             models = {}
             for id in run_ids:
                 model_path = get_local_artifact_path(
@@ -419,8 +590,10 @@ def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment
             target_metrics["optimal_a"] = float(optimal_a)
             target_metrics["optimal_a_auc"] = float(optimal_auc)
             target_metrics["canary"] = False
-            target_metrics["run_name"] = mlflow.get_run(run_ids[0]).info.run_name
+            target_metrics["run_name"] = run_name
             target_metrics["id"] = group_id
+            if step in step_metadata_map:
+                target_metrics.update(step_metadata_map[step])
 
             metrics.append(target_metrics)
             
@@ -453,7 +626,9 @@ def handle_group_runs(group_id, run_ids, experiment_name, mlruns_dir, experiment
                 target_canary_metrics["optimal_a"] = float(optimal_canary_a)
                 target_canary_metrics["optimal_a_auc"] = float(optimal_canary_auc)
                 target_canary_metrics["canary"] = True
-                target_canary_metrics["run_name"] = mlflow.get_run(run_ids[0]).info.run_name
+                target_canary_metrics["run_name"] = run_name
+                if step in step_metadata_map:
+                    target_canary_metrics.update(step_metadata_map[step])
 
                 metrics.append(target_canary_metrics)
 
@@ -546,6 +721,18 @@ def main():
         default=1,
         help="Number of concurrent workers for parallel processing",
     )
+    parser.add_argument(
+        "--static-eval-points",
+        "--static-points",
+        dest="static_eval_points",
+        action="store_true",
+        help="Evaluate specific checkpoints per model configuration as defined in STATIC_EVAL_POINTS instead of evaluating all steps in STEP_SIZE increments.",
+    )
+    parser.add_argument(
+        "--output-filename",
+        default=None,
+        help="Custom output parquet filename (default: informia_static_results.parquet when --static-eval-points is set, otherwise informia_results.parquet)",
+    )
     args, unknown = parser.parse_known_args()
     if unknown:
         print(f"Warning: ignoring unknown arguments: {unknown}")
@@ -559,7 +746,12 @@ def main():
     Logger().setup()
     mlflow.set_tracking_uri(args.tracking_uri)
 
-    output_path = os.path.join(cache_path, "informia_results.parquet")
+    output_filename = args.output_filename or (
+        "informia_static_results.parquet"
+        if args.static_eval_points
+        else "informia_results.parquet"
+    )
+    output_path = os.path.join(cache_path, output_filename)
     if os.path.exists(output_path):
         existing_df = pd.read_parquet(output_path)
     else:
@@ -583,6 +775,7 @@ def main():
                     args.experiment_name,
                     args.mlruns_dir,
                     exp_id,
+                    args.static_eval_points,
                 ): group_id
                 for group_id, run_ids in groups.items()
             }
@@ -597,7 +790,12 @@ def main():
     else:
         for group_id, run_ids in groups.items():
             metrics = handle_group_runs(
-                group_id, run_ids, args.experiment_name, args.mlruns_dir, exp_id
+                group_id,
+                run_ids,
+                args.experiment_name,
+                args.mlruns_dir,
+                exp_id,
+                args.static_eval_points,
             )
             if metrics:
                 new_df = pd.DataFrame(metrics)
