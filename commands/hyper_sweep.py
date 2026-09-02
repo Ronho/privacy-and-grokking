@@ -60,7 +60,7 @@ def cmd(config, seed, data_seed, model_index, canary_json, steps=None, name_pref
     if steps is None:
         steps = get_steps(config)
     # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train hyper-sweeps {config.name} {steps} --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
+    cmd_str = f"pag train hyper-sweep {config.name} {steps} --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:

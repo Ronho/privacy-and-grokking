@@ -37,7 +37,7 @@ configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name
 
 def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postfix=None):
     # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train canary-selection {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
+    cmd_str = f"pag train canary-selection-1 {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:

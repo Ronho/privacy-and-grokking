@@ -390,6 +390,12 @@ def main():
         help="Directory to save the generated PDF plots (default: plots/info_rmia)"
     )
     parser.add_argument(
+        "--canary",
+        type=str,
+        default="Label Noise",
+        help="Canary type to plot (default: 'Label Noise', use 'all' to plot all available canaries)"
+    )
+    parser.add_argument(
         "--plot-type",
         choices=["combined", "attacks", "both"],
         default="combined",
@@ -470,6 +476,9 @@ def main():
         for c in sorted(avail_canaries):
             if c not in ordered_canaries:
                 ordered_canaries.append(c)
+
+        if args.canary and args.canary.lower() != 'all':
+            ordered_canaries = [c for c in ordered_canaries if c.lower() == args.canary.lower()]
 
         if not ordered_canaries:
             continue
