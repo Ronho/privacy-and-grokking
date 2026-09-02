@@ -409,6 +409,8 @@ def handle_group_runs(
                 return []
 
             train_size = len(target_data_container.train)
+            if target_data_container.train_canary is not None:
+                train_size += len(target_data_container.train_canary)
             batch_size = target_cfg.batch_size
             if batch_size == -1 or batch_size >= train_size:
                 steps_per_epoch = 1

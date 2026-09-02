@@ -209,6 +209,7 @@ def evaluate(
                 for key, value in m.items():
                     metrics[f"attack/{prefix}/{key}"] = value
 
+        train_canary_results = None
         if train_canary_loader is not None:
             train_canary_results, _, _, _ = _process_loader(
                 model, train_canary_loader,
@@ -218,7 +219,14 @@ def evaluate(
             in_canary_correctness = train_canary_results["correctness"]
             if len(in_canary_correctness) > 0:
                 metrics["train/canary_accuracy"] = in_canary_correctness.float().mean().item()
+            if "mse_loss" in train_canary_results and len(train_canary_results["mse_loss"]) > 0:
+                metrics["train/canary_loss/mse/mean"] = train_canary_results["mse_loss"].mean().item()
+                metrics["train/canary_loss/mse/std"] = train_canary_results["mse_loss"].std().item()
+            if "ce_loss" in train_canary_results and len(train_canary_results["ce_loss"]) > 0:
+                metrics["train/canary_loss/cross_entropy/mean"] = train_canary_results["ce_loss"].mean().item()
+                metrics["train/canary_loss/cross_entropy/std"] = train_canary_results["ce_loss"].std().item()
                 
+        test_canary_results = None
         if test_canary_loader is not None:
             test_canary_results, _, _, _ = _process_loader(
                 model, test_canary_loader,
@@ -228,13 +236,69 @@ def evaluate(
             out_canary_correctness = test_canary_results["correctness"]
             if len(out_canary_correctness) > 0:
                 metrics["test/canary_accuracy"] = out_canary_correctness.float().mean().item()
+            if "mse_loss" in test_canary_results and len(test_canary_results["mse_loss"]) > 0:
+                metrics["test/canary_loss/mse/mean"] = test_canary_results["mse_loss"].mean().item()
+                metrics["test/canary_loss/mse/std"] = test_canary_results["mse_loss"].std().item()
+            if "ce_loss" in test_canary_results and len(test_canary_results["ce_loss"]) > 0:
+                metrics["test/canary_loss/cross_entropy/mean"] = test_canary_results["ce_loss"].mean().item()
+                metrics["test/canary_loss/cross_entropy/std"] = test_canary_results["ce_loss"].std().item()
 
-            # TODO: check
-            # if metrics_config.one_run_audit:
-            #     from privacy_and_grokking.metrics.one_run_audit import compute_empirical_epsilon
-            #     audit_metrics = compute_empirical_epsilon(in_canary_losses, out_canary_losses, step)
-            #     for k, v in audit_metrics.items():
-            #         metrics[f"audit/{k}"] = v
+        if train_canary_results is not None and test_canary_results is not None:
+            canary_attacks = []
+            if metrics_config.attack_ce_loss and "ce_loss" in train_canary_results and "ce_loss" in test_canary_results:
+                canary_attacks.append(
+                    (
+                        "canary_ce_loss",
+                        -train_canary_results["ce_loss"],
+                        -test_canary_results["ce_loss"],
+                    )
+                )
+            if metrics_config.attack_mse_loss and "mse_loss" in train_canary_results and "mse_loss" in test_canary_results:
+                canary_attacks.append(
+                    (
+                        "canary_mse_loss",
+                        -train_canary_results["mse_loss"],
+                        -test_canary_results["mse_loss"],
+                    )
+                )
+            if metrics_config.attack_correctness and "correctness" in train_canary_results and "correctness" in test_canary_results:
+                canary_attacks.append(
+                    (
+                        "canary_correctness",
+                        train_canary_results["correctness"],
+                        test_canary_results["correctness"],
+                    )
+                )
+            if metrics_config.attack_true_class_prob and "true_class_prob" in train_canary_results and "true_class_prob" in test_canary_results:
+                canary_attacks.append(
+                    (
+                        "canary_true_class_prob",
+                        train_canary_results["true_class_prob"],
+                        test_canary_results["true_class_prob"],
+                    )
+                )
+            if metrics_config.attack_true_class_logit and "true_class_logit" in train_canary_results and "true_class_logit" in test_canary_results:
+                canary_attacks.append(
+                    (
+                        "canary_true_class_logit",
+                        train_canary_results["true_class_logit"],
+                        test_canary_results["true_class_logit"],
+                    )
+                )
+
+            for prefix, train_sig, test_sig in canary_attacks:
+                if len(train_sig) > 0 and len(test_sig) > 0:
+                    m = compute_roc_metrics_single_step(train_sig, test_sig)
+                    for key, value in m.items():
+                        metrics[f"attack/{prefix}/{key}"] = value
+
+            if metrics_config.distribution_overlap:
+                for loss_key in ("mse", "ce"):
+                    k = f"{loss_key}_loss"
+                    if k in train_canary_results and k in test_canary_results:
+                        metrics[f"loss/canary_{loss_key}/overlap"] = compute_distribution_overlap(
+                            train_canary_results[k], test_canary_results[k]
+                        )
 
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
