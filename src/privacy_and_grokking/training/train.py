@@ -343,6 +343,13 @@ def train_handle(
                 if config.checkpoint_frequency_step is not None and config.checkpoint_frequency_step > 0:
                     if step % config.checkpoint_frequency_step == 0:
                         should_checkpoint = True
+                    if (
+                        config.early_checkpoint_frequency_step is not None
+                        and config.early_checkpoint_frequency_step > 0
+                        and step <= config.early_checkpoint_step_limit
+                        and step % config.early_checkpoint_frequency_step == 0
+                    ):
+                        should_checkpoint = True
 
                 if config.checkpoint_frequency_epoch is not None and config.checkpoint_frequency_epoch > 0:
                     steps_per_epoch = max(1, len(train_loader))

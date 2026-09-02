@@ -1,13 +1,175 @@
 import argparse
 import datetime
+import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import mlflow
 import pandas as pd
 from mlflow.entities import ViewType
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def fetch_run_config(
+    run_row, tracking_uri: str, client: mlflow.tracking.MlflowClient | None = None
+) -> dict | None:
+    """Attempts to find and load training_config.json for a given run row."""
+    run_id = str(run_row.get("run_id", ""))
+    artifact_uri = str(run_row.get("artifact_uri", ""))
+
+    # 1. Direct artifact_uri path if file:// based
+    if artifact_uri.startswith("file://"):
+        local_path = artifact_uri[7:]
+        if os.name == "nt" and len(local_path) >= 3 and local_path[0] == "/" and local_path[2] == ":":
+            local_path = local_path[1:]
+        cfg_file = os.path.join(local_path, "training_config.json")
+        if os.path.isfile(cfg_file):
+            try:
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+    # 2. Tracking URI directory if file:// based
+    if tracking_uri.startswith("file://"):
+        base_dir = tracking_uri[7:]
+        if os.name == "nt" and len(base_dir) >= 3 and base_dir[0] == "/" and base_dir[2] == ":":
+            base_dir = base_dir[1:]
+        exp_id = str(run_row.get("experiment_id", ""))
+        exp_name = str(run_row.get("experiment_name", ""))
+        candidates = [
+            os.path.join(base_dir, exp_name, run_id, "artifacts", "training_config.json"),
+            os.path.join(base_dir, exp_id, run_id, "artifacts", "training_config.json"),
+            os.path.join(base_dir, run_id, "artifacts", "training_config.json"),
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                try:
+                    with open(c, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+
+    # 3. Relative workspace directories (cache/mlruns or ./mlruns)
+    for base in [
+        os.path.join(SCRIPT_DIR, "..", "cache", "mlruns"),
+        os.path.join(SCRIPT_DIR, "..", "mlruns"),
+    ]:
+        if os.path.isdir(base):
+            exp_id = str(run_row.get("experiment_id", ""))
+            exp_name = str(run_row.get("experiment_name", ""))
+            candidates = [
+                os.path.join(base, exp_name, run_id, "artifacts", "training_config.json"),
+                os.path.join(base, exp_id, run_id, "artifacts", "training_config.json"),
+                os.path.join(base, run_id, "artifacts", "training_config.json"),
+            ]
+            for c in candidates:
+                if os.path.isfile(c):
+                    try:
+                        with open(c, "r", encoding="utf-8") as f:
+                            return json.load(f)
+                    except Exception:
+                        pass
+            # Also check all experiment subdirectories in base
+            try:
+                for sub in os.listdir(base):
+                    sub_cfg = os.path.join(base, sub, run_id, "artifacts", "training_config.json")
+                    if os.path.isfile(sub_cfg):
+                        with open(sub_cfg, "r", encoding="utf-8") as f:
+                            return json.load(f)
+            except Exception:
+                pass
+
+    # 4. Fallback via MlflowClient download
+    if client is not None:
+        try:
+            local_cfg = client.download_artifacts(run_id, "training_config.json")
+            if os.path.isfile(local_cfg):
+                with open(local_cfg, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+
+    return None
+
+
+def enrich_runs_with_seeds(runs_df: pd.DataFrame, tracking_uri: str) -> pd.DataFrame:
+    """Ensures seeds (seed, data.seed, data.mask.seed, data.mask.model_index) are extracted into runs_df."""
+    need_enrich = False
+    for col in ["params.seed", "params.data.seed"]:
+        if col not in runs_df.columns or runs_df[col].isna().any():
+            need_enrich = True
+            break
+
+    if not need_enrich:
+        return runs_df
+
+    client = None
+    try:
+        client = mlflow.tracking.MlflowClient()
+    except Exception:
+        pass
+
+    seed_map = {}
+    data_seed_map = {}
+    mask_seed_map = {}
+    model_idx_map = {}
+
+    def process_row(idx_row):
+        idx, row = idx_row
+        cfg = fetch_run_config(row, tracking_uri, client)
+        if not cfg:
+            return idx, None, None, None, None
+        s = cfg.get("seed")
+        d_cfg = cfg.get("data") if isinstance(cfg.get("data"), dict) else {}
+        d_s = d_cfg.get("seed")
+        m_cfg = d_cfg.get("mask") if isinstance(d_cfg.get("mask"), dict) else {}
+        m_s = m_cfg.get("seed")
+        m_idx = m_cfg.get("model_index")
+        return idx, s, d_s, m_s, m_idx
+
+    rows = list(runs_df.iterrows())
+    with ThreadPoolExecutor(max_workers=min(32, max(1, len(rows)))) as executor:
+        for idx, s, d_s, m_s, m_idx in executor.map(process_row, rows):
+            if s is not None:
+                seed_map[idx] = s
+            if d_s is not None:
+                data_seed_map[idx] = d_s
+            if m_s is not None:
+                mask_seed_map[idx] = m_s
+            if m_idx is not None:
+                model_idx_map[idx] = m_idx
+
+    if "params.seed" not in runs_df.columns:
+        runs_df["params.seed"] = pd.Series(seed_map, dtype="object")
+    else:
+        runs_df["params.seed"] = runs_df["params.seed"].fillna(pd.Series(seed_map))
+
+    if "params.data.seed" not in runs_df.columns:
+        runs_df["params.data.seed"] = pd.Series(data_seed_map, dtype="object")
+    else:
+        runs_df["params.data.seed"] = runs_df["params.data.seed"].fillna(pd.Series(data_seed_map))
+
+    if "params.data.mask.seed" not in runs_df.columns:
+        runs_df["params.data.mask.seed"] = pd.Series(mask_seed_map, dtype="object")
+    else:
+        runs_df["params.data.mask.seed"] = runs_df["params.data.mask.seed"].fillna(pd.Series(mask_seed_map))
+
+    if "params.data.mask.model_index" not in runs_df.columns:
+        runs_df["params.data.mask.model_index"] = pd.Series(model_idx_map, dtype="object")
+    else:
+        runs_df["params.data.mask.model_index"] = runs_df["params.data.mask.model_index"].fillna(pd.Series(model_idx_map))
+
+    # Also map direct names for convenience
+    for param_key in ["seed", "data.seed", "data.mask.seed", "data.mask.model_index"]:
+        col = f"params.{param_key}"
+        if col in runs_df.columns and param_key not in runs_df.columns:
+            runs_df[param_key] = runs_df[col]
+
+    return runs_df
+
 
 
 def get_default_tracking_uri() -> str:
@@ -134,6 +296,9 @@ def list_runs(
     else:
         runs_df["run_name"] = "-"
 
+    # Enrich runs with seeds (seed, data.seed, data.mask.seed, data.mask.model_index)
+    runs_df = enrich_runs_with_seeds(runs_df, tracking_uri)
+
     # Calculate duration
     tz_info = getattr(getattr(runs_df["start_time"], "dt", None), "tz", None)
     now = pd.Timestamp.now(tz=tz_info)
@@ -181,6 +346,8 @@ def list_runs(
             col_name = f"params.{k.strip()}"
             if col_name in runs_df.columns:
                 runs_df = runs_df[runs_df[col_name].astype(str) == str(v.strip())]
+            elif k.strip() in runs_df.columns:
+                runs_df = runs_df[runs_df[k.strip()].astype(str) == str(v.strip())]
             else:
                 print(f"Warning: Parameter column '{k}' not found in runs data.")
         if runs_df.empty:

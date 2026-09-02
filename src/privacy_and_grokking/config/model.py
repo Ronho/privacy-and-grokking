@@ -23,6 +23,8 @@ class TrainConfig(BaseModel):
     metrics: MetricsConfig = MetricsConfig()
     checkpoint_frequency_step: int | None = None
     checkpoint_frequency_epoch: int | None = None
+    early_checkpoint_frequency_step: int | None = 1000
+    early_checkpoint_step_limit: int = 10000
 
     @property
     def name(self) -> str:
