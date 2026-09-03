@@ -309,91 +309,127 @@ def handle_group_runs(
         all_run_ids = [str(r) for r in run_ids]
         print(f"Processing group '{group_id}': target={target_run_id}, val={val_run_id}, refs={ref_run_ids}")
         
-        # Get Dataset for Target Model
+        # Get Dataset Containers for Target and Validation Models
         target_data_container = cfgs[run_ids[0]].data()
-        has_canary = target_data_container.train_canary and target_data_container.test_canary
-        target_in = torch.randperm(len(target_data_container.train), generator=rng)[:min(NUM_MAX_SAMPLES,len(target_data_container.train))]
-        def get_splits(num_samples, max_samples):
-            if num_samples >= 2 * max_samples:
-                return max_samples, max_samples
-            return num_samples // 2, num_samples - (num_samples // 2)
-
-        test_perm = torch.randperm(len(target_data_container.test), generator=rng)
-        out_size, pop_size = get_splits(len(target_data_container.test), NUM_MAX_SAMPLES)
-        target_out = test_perm[:out_size]
-        population_out = test_perm[out_size : out_size + pop_size]
-        
-        if has_canary:
-            target_canary_in = torch.randperm(len(target_data_container.train_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(target_data_container.train_canary))]
-            test_canary_perm = torch.randperm(len(target_data_container.test_canary), generator=rng)
-            canary_out_size, canary_pop_size = get_splits(len(target_data_container.test_canary), NUM_MAX_CANARY_SAMPLES)
-            target_canary_out = test_canary_perm[:canary_out_size]
-            population_canary_out = test_canary_perm[canary_out_size : canary_out_size + canary_pop_size]
-
-        target_in_indices = set(torch.tensor(target_data_container.train.indices)[target_in].tolist())
-        if has_canary:
-            target_canary_in_indices = set(torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist())
-        
-        target_memberships = torch.zeros(len(run_ids)-1, len(target_in))
-        target_memberships[-1, :] = 1.0
-        if has_canary:
-            target_memberships_canary = torch.zeros(len(run_ids)-1, len(target_canary_in))
-            target_memberships_canary[-1, :] = 1.0
-        for idx, r_id in enumerate(run_ids[2:]):
-            reference_data_container = cfgs[r_id].data()
-            ref_in_indices = set(reference_data_container.train.indices)
-            target_memberships[idx, :] = torch.tensor(
-                [1.0 if val in ref_in_indices else 0.0 for val in torch.tensor(target_data_container.train.indices)[target_in].tolist()],
-                dtype=torch.float
-            )
-            if has_canary:
-                ref_canary_in_indices = set(reference_data_container.train_canary.indices)
-                target_memberships_canary[idx, :] = torch.tensor(
-                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist()],
-                    dtype=torch.float
-                )
-            
-
-        print(target_memberships.where(target_memberships == 1.0, 0.0))
-        if has_canary:
-            print(target_memberships_canary.where(target_memberships_canary == 1.0, 0.0))
-
-        # Get Dataset for Validation Model
         val_data_container = cfgs[run_ids[1]].data()
-        val_in = torch.randperm(len(val_data_container.train), generator=rng)[:min(NUM_MAX_SAMPLES,len(val_data_container.train))]
-        val_test_perm = torch.randperm(len(val_data_container.test), generator=rng)
-        val_out_size, val_pop_size = get_splits(len(val_data_container.test), NUM_MAX_SAMPLES)
-        val_out = val_test_perm[:val_out_size]
-        val_population_out = val_test_perm[val_out_size : val_out_size + val_pop_size]
-        
-        if has_canary:
-            val_canary_in = torch.randperm(len(val_data_container.train_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES,len(val_data_container.train_canary))]
-            val_test_canary_perm = torch.randperm(len(val_data_container.test_canary), generator=rng)
-            val_canary_out_size, val_canary_pop_size = get_splits(len(val_data_container.test_canary), NUM_MAX_CANARY_SAMPLES)
-            val_canary_out = val_test_canary_perm[:val_canary_out_size]
-            val_population_canary_out = val_test_canary_perm[val_canary_out_size : val_canary_out_size + val_canary_pop_size]
+        has_canary = bool(
+            target_data_container.train_canary
+            and target_data_container.test_canary
+            and val_data_container.train_canary
+            and val_data_container.test_canary
+        )
 
-        val_in_indices = set(torch.tensor(val_data_container.train.indices)[val_in].tolist())
+        # Target model samples: IN from target train, OUT from val train (disjoint partition of 50k pool)
+        num_target_samples = min(NUM_MAX_SAMPLES, len(target_data_container.train), len(val_data_container.train))
+        target_in = torch.randperm(len(target_data_container.train), generator=rng)[:num_target_samples]
+        target_out = torch.randperm(len(val_data_container.train), generator=rng)[:num_target_samples]
+        population_out = torch.randperm(len(target_data_container.test), generator=rng)[:min(NUM_MAX_SAMPLES, len(target_data_container.test))]
+
         if has_canary:
-            val_canary_in_indices = set(torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist())
-        
-        val_memberships = torch.zeros(len(run_ids)-1, len(val_in))
-        val_memberships[-1, :] = 1.0
+            num_canary_target = min(NUM_MAX_CANARY_SAMPLES, len(target_data_container.train_canary), len(val_data_container.train_canary))
+            target_canary_in = torch.randperm(len(target_data_container.train_canary), generator=rng)[:num_canary_target]
+            target_canary_out = torch.randperm(len(val_data_container.train_canary), generator=rng)[:num_canary_target]
+            population_canary_out = torch.randperm(len(target_data_container.test_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES, len(target_data_container.test_canary))]
+
+        # Validation model samples (used to tune offline_a): IN from val train, OUT from target train
+        num_val_samples = min(NUM_MAX_SAMPLES, len(val_data_container.train), len(target_data_container.train))
+        val_in = torch.randperm(len(val_data_container.train), generator=rng)[:num_val_samples]
+        val_out = torch.randperm(len(target_data_container.train), generator=rng)[:num_val_samples]
+        val_population_out = torch.randperm(len(val_data_container.test), generator=rng)[:min(NUM_MAX_SAMPLES, len(val_data_container.test))]
+
         if has_canary:
-            val_memberships_canary = torch.zeros(len(run_ids)-1, len(val_canary_in))
-            val_memberships_canary[-1, :] = 1.0
+            num_canary_val = min(NUM_MAX_CANARY_SAMPLES, len(val_data_container.train_canary), len(target_data_container.train_canary))
+            val_canary_in = torch.randperm(len(val_data_container.train_canary), generator=rng)[:num_canary_val]
+            val_canary_out = torch.randperm(len(target_data_container.train_canary), generator=rng)[:num_canary_val]
+            val_population_canary_out = torch.randperm(len(val_data_container.test_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES, len(val_data_container.test_canary))]
+
+        # Preload reference training index sets for membership lookups
+        ref_train_indices = {}
+        ref_canary_indices = {}
+        for r_id in run_ids[2:]:
+            ref_container = cfgs[r_id].data()
+            ref_train_indices[r_id] = set(ref_container.train.indices)
+            if has_canary and ref_container.train_canary is not None:
+                ref_canary_indices[r_id] = set(ref_container.train_canary.indices)
+
+        # Build target memberships (target model is row index -1)
+        target_in_indices = torch.tensor(target_data_container.train.indices)[target_in].tolist()
+        target_out_indices = torch.tensor(val_data_container.train.indices)[target_out].tolist()
+
+        target_memberships = torch.zeros(len(run_ids) - 1, len(target_in))
+        target_memberships[-1, :] = 1.0  # target model is member for target_in
+        target_out_memberships = torch.zeros(len(run_ids) - 1, len(target_out))
+        target_out_memberships[-1, :] = 0.0  # target model is non-member for target_out
+
         for idx, r_id in enumerate(run_ids[2:]):
-            reference_data_container = cfgs[r_id].data()
-            ref_in_indices = set(reference_data_container.train.indices)
-            val_memberships[idx, :] = torch.tensor(
-                [1.0 if val in ref_in_indices else 0.0 for val in torch.tensor(val_data_container.train.indices)[val_in].tolist()],
-                dtype=torch.float
+            ref_in = ref_train_indices[r_id]
+            target_memberships[idx, :] = torch.tensor(
+                [1.0 if val in ref_in else 0.0 for val in target_in_indices],
+                dtype=torch.float,
             )
-            if has_canary:
-                ref_canary_in_indices = set(reference_data_container.train_canary.indices)
+            target_out_memberships[idx, :] = torch.tensor(
+                [1.0 if val in ref_in else 0.0 for val in target_out_indices],
+                dtype=torch.float,
+            )
+
+        if has_canary:
+            target_canary_in_indices = torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist()
+            target_canary_out_indices = torch.tensor(val_data_container.train_canary.indices)[target_canary_out].tolist()
+
+            target_memberships_canary = torch.zeros(len(run_ids) - 1, len(target_canary_in))
+            target_memberships_canary[-1, :] = 1.0
+            target_out_memberships_canary = torch.zeros(len(run_ids) - 1, len(target_canary_out))
+            target_out_memberships_canary[-1, :] = 0.0
+
+            for idx, r_id in enumerate(run_ids[2:]):
+                ref_canary_in = ref_canary_indices[r_id]
+                target_memberships_canary[idx, :] = torch.tensor(
+                    [1.0 if val in ref_canary_in else 0.0 for val in target_canary_in_indices],
+                    dtype=torch.float,
+                )
+                target_out_memberships_canary[idx, :] = torch.tensor(
+                    [1.0 if val in ref_canary_in else 0.0 for val in target_canary_out_indices],
+                    dtype=torch.float,
+                )
+
+        # Build validation memberships (validation model is row index -1)
+        val_in_indices = torch.tensor(val_data_container.train.indices)[val_in].tolist()
+        val_out_indices = torch.tensor(target_data_container.train.indices)[val_out].tolist()
+
+        val_memberships = torch.zeros(len(run_ids) - 1, len(val_in))
+        val_memberships[-1, :] = 1.0  # validation model is member for val_in
+        val_out_memberships = torch.zeros(len(run_ids) - 1, len(val_out))
+        val_out_memberships[-1, :] = 0.0  # validation model is non-member for val_out
+
+        for idx, r_id in enumerate(run_ids[2:]):
+            ref_in = ref_train_indices[r_id]
+            val_memberships[idx, :] = torch.tensor(
+                [1.0 if val in ref_in else 0.0 for val in val_in_indices],
+                dtype=torch.float,
+            )
+            val_out_memberships[idx, :] = torch.tensor(
+                [1.0 if val in ref_in else 0.0 for val in val_out_indices],
+                dtype=torch.float,
+            )
+
+        if has_canary:
+            val_canary_in_indices = torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist()
+            val_canary_out_indices = torch.tensor(target_data_container.train_canary.indices)[val_canary_out].tolist()
+
+            val_memberships_canary = torch.zeros(len(run_ids) - 1, len(val_canary_in))
+            val_memberships_canary[-1, :] = 1.0
+            val_out_memberships_canary = torch.zeros(len(run_ids) - 1, len(val_canary_out))
+            val_out_memberships_canary[-1, :] = 0.0
+
+            for idx, r_id in enumerate(run_ids[2:]):
+                ref_canary_in = ref_canary_indices[r_id]
                 val_memberships_canary[idx, :] = torch.tensor(
-                    [1.0 if val in ref_canary_in_indices else 0.0 for val in torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist()],
-                    dtype=torch.float
+                    [1.0 if val in ref_canary_in else 0.0 for val in val_canary_in_indices],
+                    dtype=torch.float,
+                )
+                val_out_memberships_canary[idx, :] = torch.tensor(
+                    [1.0 if val in ref_canary_in else 0.0 for val in val_canary_out_indices],
+                    dtype=torch.float,
                 )
 
         step_metadata_map = {}
@@ -508,7 +544,7 @@ def handle_group_runs(
                     reference_model, target_data_container.train, target_in, DEVICE, norm_mean, norm_std, batch_size=200
                 )
                 target_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, target_data_container.test, target_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model, val_data_container.train, target_out, DEVICE, norm_mean, norm_std, batch_size=200
                 )
                 target_population_out_probs[idx] = compute_signals_in_batches(
                     reference_model, target_data_container.test, population_out, DEVICE, norm_mean, norm_std, batch_size=200
@@ -518,7 +554,7 @@ def handle_group_runs(
                         reference_model, target_data_container.train_canary, target_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     target_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.test_canary, target_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, val_data_container.train_canary, target_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     target_canary_population_out_probs[idx] = compute_signals_in_batches(
                         reference_model, target_data_container.test_canary, population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
@@ -555,7 +591,7 @@ def handle_group_runs(
                     reference_model, val_data_container.train, val_in, DEVICE, norm_mean, norm_std, batch_size=200
                 )
                 val_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, val_data_container.test, val_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model, target_data_container.train, val_out, DEVICE, norm_mean, norm_std, batch_size=200
                 )
                 val_population_out_probs[idx] = compute_signals_in_batches(
                     reference_model, val_data_container.test, val_population_out, DEVICE, norm_mean, norm_std, batch_size=200
@@ -565,7 +601,7 @@ def handle_group_runs(
                         reference_model, val_data_container.train_canary, val_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     val_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.test_canary, val_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model, target_data_container.train_canary, val_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
                     )
                     val_canary_population_out_probs[idx] = compute_signals_in_batches(
                         reference_model, val_data_container.test_canary, val_population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
@@ -579,7 +615,7 @@ def handle_group_runs(
                 val_metrics = run_informia(
                     all_signals=torch.cat([val_in_probs, val_out_probs], dim=1),
                     population_signals=val_population_out_probs,
-                    all_memberships=torch.cat([val_memberships, torch.zeros_like(val_out_probs)], dim=1),
+                    all_memberships=torch.cat([val_memberships, val_out_memberships], dim=1),
                     offline_a=a
                 )
                 if val_metrics["auc"] > optimal_auc:
@@ -590,7 +626,7 @@ def handle_group_runs(
             target_metrics = run_informia(
                 all_signals=torch.cat([target_in_probs, target_out_probs], dim=1),
                 population_signals=target_population_out_probs,
-                all_memberships=torch.cat([target_memberships, torch.zeros_like(target_out_probs)], dim=1),
+                all_memberships=torch.cat([target_memberships, target_out_memberships], dim=1),
                 offline_a=optimal_a
             )
             target_metrics["step"] = step
@@ -618,7 +654,7 @@ def handle_group_runs(
                     val_metrics = run_informia(
                         all_signals=torch.cat([val_canary_in_probs, val_canary_out_probs], dim=1),
                         population_signals=val_canary_population_out_probs,
-                        all_memberships=torch.cat([val_memberships_canary, torch.zeros_like(val_canary_out_probs)], dim=1),
+                        all_memberships=torch.cat([val_memberships_canary, val_out_memberships_canary], dim=1),
                         offline_a=a
                     )
                     if val_metrics["auc"] > optimal_canary_auc:
@@ -628,8 +664,8 @@ def handle_group_runs(
                 target_canary_metrics = run_informia(
                     all_signals=torch.cat([target_canary_in_probs, target_canary_out_probs], dim=1),
                     population_signals=target_canary_population_out_probs,
-                    all_memberships=torch.cat([target_memberships_canary, torch.zeros_like(target_canary_out_probs)], dim=1),
-                    offline_a=optimal_a
+                    all_memberships=torch.cat([target_memberships_canary, target_out_memberships_canary], dim=1),
+                    offline_a=optimal_canary_a
                 )
 
                 target_canary_metrics["id"] = group_id
