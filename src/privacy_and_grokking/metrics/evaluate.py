@@ -100,6 +100,101 @@ def _process_loader(
     return result, feature, label_list, logits
 
 
+def _evaluate_attacks(
+    in_results: dict[str, torch.Tensor],
+    out_results: dict[str, torch.Tensor],
+    prefix_template: str,
+    metrics_config: MetricsConfig,
+) -> dict[str, float]:
+    attacks = []
+    if (
+        metrics_config.attack_true_class_prob
+        and "true_class_prob" in in_results
+        and "true_class_prob" in out_results
+    ):
+        attacks.append(
+            (
+                prefix_template.format(metric="true_class_prob"),
+                in_results["true_class_prob"],
+                out_results["true_class_prob"],
+            )
+        )
+    if (
+        metrics_config.attack_true_class_logit
+        and "true_class_logit" in in_results
+        and "true_class_logit" in out_results
+    ):
+        attacks.append(
+            (
+                prefix_template.format(metric="true_class_logit"),
+                in_results["true_class_logit"],
+                out_results["true_class_logit"],
+            )
+        )
+    if (
+        metrics_config.attack_ce_loss
+        and "ce_loss" in in_results
+        and "ce_loss" in out_results
+    ):
+        attacks.append(
+            (
+                prefix_template.format(metric="ce_loss"),
+                -in_results["ce_loss"],
+                -out_results["ce_loss"],
+            )
+        )
+    if (
+        metrics_config.attack_mse_loss
+        and "mse_loss" in in_results
+        and "mse_loss" in out_results
+    ):
+        attacks.append(
+            (
+                prefix_template.format(metric="mse_loss"),
+                -in_results["mse_loss"],
+                -out_results["mse_loss"],
+            )
+        )
+    if (
+        metrics_config.attack_correctness
+        and "correctness" in in_results
+        and "correctness" in out_results
+    ):
+        attacks.append(
+            (
+                prefix_template.format(metric="correctness"),
+                in_results["correctness"],
+                out_results["correctness"],
+            )
+        )
+
+    attack_metrics = {}
+    for prefix, in_sig, out_sig in attacks:
+        if len(in_sig) > 0 and len(out_sig) > 0:
+            m = compute_roc_metrics_single_step(in_sig, out_sig)
+            for key, value in m.items():
+                attack_metrics[f"attack/{prefix}/{key}"] = value
+    return attack_metrics
+
+
+def _evaluate_distribution_overlap(
+    in_results: dict[str, torch.Tensor],
+    out_results: dict[str, torch.Tensor],
+    prefix_template: str,
+) -> dict[str, float]:
+    overlap_metrics = {}
+    for loss_key in ("mse", "ce"):
+        k = f"{loss_key}_loss"
+        if k in in_results and k in out_results:
+            in_loss = in_results[k]
+            out_loss = out_results[k]
+            if len(in_loss) > 0 and len(out_loss) > 0:
+                overlap_metrics[f"loss/{prefix_template.format(loss_key=loss_key)}/overlap"] = (
+                    compute_distribution_overlap(in_loss, out_loss)
+                )
+    return overlap_metrics
+
+
 def evaluate(
     model: nn.Module,
     step: int,
@@ -188,52 +283,14 @@ def evaluate(
             metrics["generalization_gap"] = train_accuracy - test_accuracy
 
         if metrics_config.any_attack_metric:
-            attacks = []
-            if metrics_config.attack_true_class_prob:
-                attacks.append(
-                    (
-                        "true_class_prob",
-                        train_results["true_class_prob"],
-                        test_results["true_class_prob"],
-                    )
+            metrics.update(
+                _evaluate_attacks(
+                    train_results,
+                    test_results,
+                    "{metric}",
+                    metrics_config,
                 )
-            if metrics_config.attack_true_class_logit:
-                attacks.append(
-                    (
-                        "true_class_logit",
-                        train_results["true_class_logit"],
-                        test_results["true_class_logit"],
-                    )
-                )
-            if metrics_config.attack_ce_loss:
-                attacks.append(
-                    (
-                        "ce_loss",
-                        -train_results["ce_loss"],
-                        -test_results["ce_loss"],
-                    )
-                )
-            if metrics_config.attack_mse_loss:
-                attacks.append(
-                    (
-                        "mse_loss",
-                        -train_results["mse_loss"],
-                        -test_results["mse_loss"],
-                    )
-                )
-            if metrics_config.attack_correctness:
-                attacks.append(
-                    (
-                        "correctness",
-                        train_results["correctness"],
-                        test_results["correctness"],
-                    )
-                )
-
-            for prefix, train_sig, test_sig in attacks:
-                m = compute_roc_metrics_single_step(train_sig, test_sig)
-                for key, value in m.items():
-                    metrics[f"attack/{prefix}/{key}"] = value
+            )
 
         train_canary_results = None
         if train_canary_loader is not None:
@@ -281,82 +338,66 @@ def evaluate(
                     test_canary_results["ce_loss"].std().item()
                 )
 
-        if train_canary_results is not None and test_canary_results is not None:
-            canary_attacks = []
-            if (
-                metrics_config.attack_ce_loss
-                and "ce_loss" in train_canary_results
-                and "ce_loss" in test_canary_results
-            ):
-                canary_attacks.append(
-                    (
-                        "canary_ce_loss",
-                        -train_canary_results["ce_loss"],
-                        -test_canary_results["ce_loss"],
-                    )
-                )
-            if (
-                metrics_config.attack_mse_loss
-                and "mse_loss" in train_canary_results
-                and "mse_loss" in test_canary_results
-            ):
-                canary_attacks.append(
-                    (
-                        "canary_mse_loss",
-                        -train_canary_results["mse_loss"],
-                        -test_canary_results["mse_loss"],
-                    )
-                )
-            if (
-                metrics_config.attack_correctness
-                and "correctness" in train_canary_results
-                and "correctness" in test_canary_results
-            ):
-                canary_attacks.append(
-                    (
-                        "canary_correctness",
-                        train_canary_results["correctness"],
-                        test_canary_results["correctness"],
-                    )
-                )
-            if (
-                metrics_config.attack_true_class_prob
-                and "true_class_prob" in train_canary_results
-                and "true_class_prob" in test_canary_results
-            ):
-                canary_attacks.append(
-                    (
-                        "canary_true_class_prob",
-                        train_canary_results["true_class_prob"],
-                        test_canary_results["true_class_prob"],
-                    )
-                )
-            if (
-                metrics_config.attack_true_class_logit
-                and "true_class_logit" in train_canary_results
-                and "true_class_logit" in test_canary_results
-            ):
-                canary_attacks.append(
-                    (
-                        "canary_true_class_logit",
-                        train_canary_results["true_class_logit"],
-                        test_canary_results["true_class_logit"],
-                    )
-                )
+        if train_canary_results is not None:
+            train_plus_canary_results = {
+                k: torch.cat([train_results[k], train_canary_results[k]], dim=0)
+                for k in train_results
+                if k in train_canary_results
+            }
 
-            for prefix, train_sig, test_sig in canary_attacks:
-                if len(train_sig) > 0 and len(test_sig) > 0:
-                    m = compute_roc_metrics_single_step(train_sig, test_sig)
-                    for key, value in m.items():
-                        metrics[f"attack/{prefix}/{key}"] = value
+            if metrics_config.any_attack_metric:
+                metrics.update(
+                    _evaluate_attacks(
+                        train_canary_results,
+                        test_results,
+                        "train_canary_vs_test/{metric}",
+                        metrics_config,
+                    )
+                )
+                metrics.update(
+                    _evaluate_attacks(
+                        train_plus_canary_results,
+                        test_results,
+                        "train_plus_canary_vs_test/{metric}",
+                        metrics_config,
+                    )
+                )
 
             if metrics_config.distribution_overlap:
-                for loss_key in ("mse", "ce"):
-                    k = f"{loss_key}_loss"
-                    if k in train_canary_results and k in test_canary_results:
-                        metrics[f"loss/canary_{loss_key}/overlap"] = compute_distribution_overlap(
-                            train_canary_results[k], test_canary_results[k]
-                        )
+                metrics.update(
+                    _evaluate_distribution_overlap(
+                        train_canary_results,
+                        test_results,
+                        "train_canary_vs_test/{loss_key}",
+                    )
+                )
+                metrics.update(
+                    _evaluate_distribution_overlap(
+                        train_plus_canary_results,
+                        test_results,
+                        "train_plus_canary_vs_test/{loss_key}",
+                    )
+                )
+
+        if train_canary_results is not None and test_canary_results is not None:
+            if metrics_config.any_attack_metric:
+                metrics.update(
+                    _evaluate_attacks(
+                        train_canary_results,
+                        test_canary_results,
+                        "canary_{metric}",
+                        metrics_config,
+                    )
+                )
+
+            if metrics_config.distribution_overlap:
+                metrics.update(
+                    _evaluate_distribution_overlap(
+                        train_canary_results,
+                        test_canary_results,
+                        "canary_{loss_key}",
+                    )
+                )
 
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))

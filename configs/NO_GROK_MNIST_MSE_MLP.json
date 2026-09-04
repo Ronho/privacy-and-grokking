@@ -1,12 +1,11 @@
 {
     "model": {
-        "name": "mlp",
-        "initialization_scale": 8.0
+        "name": "mlp"
     },
     "seed": 0,
     "batch_size": 200,
     "loss": {
-        "name": "cross_entropy"
+        "name": "mse"
     },
     "scheduler": {
         "name": "None"
@@ -14,7 +13,7 @@
     "optimizer": {
         "name": "AdamW",
         "lr": 0.001,
-        "weight_decay": 0.01
+        "weight_decay": 0.1
     },
     "data": {
         "data": {
@@ -27,7 +26,6 @@
             "seed": 0,
             "model_index": 0
         },
-        "train_size": 2000,
         "seed": 0
     },
     "checkpoint_frequency_step": 10000,

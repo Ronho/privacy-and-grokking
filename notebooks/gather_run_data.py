@@ -78,7 +78,6 @@ async def process_run(client, run):
     init_scale = config.get("model", {}).get("initialization_scale")
     train_size = config.get("data", {}).get("train_size")
 
-
     p = config.get("data", {}).get("mask", {}).get("p", 1.0)
     batch_size = config.get("batch_size", 128)
 

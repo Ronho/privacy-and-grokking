@@ -163,6 +163,14 @@ def train_handle(
             return GpuDataset(dataset, device)
         return dataset
 
+    def safe_collate(batch):
+        if isinstance(batch[0], tuple) and len(batch[0]) == 2:
+            xs, ys = zip(*batch)
+            if any(isinstance(y, torch.Tensor) for y in ys) and any(not isinstance(y, torch.Tensor) for y in ys):
+                ys = [y if isinstance(y, torch.Tensor) else torch.tensor(y) for y in ys]
+                batch = list(zip(xs, ys))
+        return torch.utils.data.default_collate(batch)
+
     def get_dl_kwargs(dataset):
         is_gpu = isinstance(dataset, GpuDataset)
         return {
@@ -170,6 +178,7 @@ def train_handle(
             "num_workers": 0 if is_gpu else config.num_workers,
             "pin_memory": (config.num_workers > 0 and keep_on_gpu and not is_gpu),
             "persistent_workers": (config.num_workers > 0 and not is_gpu),
+            "collate_fn": safe_collate,
         }
 
     train_ds = maybe_gpu_dataset(train_subset)

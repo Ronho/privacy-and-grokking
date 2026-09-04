@@ -4,6 +4,15 @@ import torch
 import torch.nn as nn
 from pydantic import BaseModel
 
+class ModelBase(nn.Module):
+    def forward(
+        self, x: torch.Tensor, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError
+
+    def classifier(self) -> nn.Module:
+        raise NotImplementedError
+
 
 class ModelConfig(BaseModel):
     name: str
@@ -20,18 +29,8 @@ class ModelConfig(BaseModel):
                     if module.bias is not None:
                         module.bias.data *= scale
 
-    def __call__(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
+    def __call__(self, input_dim: torch.Size, num_classes: int) -> ModelBase:
         model = self._create(input_dim, num_classes)
         if self.initialization_scale is not None:
             self._apply_initialization_scale(model, self.initialization_scale)
         return model
-
-
-class ModelBase(nn.Module):
-    def forward(
-        self, x: torch.Tensor, verbose: bool = False
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        raise NotImplementedError
-
-    def classifier(self) -> nn.Module:
-        raise NotImplementedError

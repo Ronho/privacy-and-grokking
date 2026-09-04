@@ -1,669 +1,463 @@
 import pytest
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
-from privacy_and_grokking.datasets.base import (
-    CanaryDataset,
-    DatasetConfig,
-    distribute_a_across_b,
-)
+from privacy_and_grokking.config import TrainConfig
+from privacy_and_grokking.datasets import DatasetConfig
 from privacy_and_grokking.datasets.canaries import (
-    SquareWatermarkCanary,
+    CanaryConfig,
+    GaussianNoiseCanaryConfig,
+    LabelNoiseCanaryConfig,
+    OODNaturalCanaryConfig,
     SquareWatermarkCanaryConfig,
-    UniformNoiseCanary,
     UniformNoiseCanaryConfig,
-    create_canary_generator,
 )
-from privacy_and_grokking.datasets.canary_class_assignment import (
-    alternative_derange_balanced_indices,
-    derange_balanced_indices,
-    random_derange_indices,
-)
-from privacy_and_grokking.datasets.gpu import GpuDataset
-from privacy_and_grokking.datasets.masking import Mask
-from privacy_and_grokking.datasets.masking.balanced_stratified import (
-    BalancedStratifiedMasking,
-    BalancedStratifiedMaskingConfig,
-)
-from privacy_and_grokking.datasets.masking.independent_stratified import (
-    IndependentStratifiedMasking,
-    IndependentStratifiedMaskingConfig,
-)
-from privacy_and_grokking.datasets.masking.partitioned_stratified import (
-    PartitionedStratifiedMasking,
-    PartitionedStratifiedMaskingConfig,
-)
-from privacy_and_grokking.datasets.masking.uniform import (
-    UniformMasking,
-    UniformMaskingConfig,
-)
-
-# --- Helpers ---
+from privacy_and_grokking.datasets.masking import PairedStratifiedMaskingConfig
+from privacy_and_grokking.datasets.sets.base import CACHE_PATH, DataContainer, Normalization
+from privacy_and_grokking.datasets.sets.cifar10 import CIFAR10Config
+from privacy_and_grokking.datasets.sets.mnist import MNISTConfig
+from privacy_and_grokking.datasets.sets.modular_addition import ModularAdditionConfig
 
 
-class FakeDataset(Dataset):
-    """A simple in-memory dataset for testing."""
+class TestDatasetConfigs:
+    def test_builds_complete_dataset_from_config(self, train_config: TrainConfig):
+        dataset = train_config.data()
 
-    def __init__(
-        self, num_samples: int, num_classes: int, input_shape: tuple[int, ...] = (1, 8, 8)
+        assert isinstance(dataset, DataContainer)
+        assert isinstance(dataset.train, Dataset)
+        assert isinstance(dataset.test, Dataset)
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
+        assert isinstance(dataset.num_classes, int)
+        assert isinstance(dataset.input_shape, torch.Size)
+        assert isinstance(dataset.normalization, Normalization) or dataset.normalization is None
+
+
+class TestMNIST:
+    @pytest.fixture
+    def dataset_config_no_grokking(self) -> DatasetConfig:
+        return DatasetConfig(
+            data=MNISTConfig(),
+            mask=PairedStratifiedMaskingConfig(
+                num_models=6,
+                p=0.5,
+                seed=0,
+                model_index=0,
+            ),
+            seed=0,
+        )
+
+    @pytest.fixture
+    def dataset_config_grokking(self) -> DatasetConfig:
+        return DatasetConfig(
+            data=MNISTConfig(),
+            mask=PairedStratifiedMaskingConfig(
+                num_models=6,
+                p=0.5,
+                seed=0,
+                model_index=0,
+            ),
+            train_size=2000,
+            seed=0,
+        )
+
+    def test_dataset_config(
+        self,
+        train_config: TrainConfig,
+        dataset_config_grokking: DatasetConfig,
+        dataset_config_no_grokking: DatasetConfig,
     ):
-        self.num_samples = num_samples
-        self.num_classes = num_classes
-        self.input_shape = input_shape
-        torch.manual_seed(0)
-        self.images = torch.randn(num_samples, *input_shape)
-        self.labels = torch.arange(num_samples) % num_classes
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        return self.images[idx], self.labels[idx].item()
-
-
-NUM_SAMPLES = 100
-NUM_CLASSES = 5
-INPUT_SHAPE = (1, 8, 8)
-
-
-# --- Tests for distribute_a_across_b ---
-
-
-class TestDistributeAcrossB:
-    def test_sum_equals_a(self):
-        result = distribute_a_across_b(10, 3)
-        assert result.sum().item() == 10
-
-    def test_even_distribution(self):
-        result = distribute_a_across_b(12, 4)
-        assert torch.all(result == 3)
-
-    def test_remainder_distributed(self):
-        result = distribute_a_across_b(10, 3)
-        # 10 // 3 = 3, remainder 1 -> first bucket gets 4
-        assert result[0].item() == 4
-        assert result[1].item() == 3
-        assert result[2].item() == 3
-
-    def test_a_less_than_b(self):
-        result = distribute_a_across_b(2, 5)
-        assert result.sum().item() == 2
-        assert (result <= 1).all()
-
-    def test_zero_a(self):
-        result = distribute_a_across_b(0, 3)
-        assert result.sum().item() == 0
-
-
-# --- Tests for Masking Base ---
-
-
-class TestMaskingBase:
-    def test_invalid_p_raises(self):
-        with pytest.raises(ValueError, match="p must be between 0 and 1"):
-            UniformMasking(num_samples=100, num_classes=5, num_models=2, p=1.5, seed=42)
-
-    def test_classes_length_mismatch_raises(self):
-        masking = UniformMasking(num_samples=100, num_classes=5, num_models=2, p=0.5, seed=42)
-        wrong_classes = torch.zeros(50, dtype=torch.long)
-        with pytest.raises(ValueError, match="Length of classes must match num_samples"):
-            masking(classes=wrong_classes)
-
-    def test_no_classes_generates_even_distribution(self):
-        masking = UniformMasking(num_samples=100, num_classes=5, num_models=2, p=0.5, seed=42)
-        mask = masking(classes=None)
-        assert mask.shape == (100, 2)
-
-
-# --- Tests for UniformMasking ---
-
-
-class TestUniformMasking:
-    def test_output_shape(self):
-        masking = UniformMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42
+        """Allows us to check that we cover every relevant case."""
+        if train_config.data.data.name != "mnist":
+            pytest.skip(f"Skipping non-MNIST config: {train_config.name}")
+        assert (
+            train_config.data == dataset_config_grokking
+            or train_config.data == dataset_config_no_grokking
         )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        assert mask.shape == (NUM_SAMPLES, 3)
-        assert mask.dtype == torch.bool
 
-    def test_approximate_proportion(self):
-        masking = UniformMasking(
-            num_samples=1000, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
+    def test_dataset_config_grokking(self, dataset_config_grokking: DatasetConfig):
+        dataset = dataset_config_grokking()
+
+        assert dataset.input_shape == torch.Size([1, 28, 28])
+        assert dataset.num_classes == 10
+        assert dataset.normalization == Normalization(mean=[0.1307], std=[0.3081])
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
+
+        assert len(dataset.train) == 1000
+        assert len(dataset.test) == 10000
+
+        class_counts = torch.bincount(torch.tensor([y for x, y in dataset.train]))
+        assert torch.all(class_counts == 100)
+
+    def test_dataset_config_no_grokking(self, dataset_config_no_grokking: DatasetConfig):
+        dataset = dataset_config_no_grokking()
+
+        assert dataset.input_shape == torch.Size([1, 28, 28])
+        assert dataset.num_classes == 10
+        assert dataset.normalization == Normalization(mean=[0.1307], std=[0.3081])
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
+
+        assert len(dataset.train) == 25000
+        assert len(dataset.test) == 10000
+
+        # All classes equally represented
+        class_counts = torch.bincount(torch.tensor([y for x, y in dataset.train]))
+        assert torch.all(class_counts == 2500)
+
+    @pytest.mark.parametrize(("a", "b"), [(0, 1), (2, 3), (4, 5)])
+    @pytest.mark.parametrize(
+        "config_name", ["dataset_config_no_grokking", "dataset_config_grokking"]
+    )
+    def test_dataset_config_no_overlap(
+        self, a: int, b: int, config_name: str, request: pytest.FixtureRequest
+    ):
+        base_config: DatasetConfig = request.getfixturevalue(config_name)
+
+        config_a = base_config.model_copy(deep=True)
+        config_a.mask.model_index = a
+
+        config_b = base_config.model_copy(deep=True)
+        config_b.mask.model_index = b
+
+        indices_a = set(config_a().train.indices)
+        indices_b = set(config_b().train.indices)
+
+        assert indices_a.isdisjoint(indices_b)
+
+    @pytest.mark.parametrize(
+        "canary_config",
+        [
+            GaussianNoiseCanaryConfig(num=100),
+            UniformNoiseCanaryConfig(num=100),
+            SquareWatermarkCanaryConfig(num=100, square_size=5),
+            LabelNoiseCanaryConfig(num=100),
+            OODNaturalCanaryConfig(num=100),
+        ],
+        ids=["gaussian_noise", "uniform_noise", "square_watermark", "label_noise", "ood_natural"],
+    )
+    @pytest.mark.parametrize(
+        ("config_name", "expected_train_size", "expected_per_class"),
+        [
+            ("dataset_config_grokking", 1000, 100),
+            ("dataset_config_no_grokking", 25000, 2500),
+        ],
+    )
+    def test_canaries_distribution(
+        self,
+        canary_config: CanaryConfig,
+        config_name: str,
+        expected_train_size: int,
+        expected_per_class: int,
+        request: pytest.FixtureRequest,
+    ):
+        base_config: DatasetConfig = request.getfixturevalue(config_name)
+        config = base_config.model_copy(deep=True)
+        config.canary = canary_config
+
+        dataset = config()
+
+        # 1. Train-Daten: Gleiche Gesamtzahl an Traindaten (Rohdaten + Canaries)
+        assert dataset.train_canary is not None
+        assert len(dataset.train) + len(dataset.train_canary) == expected_train_size
+
+        # Klassen in Train sind weiterhin gleich verteilt
+        train_labels = torch.tensor([y for _, y in dataset.train])
+        train_canary_labels = torch.tensor([y for _, y in dataset.train_canary])
+        total_train_labels = torch.cat([train_labels, train_canary_labels])
+
+        train_class_counts = torch.bincount(total_train_labels, minlength=10)
+        assert torch.all(train_class_counts == expected_per_class)
+
+        # 2. Test-Daten: Canaries kommen on top (test_canary)
+        # und sind gleichverteilt über alle Klassen
+        assert dataset.test_canary is not None
+        assert len(dataset.test_canary) == canary_config.num
+
+        test_canary_labels = torch.tensor([y for _, y in dataset.test_canary])
+        test_canary_counts = torch.bincount(test_canary_labels, minlength=10)
+        assert torch.all(test_canary_counts == canary_config.num // 10)
+
+    def test_canary_dataloader_collate(self, dataset_config_grokking: DatasetConfig):
+        config = dataset_config_grokking.model_copy(deep=True)
+        config.canary = LabelNoiseCanaryConfig(num=100)
+        dataset = config()
+        ds = ConcatDataset([dataset.train, dataset.train_canary])
+        loader = DataLoader(ds, batch_size=200, shuffle=True)
+        for _, y in loader:
+            assert isinstance(y, torch.Tensor)
+            assert len(y) > 0
+
+
+cifar10_canaries: list[CanaryConfig] = [
+    GaussianNoiseCanaryConfig(num=100),
+    UniformNoiseCanaryConfig(num=100),
+    SquareWatermarkCanaryConfig(num=100, square_size=5),
+    LabelNoiseCanaryConfig(num=100),
+]
+if (CACHE_PATH / "cifar-100-python").exists():
+    cifar10_canaries.append(OODNaturalCanaryConfig(num=100))
+
+
+class TestCIFAR10:
+    @pytest.fixture
+    def dataset_config_no_grokking(self) -> DatasetConfig:
+        return DatasetConfig(
+            data=CIFAR10Config(),
+            mask=PairedStratifiedMaskingConfig(
+                num_models=6,
+                p=0.5,
+                seed=0,
+                model_index=0,
+            ),
+            seed=0,
         )
-        classes = torch.arange(1000) % NUM_CLASSES
-        mask = masking(classes=classes)
-        # Each model should have approximately 50% of samples
-        for model_idx in range(2):
-            proportion = mask[:, model_idx].float().mean().item()
-            assert 0.4 < proportion < 0.6
 
-    def test_deterministic_with_seed(self):
-        kwargs = {
-            "num_samples": NUM_SAMPLES,
-            "num_classes": NUM_CLASSES,
-            "num_models": 2,
-            "p": 0.5,
-            "seed": 123,
-        }
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask1 = UniformMasking(**kwargs)(classes=classes)
-        mask2 = UniformMasking(**kwargs)(classes=classes)
-        assert torch.equal(mask1, mask2)
-
-    def test_config_creates_masking(self):
-        cfg = UniformMaskingConfig(name="uniform", num_models=2, p=0.5, seed=42)
-        masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
-        assert isinstance(masking, UniformMasking)
-
-
-# --- Tests for IndependentStratifiedMasking ---
-
-
-class TestIndependentStratifiedMasking:
-    def test_output_shape(self):
-        masking = IndependentStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42
+    @pytest.fixture
+    def dataset_config_grokking(self) -> DatasetConfig:
+        return DatasetConfig(
+            data=CIFAR10Config(),
+            mask=PairedStratifiedMaskingConfig(
+                num_models=6,
+                p=0.5,
+                seed=0,
+                model_index=0,
+            ),
+            train_size=2000,
+            seed=0,
         )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        assert mask.shape == (NUM_SAMPLES, 3)
 
-    def test_stratified_selection(self):
-        masking = IndependentStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
+    def test_dataset_config(
+        self,
+        train_config: TrainConfig,
+        dataset_config_grokking: DatasetConfig,
+        dataset_config_no_grokking: DatasetConfig,
+    ):
+        """Allows us to check that we cover every relevant case."""
+        if train_config.data.data.name != "cifar10":
+            pytest.skip(f"Skipping non-CIFAR10 config: {train_config.name}")
+        assert (
+            train_config.data == dataset_config_grokking
+            or train_config.data == dataset_config_no_grokking
         )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        # Each model should select ~50% from each class
-        for model_idx in range(2):
-            for c in range(NUM_CLASSES):
-                class_mask = classes == c
-                selected = mask[class_mask, model_idx].sum().item()
-                total_in_class = class_mask.sum().item()
-                expected = int(total_in_class * 0.5)
-                assert selected == expected
 
-    def test_deterministic_with_seed(self):
-        kwargs = {
-            "num_samples": NUM_SAMPLES,
-            "num_classes": NUM_CLASSES,
-            "num_models": 2,
-            "p": 0.5,
-            "seed": 99,
-        }
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask1 = IndependentStratifiedMasking(**kwargs)(classes=classes)
-        mask2 = IndependentStratifiedMasking(**kwargs)(classes=classes)
-        assert torch.equal(mask1, mask2)
+    def test_dataset_config_grokking(self, dataset_config_grokking: DatasetConfig):
+        dataset = dataset_config_grokking()
 
-    def test_config_creates_masking(self):
-        cfg = IndependentStratifiedMaskingConfig(
-            name="independent_stratified", num_models=2, p=0.5, seed=42
+        assert dataset.input_shape == torch.Size([3, 32, 32])
+        assert dataset.num_classes == 10
+        assert dataset.normalization == Normalization(
+            mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]
         )
-        masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
-        assert isinstance(masking, IndependentStratifiedMasking)
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
 
+        assert len(dataset.train) == 1000
+        assert len(dataset.test) == 10000
 
-# --- Tests for PartitionedStratifiedMasking ---
+        class_counts = torch.bincount(torch.tensor([y for x, y in dataset.train]))
+        assert torch.all(class_counts == 100)
 
+    def test_dataset_config_no_grokking(self, dataset_config_no_grokking: DatasetConfig):
+        dataset = dataset_config_no_grokking()
 
-class TestPartitionedStratifiedMasking:
-    def test_output_shape(self):
-        masking = PartitionedStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
+        assert dataset.input_shape == torch.Size([3, 32, 32])
+        assert dataset.num_classes == 10
+        assert dataset.normalization == Normalization(
+            mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]
         )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        assert mask.shape == (NUM_SAMPLES, 2)
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
 
-    def test_partitions_are_disjoint(self):
-        masking = PartitionedStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
+        assert len(dataset.train) == 25000
+        assert len(dataset.test) == 10000
+
+        # All classes equally represented
+        class_counts = torch.bincount(torch.tensor([y for x, y in dataset.train]))
+        assert torch.all(class_counts == 2500)
+
+    @pytest.mark.parametrize(("a", "b"), [(0, 1), (2, 3), (4, 5)])
+    @pytest.mark.parametrize(
+        "config_name", ["dataset_config_no_grokking", "dataset_config_grokking"]
+    )
+    def test_dataset_config_no_overlap(
+        self, a: int, b: int, config_name: str, request: pytest.FixtureRequest
+    ):
+        base_config: DatasetConfig = request.getfixturevalue(config_name)
+
+        config_a = base_config.model_copy(deep=True)
+        config_a.mask.model_index = a
+
+        config_b = base_config.model_copy(deep=True)
+        config_b.mask.model_index = b
+
+        indices_a = set(config_a().train.indices)
+        indices_b = set(config_b().train.indices)
+
+        assert indices_a.isdisjoint(indices_b)
+
+    @pytest.mark.parametrize(
+        "canary_config",
+        cifar10_canaries,
+        ids=[c.name for c in cifar10_canaries],
+    )
+    @pytest.mark.parametrize(
+        ("config_name", "expected_train_size", "expected_per_class"),
+        [
+            ("dataset_config_grokking", 1000, 100),
+            ("dataset_config_no_grokking", 25000, 2500),
+        ],
+    )
+    def test_canaries_distribution(
+        self,
+        canary_config: CanaryConfig,
+        config_name: str,
+        expected_train_size: int,
+        expected_per_class: int,
+        request: pytest.FixtureRequest,
+    ):
+        base_config: DatasetConfig = request.getfixturevalue(config_name)
+        config = base_config.model_copy(deep=True)
+        config.canary = canary_config
+
+        dataset = config()
+
+        # 1. Train-Daten: Gleiche Gesamtzahl an Traindaten (Rohdaten + Canaries)
+        assert dataset.train_canary is not None
+        assert len(dataset.train) + len(dataset.train_canary) == expected_train_size
+
+        # Klassen in Train sind weiterhin gleich verteilt
+        train_labels = torch.tensor([y for _, y in dataset.train])
+        train_canary_labels = torch.tensor([y for _, y in dataset.train_canary])
+        total_train_labels = torch.cat([train_labels, train_canary_labels])
+
+        train_class_counts = torch.bincount(total_train_labels, minlength=10)
+        assert torch.all(train_class_counts == expected_per_class)
+
+        # 2. Test-Daten: Canaries kommen on top (test_canary)
+        # und sind gleichverteilt über alle Klassen
+        assert dataset.test_canary is not None
+        assert len(dataset.test_canary) == canary_config.num
+
+        test_canary_labels = torch.tensor([y for _, y in dataset.test_canary])
+        test_canary_counts = torch.bincount(test_canary_labels, minlength=10)
+        assert torch.all(test_canary_counts == canary_config.num // 10)
+
+    def test_canary_dataloader_collate(self, dataset_config_grokking: DatasetConfig):
+        config = dataset_config_grokking.model_copy(deep=True)
+        config.canary = LabelNoiseCanaryConfig(num=100)
+        dataset = config()
+        ds = ConcatDataset([dataset.train, dataset.train_canary])
+        loader = DataLoader(ds, batch_size=200, shuffle=True)
+        for _, y in loader:
+            assert isinstance(y, torch.Tensor)
+            assert len(y) > 0
+
+
+class TestModularAddition:
+    @pytest.fixture
+    def dataset_config_grokking(self) -> DatasetConfig:
+        return DatasetConfig(
+            data=ModularAdditionConfig(
+                p=113,
+                num_train_per_class=90,
+                num_test_per_class=23,
+            ),
+            mask=PairedStratifiedMaskingConfig(
+                num_models=6,
+                p=0.5,
+                seed=0,
+                model_index=0,
+            ),
+            seed=0,
         )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        # No sample should be in both models
-        overlap = (mask[:, 0] & mask[:, 1]).sum().item()
-        assert overlap == 0
-
-    def test_all_samples_assigned(self):
-        masking = PartitionedStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=2, p=0.5, seed=42
-        )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        # Every sample should be in exactly one model
-        assigned = mask.any(dim=1)
-        assert assigned.all()
-
-    def test_deterministic_with_seed(self):
-        kwargs = {
-            "num_samples": NUM_SAMPLES,
-            "num_classes": NUM_CLASSES,
-            "num_models": 2,
-            "p": 0.5,
-            "seed": 77,
-        }
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask1 = PartitionedStratifiedMasking(**kwargs)(classes=classes)
-        mask2 = PartitionedStratifiedMasking(**kwargs)(classes=classes)
-        assert torch.equal(mask1, mask2)
-
-    def test_config_creates_masking(self):
-        cfg = PartitionedStratifiedMaskingConfig(
-            name="partitioned_stratified", num_models=2, p=0.5, seed=42
-        )
-        masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
-        assert isinstance(masking, PartitionedStratifiedMasking)
-
-
-# --- Tests for BalancedStratifiedMasking ---
-
-
-class TestBalancedStratifiedMasking:
-    def test_output_shape(self):
-        masking = BalancedStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42
-        )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        assert mask.shape == (NUM_SAMPLES, 3)
-
-    def test_each_model_gets_correct_count(self):
-        masking = BalancedStratifiedMasking(
-            num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES, num_models=3, p=0.5, seed=42
-        )
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask = masking(classes=classes)
-        expected_per_model = int(NUM_SAMPLES * 0.5)
-        for model_idx in range(3):
-            count = mask[:, model_idx].sum().item()
-            assert count == expected_per_model
-
-    def test_deterministic_with_seed(self):
-        kwargs = {
-            "num_samples": NUM_SAMPLES,
-            "num_classes": NUM_CLASSES,
-            "num_models": 2,
-            "p": 0.5,
-            "seed": 55,
-        }
-        classes = torch.arange(NUM_SAMPLES) % NUM_CLASSES
-        mask1 = BalancedStratifiedMasking(**kwargs)(classes=classes)
-        mask2 = BalancedStratifiedMasking(**kwargs)(classes=classes)
-        assert torch.equal(mask1, mask2)
-
-    def test_config_creates_masking(self):
-        cfg = BalancedStratifiedMaskingConfig(
-            name="balanced_stratified", num_models=2, p=0.5, seed=42
-        )
-        masking = cfg(num_samples=NUM_SAMPLES, num_classes=NUM_CLASSES)
-        assert isinstance(masking, BalancedStratifiedMasking)
-
-
-# --- Tests for Mask discriminated union ---
-
-
-class TestMaskDiscriminator:
-    def test_uniform_from_dict(self):
-        from pydantic import TypeAdapter
-
-        adapter = TypeAdapter(Mask)
-        cfg = adapter.validate_python({"name": "uniform", "num_models": 2, "p": 0.5})
-        assert isinstance(cfg, UniformMaskingConfig)
-
-    def test_independent_stratified_from_dict(self):
-        from pydantic import TypeAdapter
-
-        adapter = TypeAdapter(Mask)
-        cfg = adapter.validate_python({"name": "independent_stratified", "num_models": 2, "p": 0.5})
-        assert isinstance(cfg, IndependentStratifiedMaskingConfig)
-
-    def test_partitioned_stratified_from_dict(self):
-        from pydantic import TypeAdapter
-
-        adapter = TypeAdapter(Mask)
-        cfg = adapter.validate_python({"name": "partitioned_stratified", "num_models": 2, "p": 0.5})
-        assert isinstance(cfg, PartitionedStratifiedMaskingConfig)
-
-    def test_balanced_stratified_from_dict(self):
-        from pydantic import TypeAdapter
-
-        adapter = TypeAdapter(Mask)
-        cfg = adapter.validate_python({"name": "balanced_stratified", "num_models": 2, "p": 0.5})
-        assert isinstance(cfg, BalancedStratifiedMaskingConfig)
-
-
-# --- Tests for Canaries ---
-
-
-class TestSquareWatermarkCanary:
-    def test_applies_watermark(self):
-        canary = SquareWatermarkCanary(dim=(1, 8, 8), square_size=3)
-        image = torch.zeros(1, 8, 8)
-        result = canary(image)
-        # Bottom-right 3x3 should be 1.0
-        assert torch.all(result[:, -3:, -3:] == 1.0)
-        # Rest should remain 0
-        assert torch.all(result[:, :-3, :] == 0.0)
-
-    def test_square_size_clamped_to_image(self):
-        canary = SquareWatermarkCanary(dim=(1, 4, 4), square_size=10)
-        assert canary.square_size == 4
-
-    def test_config_creates_canary(self):
-        cfg = SquareWatermarkCanaryConfig(name="square_watermark", square_size=2)
-        canary = cfg(dim=(1, 8, 8))
-        assert isinstance(canary, SquareWatermarkCanary)
-
-    def test_config_name(self):
-        cfg = SquareWatermarkCanaryConfig(name="square_watermark", square_size=2)
-        assert cfg.name == "square_watermark"
-
-
-class TestUniformNoiseCanary:
-    def test_replaces_image_with_noise(self):
-        canary = UniformNoiseCanary(dim=(1, 8, 8))
-        image = torch.zeros(1, 8, 8)
-        result = canary(image)
-        # Result should not be all zeros (noise was applied)
-        assert not torch.all(result == 0.0)
-        # Values should be in [0, 1) range (from torch.rand)
-        assert result.min() >= 0.0
-        assert result.max() < 1.0
-
-    def test_output_shape(self):
-        canary = UniformNoiseCanary(dim=(3, 16, 16))
-        image = torch.zeros(3, 16, 16)
-        result = canary(image)
-        assert result.shape == (3, 16, 16)
-
-    def test_config_creates_canary(self):
-        cfg = UniformNoiseCanaryConfig(name="uniform_noise")
-        canary = cfg(dim=(1, 8, 8))
-        assert isinstance(canary, UniformNoiseCanary)
-
-    def test_config_name(self):
-        cfg = UniformNoiseCanaryConfig(name="uniform_noise")
-        assert cfg.name == "uniform_noise"
-
-
-class TestCreateCanaryGenerator:
-    def test_square_watermark(self):
-        cfg = SquareWatermarkCanaryConfig(name="square_watermark", square_size=2)
-        canary = create_canary_generator(config=cfg, dim=(1, 8, 8))
-        image = torch.zeros(1, 8, 8)
-        result = canary(image)
-        assert torch.all(result[:, -2:, -2:] == 1.0)
-
-    def test_uniform_noise(self):
-        cfg = UniformNoiseCanaryConfig(name="uniform_noise")
-        canary = create_canary_generator(config=cfg, dim=(1, 8, 8))
-        image = torch.zeros(1, 8, 8)
-        result = canary(image)
-        assert result.shape == (1, 8, 8)
-
-
-# --- Tests for Canary Class Assignment ---
-
-
-class TestDerangeBalancedIndices:
-    def test_no_fixed_points(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        result = derange_balanced_indices(canary_lookup, seed=42)
-        original = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2])
-        # No label should match its original class
-        assert torch.all(result != original)
-
-    def test_preserves_class_counts(self):
-        canary_lookup = {0: [0, 1], 1: [2, 3], 2: [4, 5]}
-        result = derange_balanced_indices(canary_lookup, seed=42)
-        # Each class should appear exactly twice in the result
-        for cls in range(3):
-            assert (result == cls).sum().item() == 2
-
-    def test_deterministic(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        r1 = derange_balanced_indices(canary_lookup, seed=42)
-        r2 = derange_balanced_indices(canary_lookup, seed=42)
-        assert torch.equal(r1, r2)
-
-
-class TestAlternativeDerangeBalancedIndices:
-    def test_no_fixed_points(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        result = alternative_derange_balanced_indices(canary_lookup, seed=42)
-        original = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2])
-        assert torch.all(result != original)
-
-    def test_preserves_class_counts(self):
-        canary_lookup = {0: [0, 1], 1: [2, 3], 2: [4, 5]}
-        result = alternative_derange_balanced_indices(canary_lookup, seed=42)
-        for cls in range(3):
-            assert (result == cls).sum().item() == 2
-
-    def test_deterministic(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        r1 = alternative_derange_balanced_indices(canary_lookup, seed=42)
-        r2 = alternative_derange_balanced_indices(canary_lookup, seed=42)
-        assert torch.equal(r1, r2)
-
-
-class TestRandomDerangeIndices:
-    def test_output_length(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        result = random_derange_indices(canary_lookup, seed=42)
-        assert len(result) == 9
-
-    def test_deterministic(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        r1 = random_derange_indices(canary_lookup, seed=42)
-        r2 = random_derange_indices(canary_lookup, seed=42)
-        assert torch.equal(r1, r2)
-
-    def test_labels_shifted(self):
-        canary_lookup = {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
-        result = random_derange_indices(canary_lookup, seed=42)
-        original = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2])
-        # At least some labels should differ (shift-based)
-        assert not torch.equal(result, original)
-
-
-# --- Tests for CanaryDataset ---
-
-
-class TestCanaryDataset:
-    def test_len(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        subset_indices = torch.arange(NUM_SAMPLES)
-        cd = CanaryDataset(dataset=dataset, subset_indices=subset_indices, num_classes=NUM_CLASSES)
-        assert len(cd) == NUM_SAMPLES
-
-    def test_getitem_no_canary(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        subset_indices = torch.arange(NUM_SAMPLES)
-        cd = CanaryDataset(dataset=dataset, subset_indices=subset_indices, num_classes=NUM_CLASSES)
-        img, lbl = cd[0]
-        assert isinstance(img, torch.Tensor)
-        assert isinstance(lbl, torch.Tensor)
-        assert img.shape == INPUT_SHAPE
-
-    def test_getitem_with_canary(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        subset_indices = torch.arange(NUM_SAMPLES)
-        canary_indices = torch.tensor([0, 1, 2])
-        canary_labels = torch.tensor([1, 2, 3])
-        canary_transform = SquareWatermarkCanary(dim=INPUT_SHAPE, square_size=2)
-
-        cd = CanaryDataset(
-            dataset=dataset,
-            subset_indices=subset_indices,
-            num_classes=NUM_CLASSES,
-            canary_indices=canary_indices,
-            canary_labels=canary_labels,
-            canary_transform=canary_transform,
-        )
-        img, lbl = cd[0]
-        # Canary transform should have been applied (watermark in bottom-right)
-        assert torch.all(img[:, -2:, -2:] == 1.0)
-        # Label should be the canary label
-        assert lbl.item() == 1
-
-    def test_index_out_of_range(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        subset_indices = torch.arange(10)
-        cd = CanaryDataset(dataset=dataset, subset_indices=subset_indices, num_classes=NUM_CLASSES)
-        with pytest.raises(IndexError):
-            cd[10]
-
-    def test_canary_index_without_transform_raises(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        subset_indices = torch.arange(NUM_SAMPLES)
-        canary_indices = torch.tensor([0])
-
-        cd = CanaryDataset(
-            dataset=dataset,
-            subset_indices=subset_indices,
-            num_classes=NUM_CLASSES,
-            canary_indices=canary_indices,
-            canary_labels=None,
-            canary_transform=None,
-        )
-        with pytest.raises(RuntimeError):
-            cd[0]
-
-
-# --- Tests for GpuDataset ---
-
-
-class TestGpuDataset:
-    def test_len(self):
-        dataset = FakeDataset(20, NUM_CLASSES)
-        gpu_ds = GpuDataset(dataset, device=torch.device("cpu"))
-        assert len(gpu_ds) == 20
-
-    def test_getitem(self):
-        dataset = FakeDataset(20, NUM_CLASSES)
-        gpu_ds = GpuDataset(dataset, device=torch.device("cpu"))
-        img, lbl = gpu_ds[0]
-        assert isinstance(img, torch.Tensor)
-        assert isinstance(lbl, torch.Tensor)
-        assert img.shape == INPUT_SHAPE
-
-    def test_all_data_on_device(self):
-        dataset = FakeDataset(20, NUM_CLASSES)
-        device = torch.device("cpu")
-        gpu_ds = GpuDataset(dataset, device=device)
-        assert gpu_ds.images.device == device
-        assert gpu_ds.labels.device == device
-
-    def test_labels_are_long(self):
-        dataset = FakeDataset(20, NUM_CLASSES)
-        gpu_ds = GpuDataset(dataset, device=torch.device("cpu"))
-        assert gpu_ds.labels.dtype == torch.long
-
-
-# --- Tests for DatasetConfig ---
-
-
-class TestDatasetConfig:
-    def test_apply_mask(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            mask={"name": "uniform", "num_models": 2, "p": 0.5, "model_index": 0, "seed": 42},
-        )
-        result = cfg.apply_mask(dataset, num_classes=NUM_CLASSES)
-        # Should return a Subset with fewer samples
-        assert len(result) < NUM_SAMPLES
-
-    def test_apply_mask_none(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(data={"name": "mnist"}, mask=None)
-        result = cfg.apply_mask(dataset, num_classes=NUM_CLASSES)
-        # Should return the original dataset unchanged
-        assert result is dataset
-
-    def test_apply_canary_none(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(data={"name": "mnist"}, canary=None)
-        result = cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-        assert result is dataset
-
-    def test_apply_canary_zero_share(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            canary={"name": "square_watermark", "share": 0, "square_size": 2},
-            seed=42,
-        )
-        result = cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-        assert result is dataset
-
-    def test_apply_canary_requires_seed(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            canary={"name": "square_watermark", "share": 0.1, "square_size": 2},
-            seed=None,
-        )
-        with pytest.raises(ValueError, match="seed is required"):
-            cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-
-    def test_apply_canary_returns_canary_dataset(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            canary={"name": "square_watermark", "share": 0.1, "square_size": 2},
-            seed=42,
-        )
-        result = cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-        assert isinstance(result, CanaryDataset)
-
-    def test_apply_canary_with_train_size(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            canary={"name": "square_watermark", "share": 0.1, "square_size": 2},
-            seed=42,
-            train_size=50,
-        )
-        result = cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-        assert isinstance(result, CanaryDataset)
-        assert len(result) == 50
-
-    def test_apply_canary_train_size_exceeds_raises(self):
-        dataset = FakeDataset(NUM_SAMPLES, NUM_CLASSES)
-        cfg = DatasetConfig(
-            data={"name": "mnist"},
-            canary={"name": "square_watermark", "share": 0.1, "square_size": 2},
-            seed=42,
-            train_size=200,
-        )
-        with pytest.raises(ValueError, match="train_size exceeds dataset size"):
-            cfg.apply_canary(dataset, num_classes=NUM_CLASSES)
-
-
-# --- Tests for Canary discriminated union ---
-
-
-class TestCanaryDiscriminator:
-    def test_square_watermark_from_dict(self):
-        from pydantic import TypeAdapter
-
-        from privacy_and_grokking.datasets.canaries import CanaryType
-
-        adapter = TypeAdapter(CanaryType)
-        cfg = adapter.validate_python({"name": "square_watermark", "share": 0.1, "square_size": 3})
-        assert isinstance(cfg, SquareWatermarkCanaryConfig)
-
-    def test_uniform_noise_from_dict(self):
-        from pydantic import TypeAdapter
-
-        from privacy_and_grokking.datasets.canaries import CanaryType
-
-        adapter = TypeAdapter(CanaryType)
-        cfg = adapter.validate_python({"name": "uniform_noise", "share": 0.2})
-        assert isinstance(cfg, UniformNoiseCanaryConfig)
+
+    def test_dataset_config(
+        self, train_config: TrainConfig, dataset_config_grokking: DatasetConfig
+    ):
+        """Allows us to check that we cover every relevant case."""
+        if train_config.data.data.name != "modular_addition":
+            pytest.skip(f"Skipping non-ModularAddition config: {train_config.name}")
+        assert train_config.data == dataset_config_grokking
+
+    def test_dataset_config_grokking(self, dataset_config_grokking: DatasetConfig):
+        dataset = dataset_config_grokking()
+
+        assert dataset.input_shape == torch.Size([3, 114])
+        assert dataset.num_classes == 113
+        assert dataset.normalization is None
+        assert dataset.train_canary is None
+        assert dataset.test_canary is None
+
+        assert len(dataset.train) == 5085
+        assert len(dataset.test) == 2599
+
+        class_counts = torch.bincount(torch.tensor([y for x, y in dataset.train]))
+        assert torch.all(class_counts == 45)
+
+    @pytest.mark.parametrize(("a", "b"), [(0, 1), (2, 3), (4, 5)])
+    def test_dataset_config_no_overlap(
+        self, a: int, b: int, dataset_config_grokking: DatasetConfig
+    ):
+        config_a = dataset_config_grokking.model_copy(deep=True)
+        config_a.mask.model_index = a
+
+        config_b = dataset_config_grokking.model_copy(deep=True)
+        config_b.mask.model_index = b
+
+        indices_a = set(config_a().train.indices)
+        indices_b = set(config_b().train.indices)
+
+        assert indices_a.isdisjoint(indices_b)
+
+    @pytest.mark.parametrize(
+        "canary_config",
+        [
+            GaussianNoiseCanaryConfig(num=226),
+            UniformNoiseCanaryConfig(num=226),
+            SquareWatermarkCanaryConfig(num=226, square_size=5),
+            LabelNoiseCanaryConfig(num=226),
+        ],
+        ids=["gaussian_noise", "uniform_noise", "square_watermark", "label_noise"],
+    )
+    def test_canaries_distribution(
+        self,
+        canary_config: CanaryConfig,
+        dataset_config_grokking: DatasetConfig,
+    ):
+        config = dataset_config_grokking.model_copy(deep=True)
+        config.canary = canary_config
+
+        dataset = config()
+
+        # 1. Train-Daten: Gleiche Gesamtzahl an Traindaten (Rohdaten + Canaries)
+        assert dataset.train_canary is not None
+        assert len(dataset.train) + len(dataset.train_canary) == 5085
+
+        # Klassen in Train sind weiterhin gleich verteilt
+        train_labels = torch.tensor([y for _, y in dataset.train])
+        train_canary_labels = torch.tensor([y for _, y in dataset.train_canary])
+        total_train_labels = torch.cat([train_labels, train_canary_labels])
+
+        train_class_counts = torch.bincount(total_train_labels, minlength=113)
+        assert torch.all(train_class_counts == 45)
+
+        # 2. Test-Daten: Canaries kommen on top (test_canary)
+        # und sind gleichverteilt über alle Klassen
+        assert dataset.test_canary is not None
+        assert len(dataset.test_canary) == canary_config.num
+
+        test_canary_labels = torch.tensor([y for _, y in dataset.test_canary])
+        test_canary_counts = torch.bincount(test_canary_labels, minlength=113)
+        assert torch.all(test_canary_counts == canary_config.num // 113)
+
+    def test_canary_dataloader_collate(self, dataset_config_grokking: DatasetConfig):
+        config = dataset_config_grokking.model_copy(deep=True)
+        config.canary = LabelNoiseCanaryConfig(num=226)
+        dataset = config()
+        ds = ConcatDataset([dataset.train, dataset.train_canary])
+        loader = DataLoader(ds, batch_size=200, shuffle=True)
+        for _, y in loader:
+            assert isinstance(y, torch.Tensor)
+            assert len(y) > 0

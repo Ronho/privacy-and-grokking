@@ -51,7 +51,7 @@ class TestMLPConfig:
     def test_last_layer(self):
         cfg = MLPConfig()
         model = cfg(input_dim=MNIST_INPUT_DIM, num_classes=NUM_CLASSES)
-        assert model.last_layer.out_features == NUM_CLASSES
+        assert model.classifier == NUM_CLASSES
 
 
 class TestMLPBatchNormConfig:

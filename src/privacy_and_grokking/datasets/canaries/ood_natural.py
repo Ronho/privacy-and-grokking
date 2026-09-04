@@ -15,14 +15,14 @@ class OODNaturalCanary:
 
         transform_list = []
 
-        if dim[-3] == 3 and dim[-1] == 32:
+        if len(dim) >= 3 and dim[-3] == 3 and dim[-1] == 32:
             # CIFAR-10 -> CIFAR-100
             transform_list.append(transforms.ToTensor())
             transform = transforms.Compose(transform_list)
             self.dataset = datasets.CIFAR100(
                 root=CACHE_PATH, train=True, download=True, transform=transform
             )
-        elif dim[-3] == 1 and dim[-1] in (28, 32):
+        elif len(dim) >= 3 and dim[-3] == 1 and dim[-1] in (28, 32):
             # MNIST -> FashionMNIST
             if dim[-1] == 32:
                 transform_list.append(transforms.Pad(2))

@@ -13,7 +13,7 @@ class SquareWatermarkCanary:
         self.square_size = min(square_size, dim[-2], dim[-1])
 
     def __call__(self, image: torch.Tensor) -> torch.Tensor:
-        image[:, -self.square_size :, -self.square_size :] = 1.0
+        image[..., -self.square_size :, -self.square_size :] = 1.0
         return image
 
 

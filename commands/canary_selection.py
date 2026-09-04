@@ -22,6 +22,19 @@ num_repetitions=6
 seed=4712
 shuffle=False
 
+def config_priority(config_path):
+    name = config_path.name.lstrip("+_")
+    if "MNIST" in name and "MSE" in name and "MLP" in name:
+        return 0
+    if "MNIST" in name and "CE" in name and "MLP" in name:
+        return 1
+    if "VIT" in name:
+        return 2
+    if "MADD" in name and "CE" in name:
+        return 3
+    if "MADD" in name and "MSE" in name:
+        return 4
+    return 99
 
 def get_deterministic_seed(*args, salt=seed):
     """Generates a deterministic integer seed from arguments to ensure idempotency."""
@@ -33,11 +46,11 @@ random.seed(seed)
 
 lines = []
 configs_list = list(configs.glob("*.json"))
-configs_list = [c for c in configs_list if not c.name.startswith("_") and c.name.startswith("+")] # TODO: Remove "and c.name.startswith("+")" once finished.
+configs_list = [c for c in configs_list if not c.name.startswith("_")]
+configs_list.sort(key=config_priority)
 
 def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postfix=None):
-    # TODO: Remove the [1:] from config.stem once finished.
-    cmd_str = f"pag train canary-selection-1 {config.name} 150000 --run-name {name_prefix}{config.stem[1:]} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
+    cmd_str = f"pag train canary-selection-v1 {config.name} 150000 --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
@@ -46,23 +59,15 @@ def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postf
 
 for config in configs_list:
     for canary_name in canary_types:
-        # TODO: Remove the [1:] from config.stem once finished.
-        data_seed = get_deterministic_seed(config.name[1:], canary_name, "data_seed")
+        data_seed = get_deterministic_seed(config.name, canary_name, "data_seed")
         for i in range(num_repetitions):
-            c_num = 113 if "MADD" in config.name else num_canaries
+            c_num = 226 if "MADD" in config.name else num_canaries
             canary_dict = {"name": canary_name, "num": c_num}
             if canary_name == "square_watermark":
                 canary_dict["square_size"] = 5
             canary_json = json.dumps(canary_dict)
-            if not "MADD" in config.name: # Modular Addition does not work with grokking parameter
-                run_seed = get_deterministic_seed(config.name, canary_name, i, "grokking")
-                lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
-
-            # None grokking training i.e. no initialization scale, full train size
-            if "MADD" in config.name and canary_name not in ["label_noise", "uniform_noise", "gaussian_noise"]: # Modular Addition does not work with other canaries
-                continue
-            run_seed = get_deterministic_seed(config.name, canary_name, i, "no_grokking")
-            lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_NO_", postfix=f" --override model.initialization_scale=None -o data.train_size=None"))
+            run_seed = get_deterministic_seed(config.name, canary_name, i, "base")
+            lines.append(cmd(config, run_seed, data_seed, i, canary_json, name_prefix=f"{canary_name.upper()}_"))
 
 if shuffle:
     random.shuffle(lines)
