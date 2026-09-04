@@ -92,7 +92,7 @@ class DatasetConfig(BaseModel):
     def _make_rng(self) -> torch.Generator:
         """Create a seeded random generator."""
         rng = torch.Generator()
-        if self.seed:
+        if self.seed is not None:
             rng.manual_seed(self.seed)
         return rng
 

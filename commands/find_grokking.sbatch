@@ -4,6 +4,7 @@
 #SBATCH --output=logs/find_grokking_%j.log
 #SBATCH --error=logs/find_grokking_%j.err
 #SBATCH --partition=defq
+#SBATCH --nodelist=BCM-DGX-A100-2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=40

@@ -4,6 +4,7 @@
 #SBATCH --output=logs/mlflow_ui_%j.log
 #SBATCH --error=logs/mlflow_ui_%j.err
 #SBATCH --partition=defq
+#SBATCH --nodelist=BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2

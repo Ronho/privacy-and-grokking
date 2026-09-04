@@ -4,6 +4,7 @@
 #SBATCH --output=logs/info_rmia_%A.log
 #SBATCH --error=logs/info_rmia_%A.err
 #SBATCH --partition=defq
+#SBATCH --nodelist=BCM-DGX-A100-2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=40

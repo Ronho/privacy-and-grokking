@@ -4,6 +4,7 @@
 #SBATCH --output=logs/canary_selection_%j.log
 #SBATCH --error=logs/canary_selection_%j.err
 #SBATCH --partition=defq
+#SBATCH --nodelist=BCM-DGX-A100-2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=40
