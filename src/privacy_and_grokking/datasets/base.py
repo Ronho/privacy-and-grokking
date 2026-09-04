@@ -72,9 +72,7 @@ class DatasetConfig(BaseModel):
     train_size: int | None = Field(ge=0, default=None)
     seed: int | None = None
 
-    def apply_mask(
-        self, dataset: Dataset, num_classes: int
-    ) -> Subset:
+    def apply_mask(self, dataset: Dataset, num_classes: int) -> Subset:
         """Apply the masking strategy to select a subset of samples for this model."""
         if self.mask is None:
             return dataset
@@ -151,7 +149,9 @@ class DatasetConfig(BaseModel):
             canary_parts.append(canary_lookup[cls][:amt_canary])
         return torch.cat(raw_parts), torch.cat(canary_parts)
 
-    def apply_canary(self, dataset: Dataset, num_classes: int, target_size: int | None = -1) -> tuple[Dataset, Dataset | None]:
+    def apply_canary(
+        self, dataset: Dataset, num_classes: int, target_size: int | None = -1
+    ) -> tuple[Dataset, Dataset | None]:
         """Wrap the dataset in a CanaryDataset, optionally injecting canary samples.
 
         When no canary config is set, this still handles train_size subsetting.
@@ -169,7 +169,9 @@ class DatasetConfig(BaseModel):
                 return dataset, None
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices, _ = self._compute_subset_indices(labels, num_samples, num_classes, rng, target_size=target_size)
+            subset_indices, _ = self._compute_subset_indices(
+                labels, num_samples, num_classes, rng, target_size=target_size
+            )
             return Subset(dataset, subset_indices.tolist()), None
 
         # Canary config present but num is zero — nothing to inject
@@ -179,7 +181,9 @@ class DatasetConfig(BaseModel):
                 return dataset, None
             rng = self._make_rng()
             labels = self._extract_labels(dataset, num_samples)
-            subset_indices, _ = self._compute_subset_indices(labels, num_samples, num_classes, rng, target_size=target_size)
+            subset_indices, _ = self._compute_subset_indices(
+                labels, num_samples, num_classes, rng, target_size=target_size
+            )
             return Subset(dataset, subset_indices.tolist()), None
 
         if self.seed is None:
@@ -227,23 +231,25 @@ class DatasetConfig(BaseModel):
             canary_labels=canary_labels,
             canary_transform=canary_transform,
         )
-        
+
         raw_dataset = Subset(dataset, raw_indices.tolist())
-        
+
         return raw_dataset, canary_dataset
 
     def __call__(self) -> DataContainer:
         """Build the dataset, apply canaries and subsetting, then apply masking."""
         container = self.data()
-        
+
         # Train split
         train_raw, train_canary = self.apply_canary(container.train, container.num_classes)
         train_raw = self.apply_mask(train_raw, container.num_classes)
         if train_canary is not None:
             train_canary = self.apply_mask(train_canary, container.num_classes)
-            
+
         # Test split
-        test_raw, test_canary = self.apply_canary(container.test, container.num_classes, target_size=None)
+        test_raw, test_canary = self.apply_canary(
+            container.test, container.num_classes, target_size=None
+        )
 
         return DataContainer(
             train=train_raw,

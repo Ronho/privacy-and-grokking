@@ -1,19 +1,17 @@
 import argparse
-import os
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import torch
-from torchvision import datasets, transforms
 
-from privacy_and_grokking.datasets.sets.base import CACHE_PATH
-from privacy_and_grokking.datasets.sets.mnist import MNISTConfig
 from privacy_and_grokking.datasets.canaries import (
     GaussianNoiseCanary,
-    UniformNoiseCanary,
-    SquareWatermarkCanary,
     LabelNoiseCanary,
     OODNaturalCanary,
+    SquareWatermarkCanary,
+    UniformNoiseCanary,
 )
+from privacy_and_grokking.datasets.sets.mnist import MNISTConfig
 
 
 def plot_mnist_grid_2x5(dataset, output_dir: Path, dpi: int = 300):
@@ -21,7 +19,7 @@ def plot_mnist_grid_2x5(dataset, output_dir: Path, dpi: int = 300):
     Finds one clean sample for each digit 0-9 and plots them in a 2x5 grid.
     """
     samples_per_digit = {}
-    
+
     # Collect one sample per digit (0 to 9)
     for idx in range(len(dataset)):
         img, label = dataset[idx]
@@ -29,27 +27,27 @@ def plot_mnist_grid_2x5(dataset, output_dir: Path, dpi: int = 300):
             label = int(label.item())
         else:
             label = int(label)
-            
+
         if label not in samples_per_digit:
             samples_per_digit[label] = img
-            
+
         if len(samples_per_digit) == 10:
             break
-            
+
     fig, axes = plt.subplots(2, 5, figsize=(10, 4.8))
     axes_flat = axes.flatten()
-    
+
     for digit in range(10):
         ax = axes_flat[digit]
         img = samples_per_digit[digit]
         img_np = img.squeeze().cpu().numpy()
-        
+
         ax.imshow(img_np, cmap="gray", vmin=0, vmax=1)
         ax.set_title(f"Class {digit}", fontsize=11, fontweight="bold", pad=8)
         ax.axis("off")
-        
+
     plt.tight_layout(h_pad=2.0)
-    
+
     out_png = output_dir / "mnist_samples_2x5.png"
     out_pdf = output_dir / "mnist_samples_2x5.pdf"
     plt.savefig(out_png, dpi=dpi, bbox_inches="tight")
@@ -80,7 +78,7 @@ def plot_mnist_canary_examples(
       - Individual image files for each canary
     """
     torch.manual_seed(seed)
-    
+
     # Find a representative base sample matching base_digit
     base_img = None
     true_label = None
@@ -91,13 +89,13 @@ def plot_mnist_canary_examples(
             base_img = img
             true_label = lbl
             break
-            
+
     if base_img is None:
         base_img, label = dataset[0]
         true_label = int(label.item()) if isinstance(label, torch.Tensor) else int(label)
 
     dim = (1, 28, 28)
-    
+
     # Instantiate canaries
     watermark_canary = SquareWatermarkCanary(dim=dim, square_size=square_size)
     label_noise_canary = LabelNoiseCanary(dim=dim)
@@ -162,7 +160,7 @@ def plot_mnist_canary_examples(
     # 1. Save individual canary images
     single_dir = output_dir / "individual_canaries"
     single_dir.mkdir(parents=True, exist_ok=True)
-    
+
     for item in canary_items:
         fig, ax = plt.subplots(figsize=(3, 3))
         arr = item["img"].squeeze().cpu().numpy()
@@ -188,7 +186,7 @@ def plot_mnist_canary_examples(
         arr = item["img"].squeeze().cpu().numpy()
         if item["file_suffix"] == "gaussian_noise":
             arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
-            
+
         ax.imshow(arr, cmap="gray", vmin=0, vmax=1)
         ax.set_title(f"{item['title']}\n{item['subtitle']}", fontsize=11, fontweight="bold", pad=8)
         ax.set_xticks([])
@@ -205,10 +203,22 @@ def plot_mnist_canary_examples(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate 2x5 MNIST sample grid and 1 sample per canary type")
-    parser.add_argument("--output_dir", "-o", type=str, default="plots/mnist_examples", help="Directory to save output plots")
-    parser.add_argument("--base_digit", type=int, default=7, help="Digit to use as base sample for canaries (0-9)")
-    parser.add_argument("--square_size", type=int, default=5, help="Size of square watermark in pixels")
+    parser = argparse.ArgumentParser(
+        description="Generate 2x5 MNIST sample grid and 1 sample per canary type"
+    )
+    parser.add_argument(
+        "--output_dir",
+        "-o",
+        type=str,
+        default="plots/mnist_examples",
+        help="Directory to save output plots",
+    )
+    parser.add_argument(
+        "--base_digit", type=int, default=7, help="Digit to use as base sample for canaries (0-9)"
+    )
+    parser.add_argument(
+        "--square_size", type=int, default=5, help="Size of square watermark in pixels"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--dpi", type=int, default=300, help="DPI for saved PNG images")
     args = parser.parse_args()

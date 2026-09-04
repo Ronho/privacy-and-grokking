@@ -36,6 +36,7 @@ class NeuralCollapseMetrics:
     nc3: float
     nc4: float
 
+
 def compute_all_nc_metrics(
     train_features: torch.Tensor,
     train_labels: torch.Tensor,
@@ -78,42 +79,49 @@ def compute_all_nc_metrics(
         mu_c_list.append(mu_c)
         h_c_centered = h_c - mu_c
         Sigma_W += (h_c_centered.T @ h_c_centered) / N_c
-    mu_c = torch.cat(mu_c_list, dim=0) # (C, d)
+    mu_c = torch.cat(mu_c_list, dim=0)  # (C, d)
     mu_c_centered = mu_c - mu_g
-        
 
     # NC1: Tr(Sigma_W Sigma_B^!/C) where (.)^! is the Moore-Penrose pseudeoinverse
-    Sigma_W /= C # Within-class covariance, (d, d)
-    Sigma_B = (mu_c_centered.T @ mu_c_centered) / C # Between-class covariance, (d, d)
+    Sigma_W /= C  # Within-class covariance, (d, d)
+    Sigma_B = (mu_c_centered.T @ mu_c_centered) / C  # Between-class covariance, (d, d)
     Sigma_B_pinv = torch.linalg.pinv(Sigma_B)
     nc1 = (torch.trace(Sigma_W @ Sigma_B_pinv) / C).item()
 
     # NC2 - equinorm:
-    mu_c_norm = torch.linalg.vector_norm(mu_c_centered, ord=2, dim=1) # (C,)
+    mu_c_norm = torch.linalg.vector_norm(mu_c_centered, ord=2, dim=1)  # (C,)
     nc2_equinorm = (torch.std(mu_c_norm) / torch.mean(mu_c_norm)).item()
-    weight_norm = torch.linalg.vector_norm(classifier_weight, ord=2, dim=1) # (C,)
+    weight_norm = torch.linalg.vector_norm(classifier_weight, ord=2, dim=1)  # (C,)
     nc2_equinorm_weights = (torch.std(weight_norm) / torch.mean(weight_norm)).item()
 
     # NC2 - equiangularity:
     mask = ~torch.eye(C, dtype=torch.bool, device=mu_c_centered.device)
-    cos_mu = torch.matmul(mu_c_centered, mu_c_centered.T) / torch.clamp(torch.outer(mu_c_norm, mu_c_norm), min=1e-8) # (C,C)
+    cos_mu = torch.matmul(mu_c_centered, mu_c_centered.T) / torch.clamp(
+        torch.outer(mu_c_norm, mu_c_norm), min=1e-8
+    )  # (C,C)
     nc2_equiangularity = torch.std(cos_mu[mask]).item()
-    cos_weights = torch.matmul(classifier_weight, classifier_weight.T) / torch.clamp(torch.outer(weight_norm, weight_norm), min=1e-8) # (C,C)
+    cos_weights = torch.matmul(classifier_weight, classifier_weight.T) / torch.clamp(
+        torch.outer(weight_norm, weight_norm), min=1e-8
+    )  # (C,C)
     nc2_equiangularity_weights = torch.std(cos_weights[mask]).item()
-    
+
     # NC2 - maximal-angle equiangularity:
     nc2_maximal_angle_equiangularity = torch.mean(torch.abs(cos_mu + 1.0 / (C - 1))[mask]).item()
-    nc2_maximal_angle_equiangularity_weights = torch.mean(torch.abs(cos_weights + 1.0 / (C - 1))[mask]).item()
+    nc2_maximal_angle_equiangularity_weights = torch.mean(
+        torch.abs(cos_weights + 1.0 / (C - 1))[mask]
+    ).item()
 
     # NC3 - classifier convergence
-    m_tilde = mu_c_centered.T / torch.linalg.matrix_norm(mu_c_centered.T, ord="fro") # (d,C)
-    w_tilde = classifier_weight.T / torch.linalg.matrix_norm(classifier_weight.T, ord="fro") # (d,C)
-    nc3 = (torch.linalg.matrix_norm(w_tilde - m_tilde, ord="fro")**2).item()
+    m_tilde = mu_c_centered.T / torch.linalg.matrix_norm(mu_c_centered.T, ord="fro")  # (d,C)
+    w_tilde = classifier_weight.T / torch.linalg.matrix_norm(
+        classifier_weight.T, ord="fro"
+    )  # (d,C)
+    nc3 = (torch.linalg.matrix_norm(w_tilde - m_tilde, ord="fro") ** 2).item()
 
     # NC 4 - nearest class center convergence
     distances = torch.cdist(train_features, mu_c, p=2.0)
     ncc_predictions_idx = torch.argmin(distances, dim=1)
-    mismatch_mask = (train_predictions != ncc_predictions_idx)
+    mismatch_mask = train_predictions != ncc_predictions_idx
     nc4 = torch.mean(mismatch_mask.float()).item()
 
     # RNC1 according to the paper
@@ -137,9 +145,9 @@ def compute_all_nc_metrics(
         train_class_mean = train_class_features.mean(dim=0)
         test_class_mean = test_class_features.mean(dim=0)
         test_all_class_mean = g_tilde_train_all[train_mask].mean(dim=0)
-        train_diff = (train_class_features - train_class_mean).norm(p=2, dim=1)**2
-        test_diff = (test_class_features - test_class_mean).norm(p=2, dim=1)**2
-        test_all_diff = (test_all_class_features - test_all_class_mean).norm(p=2, dim=1)**2
+        train_diff = (train_class_features - train_class_mean).norm(p=2, dim=1) ** 2
+        test_diff = (test_class_features - test_class_mean).norm(p=2, dim=1) ** 2
+        test_all_diff = (test_all_class_features - test_all_class_mean).norm(p=2, dim=1) ** 2
         train_total += train_diff.sum()
         test_total += test_diff.sum()
         test_all_total += test_all_diff.sum()
@@ -165,17 +173,19 @@ def compute_all_nc_metrics(
         train_class_mean = train_class_features.mean(dim=0)
         test_class_mean = test_class_features.mean(dim=0)
 
-        train_diff = (train_class_features - train_class_mean).norm(p=2, dim=1)**2
-        test_diff = (test_class_features - test_class_mean).norm(p=2, dim=1)**2
-        test_all_diff = (test_class_features - train_class_mean).norm(p=2, dim=1)**2
-        
+        train_diff = (train_class_features - train_class_mean).norm(p=2, dim=1) ** 2
+        test_diff = (test_class_features - test_class_mean).norm(p=2, dim=1) ** 2
+        test_all_diff = (test_class_features - train_class_mean).norm(p=2, dim=1) ** 2
+
         train_total += train_diff.sum()
         test_total += test_diff.sum()
         test_all_total += test_all_diff.sum()
 
     rnc1_train_impl = (train_total / train_features.shape[0] / (scale_mean_train**2 + 1e-10)).item()
     rnc1_test_impl = (test_total / test_features.shape[0] / (scale_mean_test**2 + 1e-10)).item()
-    rnc1_test_all_impl = (test_all_total / test_features.shape[0] / (scale_mean_all**2 + 1e-10)).item()
+    rnc1_test_all_impl = (
+        test_all_total / test_features.shape[0] / (scale_mean_all**2 + 1e-10)
+    ).item()
 
     return NeuralCollapseMetrics(
         rnc1_train=rnc1_train,

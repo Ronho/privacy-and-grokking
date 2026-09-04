@@ -1,10 +1,4 @@
-from privacy_and_grokking.metrics.distribution_overlap import compute_median_heuristic
-from privacy_and_grokking.metrics.distribution_overlap import subsample_tensor
-from privacy_and_grokking.models.base import ModelBase
-
-import tempfile
 from collections import defaultdict
-from pathlib import Path
 
 import mlflow
 import torch
@@ -14,10 +8,16 @@ import torch.nn.functional as F
 from privacy_and_grokking.datasets.sets.base import Normalization
 from privacy_and_grokking.metrics.config import MetricsConfig
 from privacy_and_grokking.metrics.curvature import curvature
-from privacy_and_grokking.metrics.distribution_overlap import compute_distribution_overlap, compute_mmd
+from privacy_and_grokking.metrics.distribution_overlap import (
+    compute_distribution_overlap,
+    compute_median_heuristic,
+    compute_mmd,
+    subsample_tensor,
+)
 from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
 from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_weight_norms
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
+from privacy_and_grokking.models.base import ModelBase
 from privacy_and_grokking.utils import eval_mode, get_device
 
 
@@ -43,7 +43,17 @@ def _process_loader(
     logits_accum: list[torch.Tensor] = []
     result = defaultdict(list)
 
-    expected_keys = ["true_class_logit", "max_logit", "min_logit", "true_class_prob", "max_prob", "min_prob", "ce_loss", "mse_loss", "correctness"]
+    expected_keys = [
+        "true_class_logit",
+        "max_logit",
+        "min_logit",
+        "true_class_prob",
+        "max_prob",
+        "min_prob",
+        "ce_loss",
+        "mse_loss",
+        "correctness",
+    ]
     for k in expected_keys:
         result[k] = []
 
@@ -72,9 +82,15 @@ def _process_loader(
         if collect_penultimate_layer_features:
             feature_list_accum.append(features)
 
-    label_list = torch.cat(label_list_accum, dim=0).cpu() if label_list_accum else torch.tensor([], dtype=torch.long)
+    label_list = (
+        torch.cat(label_list_accum, dim=0).cpu()
+        if label_list_accum
+        else torch.tensor([], dtype=torch.long)
+    )
     if collect_penultimate_layer_features:
-        feature = torch.cat(feature_list_accum, dim=0).cpu() if feature_list_accum else torch.tensor([])
+        feature = (
+            torch.cat(feature_list_accum, dim=0).cpu() if feature_list_accum else torch.tensor([])
+        )
     else:
         feature = torch.tensor([])
 
@@ -116,12 +132,14 @@ def evaluate(
         )
 
         train_results, train_activations, train_labels, train_logits = _process_loader(
-            model, train_loader,
+            model,
+            train_loader,
             collect_penultimate_layer_features=collect_features,
             normalization=normalization,
         )
         test_results, test_activations, test_labels, test_logits = _process_loader(
-            model, test_loader,
+            model,
+            test_loader,
             collect_penultimate_layer_features=collect_features,
             normalization=normalization,
         )
@@ -142,20 +160,28 @@ def evaluate(
                 train_loss = train_results[f"{loss_key}_loss"]
                 test_loss = test_results[f"{loss_key}_loss"]
                 if metrics_config.distribution_overlap:
-                    metrics[f"loss/{loss_key}/overlap"] = compute_distribution_overlap(train_loss, test_loss)
+                    metrics[f"loss/{loss_key}/overlap"] = compute_distribution_overlap(
+                        train_loss, test_loss
+                    )
                 if metrics_config.mmd:
                     subsampled_train_loss = subsample_tensor(train_loss, max_samples=1000)
                     subsampled_test_loss = subsample_tensor(test_loss, max_samples=1000)
-                    bandwidth = compute_median_heuristic(subsampled_train_loss, subsampled_test_loss)
+                    bandwidth = compute_median_heuristic(
+                        subsampled_train_loss, subsampled_test_loss
+                    )
                     metrics[f"loss/{loss_key}/mmd/bw"] = bandwidth
-                    metrics[f"loss/{loss_key}/mmd/bw_0.5"] = compute_mmd(subsampled_train_loss, subsampled_test_loss, 0.5*bandwidth)
-                    metrics[f"loss/{loss_key}/mmd/bw_1.0"] = compute_mmd(subsampled_train_loss, subsampled_test_loss, bandwidth)
-                    metrics[f"loss/{loss_key}/mmd/bw_2.0"] = compute_mmd(subsampled_train_loss, subsampled_test_loss, 2.0*bandwidth)
+                    metrics[f"loss/{loss_key}/mmd/bw_0.5"] = compute_mmd(
+                        subsampled_train_loss, subsampled_test_loss, 0.5 * bandwidth
+                    )
+                    metrics[f"loss/{loss_key}/mmd/bw_1.0"] = compute_mmd(
+                        subsampled_train_loss, subsampled_test_loss, bandwidth
+                    )
+                    metrics[f"loss/{loss_key}/mmd/bw_2.0"] = compute_mmd(
+                        subsampled_train_loss, subsampled_test_loss, 2.0 * bandwidth
+                    )
 
         if metrics_config.accuracy:
-            train_accuracy = train_results["correctness"].sum() / len(
-                train_results["correctness"]
-            )
+            train_accuracy = train_results["correctness"].sum() / len(train_results["correctness"])
             test_accuracy = test_results["correctness"].sum() / len(test_results["correctness"])
             metrics["train/accuracy"] = train_accuracy
             metrics["test/accuracy"] = test_accuracy
@@ -212,7 +238,8 @@ def evaluate(
         train_canary_results = None
         if train_canary_loader is not None:
             train_canary_results, _, _, _ = _process_loader(
-                model, train_canary_loader,
+                model,
+                train_canary_loader,
                 collect_penultimate_layer_features=False,
                 normalization=normalization,
             )
@@ -220,16 +247,23 @@ def evaluate(
             if len(in_canary_correctness) > 0:
                 metrics["train/canary_accuracy"] = in_canary_correctness.float().mean().item()
             if "mse_loss" in train_canary_results and len(train_canary_results["mse_loss"]) > 0:
-                metrics["train/canary_loss/mse/mean"] = train_canary_results["mse_loss"].mean().item()
+                metrics["train/canary_loss/mse/mean"] = (
+                    train_canary_results["mse_loss"].mean().item()
+                )
                 metrics["train/canary_loss/mse/std"] = train_canary_results["mse_loss"].std().item()
             if "ce_loss" in train_canary_results and len(train_canary_results["ce_loss"]) > 0:
-                metrics["train/canary_loss/cross_entropy/mean"] = train_canary_results["ce_loss"].mean().item()
-                metrics["train/canary_loss/cross_entropy/std"] = train_canary_results["ce_loss"].std().item()
-                
+                metrics["train/canary_loss/cross_entropy/mean"] = (
+                    train_canary_results["ce_loss"].mean().item()
+                )
+                metrics["train/canary_loss/cross_entropy/std"] = (
+                    train_canary_results["ce_loss"].std().item()
+                )
+
         test_canary_results = None
         if test_canary_loader is not None:
             test_canary_results, _, _, _ = _process_loader(
-                model, test_canary_loader,
+                model,
+                test_canary_loader,
                 collect_penultimate_layer_features=False,
                 normalization=normalization,
             )
@@ -240,12 +274,20 @@ def evaluate(
                 metrics["test/canary_loss/mse/mean"] = test_canary_results["mse_loss"].mean().item()
                 metrics["test/canary_loss/mse/std"] = test_canary_results["mse_loss"].std().item()
             if "ce_loss" in test_canary_results and len(test_canary_results["ce_loss"]) > 0:
-                metrics["test/canary_loss/cross_entropy/mean"] = test_canary_results["ce_loss"].mean().item()
-                metrics["test/canary_loss/cross_entropy/std"] = test_canary_results["ce_loss"].std().item()
+                metrics["test/canary_loss/cross_entropy/mean"] = (
+                    test_canary_results["ce_loss"].mean().item()
+                )
+                metrics["test/canary_loss/cross_entropy/std"] = (
+                    test_canary_results["ce_loss"].std().item()
+                )
 
         if train_canary_results is not None and test_canary_results is not None:
             canary_attacks = []
-            if metrics_config.attack_ce_loss and "ce_loss" in train_canary_results and "ce_loss" in test_canary_results:
+            if (
+                metrics_config.attack_ce_loss
+                and "ce_loss" in train_canary_results
+                and "ce_loss" in test_canary_results
+            ):
                 canary_attacks.append(
                     (
                         "canary_ce_loss",
@@ -253,7 +295,11 @@ def evaluate(
                         -test_canary_results["ce_loss"],
                     )
                 )
-            if metrics_config.attack_mse_loss and "mse_loss" in train_canary_results and "mse_loss" in test_canary_results:
+            if (
+                metrics_config.attack_mse_loss
+                and "mse_loss" in train_canary_results
+                and "mse_loss" in test_canary_results
+            ):
                 canary_attacks.append(
                     (
                         "canary_mse_loss",
@@ -261,7 +307,11 @@ def evaluate(
                         -test_canary_results["mse_loss"],
                     )
                 )
-            if metrics_config.attack_correctness and "correctness" in train_canary_results and "correctness" in test_canary_results:
+            if (
+                metrics_config.attack_correctness
+                and "correctness" in train_canary_results
+                and "correctness" in test_canary_results
+            ):
                 canary_attacks.append(
                     (
                         "canary_correctness",
@@ -269,7 +319,11 @@ def evaluate(
                         test_canary_results["correctness"],
                     )
                 )
-            if metrics_config.attack_true_class_prob and "true_class_prob" in train_canary_results and "true_class_prob" in test_canary_results:
+            if (
+                metrics_config.attack_true_class_prob
+                and "true_class_prob" in train_canary_results
+                and "true_class_prob" in test_canary_results
+            ):
                 canary_attacks.append(
                     (
                         "canary_true_class_prob",
@@ -277,7 +331,11 @@ def evaluate(
                         test_canary_results["true_class_prob"],
                     )
                 )
-            if metrics_config.attack_true_class_logit and "true_class_logit" in train_canary_results and "true_class_logit" in test_canary_results:
+            if (
+                metrics_config.attack_true_class_logit
+                and "true_class_logit" in train_canary_results
+                and "true_class_logit" in test_canary_results
+            ):
                 canary_attacks.append(
                     (
                         "canary_true_class_logit",
@@ -303,10 +361,22 @@ def evaluate(
     if compute_heavy_metrics and metrics_config.curvature:
         metrics.update(curvature(model, loss_fn, train_loader))
 
-    if train_activations.numel() > 0 and test_activations.numel() > 0 and compute_heavy_metrics and metrics_config.neural_collapse:
-        train_predictions = train_logits.argmax(dim=1) if train_logits.numel() > 0 else torch.tensor([])
+    if (
+        train_activations.numel() > 0
+        and test_activations.numel() > 0
+        and compute_heavy_metrics
+        and metrics_config.neural_collapse
+    ):
+        train_predictions = (
+            train_logits.argmax(dim=1) if train_logits.numel() > 0 else torch.tensor([])
+        )
         nc = compute_all_nc_metrics(
-            train_activations, train_labels, test_activations, test_labels, train_predictions, model.classifier().weight
+            train_activations,
+            train_labels,
+            test_activations,
+            test_labels,
+            train_predictions,
+            model.classifier().weight,
         )
         metrics["nc/rnc1/train"] = nc.rnc1_train
         metrics["nc/rnc1/test"] = nc.rnc1_test
@@ -320,7 +390,9 @@ def evaluate(
         metrics["nc/nc2_equiangularity"] = nc.nc2_equiangularity
         metrics["nc/nc2_equiangularity_weights"] = nc.nc2_equiangularity_weights
         metrics["nc/nc2_maximal_angle_equiangularity"] = nc.nc2_maximal_angle_equiangularity
-        metrics["nc/nc2_maximal_angle_equiangularity_weights"] = nc.nc2_maximal_angle_equiangularity_weights
+        metrics["nc/nc2_maximal_angle_equiangularity_weights"] = (
+            nc.nc2_maximal_angle_equiangularity_weights
+        )
         metrics["nc/nc3"] = nc.nc3
         metrics["nc/nc4"] = nc.nc4
 
@@ -376,7 +448,7 @@ def evaluate(
     #         m = compute_roc_metrics_single_step(-all_train_flat_lf, -all_test_flat_lf)
     #         for key, value in m.items():
     #             metrics[f"attack/margin_distance_lf/global/{key}"] = value
-            
+
     #         train_median = all_train_flat_lf.median()
     #         m_centered = compute_roc_metrics_single_step(
     #             -torch.abs(all_train_flat_lf - train_median),

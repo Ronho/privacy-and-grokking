@@ -1,12 +1,12 @@
 import argparse
 import asyncio
 import json
-import tempfile
 from pathlib import Path
 
 import mlflow
 import pandas as pd
 from mlflow.tracking import MlflowClient
+
 from privacy_and_grokking.utils.mlflow import TRACKING_URI
 
 METRICS_TO_FETCH = [
@@ -26,6 +26,7 @@ METRICS_TO_FETCH = [
     "eval/attack/margin_distance_lf/global/tpr-at-fpr/10",
 ]
 
+
 async def fetch_run_metrics(client, run_id):
     """Fetch all specified metrics for a run asynchronously."""
     run_metrics_data = []
@@ -34,69 +35,81 @@ async def fetch_run_metrics(client, run_id):
             # Run the synchronous mlflow client call in a thread
             history = await asyncio.to_thread(client.get_metric_history, run_id, metric_name)
             for m in history:
-                run_metrics_data.append({
-                    "run_id": run_id,
-                    "step": m.step,
-                    "metric_name": metric_name,
-                    "value": m.value,
-                    "timestamp": m.timestamp,
-                })
-        except Exception as e:
+                run_metrics_data.append(
+                    {
+                        "run_id": run_id,
+                        "step": m.step,
+                        "metric_name": metric_name,
+                        "value": m.value,
+                        "timestamp": m.timestamp,
+                    }
+                )
+        except Exception:
             # Metric might not exist for this run
             pass
     return run_metrics_data
+
 
 async def fetch_run_config(client, run_id):
     """Fetch training config artifact asynchronously."""
     try:
         # Download artifact in a thread to avoid blocking
-        config_path = await asyncio.to_thread(client.download_artifacts, run_id, "training_config.json")
-        with open(config_path, "r") as f:
+        config_path = await asyncio.to_thread(
+            client.download_artifacts, run_id, "training_config.json"
+        )
+        with open(config_path) as f:
             return json.load(f)
-    except Exception as e:
+    except Exception:
         return {}
+
 
 async def process_run(client, run):
     """Process a single run: fetch its metadata, config, and metrics."""
     run_id = run.info.run_id
     run_name = run.info.run_name
-    
+
     # Fetch config and metrics concurrently
     config, metrics_data = await asyncio.gather(
-        fetch_run_config(client, run_id),
-        fetch_run_metrics(client, run_id)
+        fetch_run_config(client, run_id), fetch_run_metrics(client, run_id)
     )
-    
+
     # Extract required config parameters
     weight_decay = config.get("optimizer", {}).get("weight_decay")
     init_scale = config.get("model", {}).get("initialization_scale")
     train_size = config.get("data", {}).get("train_size")
-    
-    import math
+
+
     p = config.get("data", {}).get("mask", {}).get("p", 1.0)
     batch_size = config.get("batch_size", 128)
-    
+
     dataset_size = int(train_size * p) if train_size is not None else 1
-    
+
     # Add metadata to each metric row
     for row in metrics_data:
-        row.update({
-            "run_name": run_name,
-            "weight_decay": weight_decay,
-            "initialization_scale": init_scale,
-            "train_size": train_size,
-            "p": p,
-            "dataset_size": dataset_size,
-            "batch_size": batch_size,
-        })
-        
+        row.update(
+            {
+                "run_name": run_name,
+                "weight_decay": weight_decay,
+                "initialization_scale": init_scale,
+                "train_size": train_size,
+                "p": p,
+                "dataset_size": dataset_size,
+                "batch_size": batch_size,
+            }
+        )
+
     return metrics_data
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Gather run metrics and config asynchronously.")
     parser.add_argument("experiment_name", type=str, help="Name of the MLflow experiment")
-    parser.add_argument("--tag", type=str, help="Optional tag to filter runs (e.g. 'key:value')", default=None)
-    parser.add_argument("--out", type=str, default="run_metrics.parquet", help="Output parquet file path")
+    parser.add_argument(
+        "--tag", type=str, help="Optional tag to filter runs (e.g. 'key:value')", default=None
+    )
+    parser.add_argument(
+        "--out", type=str, default="run_metrics.parquet", help="Output parquet file path"
+    )
     args = parser.parse_args()
 
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -136,14 +149,24 @@ async def main():
 
     # We have a long format DataFrame.
     # Let's pivot it to a wide format so each metric is a column (easier to analyze).
-    index_cols = ["run_id", "run_name", "weight_decay", "initialization_scale", "train_size", "p", "dataset_size", "batch_size", "step", "timestamp"]
+    index_cols = [
+        "run_id",
+        "run_name",
+        "weight_decay",
+        "initialization_scale",
+        "train_size",
+        "p",
+        "dataset_size",
+        "batch_size",
+        "step",
+        "timestamp",
+    ]
     df_wide = df_long.pivot_table(
-        index=index_cols,
-        columns="metric_name",
-        values="value"
+        index=index_cols, columns="metric_name", values="value"
     ).reset_index()
 
     import numpy as np
+
     batches_per_epoch = np.ceil(df_wide["dataset_size"] / df_wide["batch_size"])
     if "epoch" not in df_wide.columns:
         df_wide["epoch"] = df_wide["step"] / batches_per_epoch
@@ -155,6 +178,7 @@ async def main():
     df_wide.to_parquet(out_path, index=False)
     print(f"Successfully saved metrics to {out_path}")
     print(f"DataFrame shape: {df_wide.shape}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -25,9 +25,7 @@ def mia_recall_over_steps(ax: plt.Axes, dh: DataHandler):
     prefix = "eval/attack/"
     suffix = "/recall"
     recall_keys = [
-        k
-        for k in dh.discover_keys(prefix)
-        if k.endswith(suffix) and not k.endswith("/recall_fpr")
+        k for k in dh.discover_keys(prefix) if k.endswith(suffix) and not k.endswith("/recall_fpr")
     ]
 
     if not recall_keys:

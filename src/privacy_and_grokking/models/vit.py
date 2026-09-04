@@ -1,10 +1,9 @@
-from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
 import torch.nn as nn
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/transformer.py
 

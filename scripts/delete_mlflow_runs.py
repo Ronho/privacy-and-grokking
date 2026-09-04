@@ -349,9 +349,7 @@ def delete_runs(
 
     if not restore:
         print("\nNote: MLflow performs a soft delete (marked as deleted in UI and tracking).")
-        print(
-            "To permanently reclaim disk space on HPC, submit the garbage collector job:"
-        )
+        print("To permanently reclaim disk space on HPC, submit the garbage collector job:")
         print("  sbatch commands/mlflow_gc.sbatch")
 
 

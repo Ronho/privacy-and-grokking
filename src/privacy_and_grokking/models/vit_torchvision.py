@@ -1,11 +1,10 @@
-from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
 import torch.nn as nn
 from torchvision.models.vision_transformer import VisionTransformer
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 
 class ViTTorchvision(ModelBase):
@@ -24,7 +23,7 @@ class ViTTorchvision(ModelBase):
             raise ValueError(f"Input size {(h, w)} must be square.")
         if h % patch_size != 0 or w % patch_size != 0:
             raise ValueError(f"Input size {(h, w)} must be divisible by patch_size={patch_size}.")
-        
+
         # Torchvision VisionTransformer expects at least 1 layer
         self.vit = VisionTransformer(
             image_size=h,
@@ -37,7 +36,7 @@ class ViTTorchvision(ModelBase):
             attention_dropout=0.0,
             num_classes=num_classes,
         )
-        
+
         # Remove/deactivate LayerNorm
         def _remove_layernorm(module: nn.Module):
             for name, child in module.named_children():
@@ -45,9 +44,10 @@ class ViTTorchvision(ModelBase):
                     setattr(module, name, nn.Identity())
                 else:
                     _remove_layernorm(child)
+
         _remove_layernorm(self.vit)
-        
-        # Torchvision ViT by default expects 3 channels. 
+
+        # Torchvision ViT by default expects 3 channels.
         # If input has different channels (e.g. 1 for MNIST), we override the conv projection.
         if c != 3:
             self.vit.conv_proj = nn.Conv2d(
@@ -72,11 +72,11 @@ class ViTTorchvision(ModelBase):
         z = x[:, 0]
 
         out = self.vit.heads(z)
-        
+
         if verbose:
             return out, z
         return out
-        
+
     def classifier(self) -> nn.Module:
         # self.vit.heads is a Sequential with a single Linear layer named 'head'
         return self.vit.heads.head

@@ -15,7 +15,7 @@ class MultiStepLRConfig(SchedulerConfig):
         self, optimizer: torch.optim.Optimizer, **kwargs
     ) -> torch.optim.lr_scheduler.LRScheduler:
         last_epoch: int = kwargs.get("last_epoch", -1)
-        
+
         return torch.optim.lr_scheduler.MultiStepLR(
             optimizer,
             milestones=self.milestones,

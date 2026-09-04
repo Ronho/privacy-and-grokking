@@ -1,11 +1,10 @@
-from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/toy_mlp.py
 
@@ -43,7 +42,7 @@ class MLPExtended(ModelBase):
 
 class MLPExtendedConfig(ModelConfig):
     name: Literal["mlp-extended"] = "mlp-extended"
-    alpha: float | None = None # cf. GROKKING AS THE TRANSITION FROM LAZY TO RICH TRAINING DYNAMICS
+    alpha: float | None = None  # cf. GROKKING AS THE TRANSITION FROM LAZY TO RICH TRAINING DYNAMICS
 
     def _create(self, input_dim: torch.Size, num_classes: int) -> nn.Module:
         return MLPExtended(input_dim, num_classes, alpha=self.alpha)

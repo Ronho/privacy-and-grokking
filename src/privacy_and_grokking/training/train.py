@@ -134,14 +134,14 @@ def train_handle(
     logger.info("Preparing dataset.")
     keep_on_gpu = torch.cuda.is_available()
     data_container = config.data()
-    
+
     train_raw = data_container.train
     train_canary = data_container.train_canary
     if train_canary is not None:
         train_subset = torch.utils.data.ConcatDataset([train_raw, train_canary])
     else:
         train_subset = train_raw
-        
+
     test = data_container.test
 
     mlflow.log_params(
@@ -177,50 +177,46 @@ def train_handle(
         train_ds,
         shuffle=True,
         generator=torch.Generator().manual_seed(config.seed),
-        **get_dl_kwargs(train_ds)
+        **get_dl_kwargs(train_ds),
     )
-    
+
     eval_train_ds = maybe_gpu_dataset(train_raw)
     eval_train_loader = torch.utils.data.DataLoader(
-        eval_train_ds,
-        shuffle=False,
-        **get_dl_kwargs(eval_train_ds)
+        eval_train_ds, shuffle=False, **get_dl_kwargs(eval_train_ds)
     )
-    
+
     eval_test_ds = maybe_gpu_dataset(test)
     eval_test_loader = torch.utils.data.DataLoader(
-        eval_test_ds,
-        shuffle=False,
-        **get_dl_kwargs(eval_test_ds)
+        eval_test_ds, shuffle=False, **get_dl_kwargs(eval_test_ds)
     )
-    
+
     eval_train_canary_loader = None
     if train_canary is not None:
         eval_train_canary_ds = maybe_gpu_dataset(train_canary)
         eval_train_canary_loader = torch.utils.data.DataLoader(
-            eval_train_canary_ds,
-            shuffle=False,
-            **get_dl_kwargs(eval_train_canary_ds)
+            eval_train_canary_ds, shuffle=False, **get_dl_kwargs(eval_train_canary_ds)
         )
-        
+
     eval_test_canary_loader = None
     if data_container.test_canary is not None:
         eval_test_canary_ds = maybe_gpu_dataset(data_container.test_canary)
         eval_test_canary_loader = torch.utils.data.DataLoader(
-            eval_test_canary_ds,
-            shuffle=False,
-            **get_dl_kwargs(eval_test_canary_ds)
+            eval_test_canary_ds, shuffle=False, **get_dl_kwargs(eval_test_canary_ds)
         )
-    
+
     epoch_log_frequency = None
     if metrics_config.log_every_n_epochs is not None:
         epoch_log_frequency = metrics_config.log_every_n_epochs * len(train_loader)
-        logger.info(f"Adding epoch_log_frequency: {epoch_log_frequency} ({metrics_config.log_every_n_epochs} epochs)")
-        
+        logger.info(
+            f"Adding epoch_log_frequency: {epoch_log_frequency} ({metrics_config.log_every_n_epochs} epochs)"
+        )
+
     epoch_heavy_log_frequency = None
     if metrics_config.heavy_log_every_n_epochs is not None:
         epoch_heavy_log_frequency = metrics_config.heavy_log_every_n_epochs * len(train_loader)
-        logger.info(f"Adding epoch_heavy_log_frequency: {epoch_heavy_log_frequency} ({metrics_config.heavy_log_every_n_epochs} epochs)")
+        logger.info(
+            f"Adding epoch_heavy_log_frequency: {epoch_heavy_log_frequency} ({metrics_config.heavy_log_every_n_epochs} epochs)"
+        )
 
     batch_offset = cfg.checkpoint % len(train_loader) if restart else 0
 
@@ -303,11 +299,15 @@ def train_handle(
                     (step < 50)
                     or (step < log_frequency and step % 100 == 0)
                     or (step % log_frequency == 0)
-                    or (epoch_log_frequency is not None and step % epoch_log_frequency == 0 and current_epoch <= 500)
+                    or (
+                        epoch_log_frequency is not None
+                        and step % epoch_log_frequency == 0
+                        and current_epoch <= 500
+                    )
                 ):
                     heavy_metrics = (step % heavy_metrics_log_frequency == 0) or (
-                            epoch_heavy_log_frequency is not None 
-                            and step % epoch_heavy_log_frequency == 0
+                        epoch_heavy_log_frequency is not None
+                        and step % epoch_heavy_log_frequency == 0
                         and current_epoch <= 500
                     )
                     metrics = evaluate(
@@ -340,7 +340,10 @@ def train_handle(
 
                 should_checkpoint = False
 
-                if config.checkpoint_frequency_step is not None and config.checkpoint_frequency_step > 0:
+                if (
+                    config.checkpoint_frequency_step is not None
+                    and config.checkpoint_frequency_step > 0
+                ):
                     if step % config.checkpoint_frequency_step == 0:
                         should_checkpoint = True
                     if (
@@ -351,7 +354,10 @@ def train_handle(
                     ):
                         should_checkpoint = True
 
-                if config.checkpoint_frequency_epoch is not None and config.checkpoint_frequency_epoch > 0:
+                if (
+                    config.checkpoint_frequency_epoch is not None
+                    and config.checkpoint_frequency_epoch > 0
+                ):
                     steps_per_epoch = max(1, len(train_loader))
                     current_epoch = step / steps_per_epoch
                     if current_epoch <= 500:

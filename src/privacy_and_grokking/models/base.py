@@ -26,6 +26,7 @@ class ModelConfig(BaseModel):
             self._apply_initialization_scale(model, self.initialization_scale)
         return model
 
+
 class ModelBase(nn.Module):
     def forward(
         self, x: torch.Tensor, verbose: bool = False

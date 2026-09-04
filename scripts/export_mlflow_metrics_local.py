@@ -1,12 +1,12 @@
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import sys
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
-from tqdm import tqdm
 import yaml
+from tqdm import tqdm
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "cache"))
@@ -42,7 +42,7 @@ def parse_single_run_dir(r_path: str, history: bool):
     r_meta_file = os.path.join(r_path, "meta.yaml")
     if os.path.isfile(r_meta_file):
         try:
-            with open(r_meta_file, "r", encoding="utf-8", errors="ignore") as f:
+            with open(r_meta_file, encoding="utf-8", errors="ignore") as f:
                 r_meta = yaml.safe_load(f)
             if isinstance(r_meta, dict) and r_meta.get("run_name"):
                 run_name = str(r_meta["run_name"])
@@ -55,7 +55,7 @@ def parse_single_run_dir(r_path: str, history: bool):
         rn_file = os.path.join(tdir, "mlflow.runName")
         if os.path.isfile(rn_file):
             try:
-                with open(rn_file, "r", encoding="utf-8", errors="ignore") as fp:
+                with open(rn_file, encoding="utf-8", errors="ignore") as fp:
                     val = fp.read().strip()
                     if val:
                         run_name = val
@@ -72,7 +72,7 @@ def parse_single_run_dir(r_path: str, history: bool):
             pf_path = os.path.join(pdir, pf)
             if os.path.isfile(pf_path):
                 try:
-                    with open(pf_path, "r", encoding="utf-8", errors="ignore") as fp:
+                    with open(pf_path, encoding="utf-8", errors="ignore") as fp:
                         clean_key = urllib.parse.unquote(pf)
                         params[f"params.{clean_key}"] = fp.read().strip()
                 except Exception:
@@ -90,7 +90,7 @@ def parse_single_run_dir(r_path: str, history: bool):
                 raw_rel = os.path.relpath(fpath, mdir).replace("\\", "/")
                 metric_name = urllib.parse.unquote(raw_rel)
                 try:
-                    with open(fpath, "r", encoding="utf-8", errors="ignore") as fp:
+                    with open(fpath, encoding="utf-8", errors="ignore") as fp:
                         lines = [l for l in fp.readlines() if l.strip()]
                     if not lines:
                         continue
@@ -103,15 +103,17 @@ def parse_single_run_dir(r_path: str, history: bool):
                             ts = int(parts[0])
                             val = float(parts[1])
                             step = int(parts[2]) if len(parts) >= 3 else 0
-                            records.append({
-                                "run_id": run_id,
-                                "metric_name": metric_name,
-                                "value": val,
-                                "step": step,
-                                "timestamp": ts,
-                                **params,
-                                "run_name": run_name,
-                            })
+                            records.append(
+                                {
+                                    "run_id": run_id,
+                                    "metric_name": metric_name,
+                                    "value": val,
+                                    "step": step,
+                                    "timestamp": ts,
+                                    **params,
+                                    "run_name": run_name,
+                                }
+                            )
                 except Exception:
                     pass
 
@@ -139,7 +141,7 @@ def export_experiment_direct(
         meta_file = os.path.join(exp_path, "meta.yaml")
         if os.path.isfile(meta_file):
             try:
-                with open(meta_file, "r", encoding="utf-8", errors="ignore") as f:
+                with open(meta_file, encoding="utf-8", errors="ignore") as f:
                     meta = yaml.safe_load(f)
                 if isinstance(meta, dict):
                     name = str(meta.get("name", ""))
@@ -173,7 +175,7 @@ def export_experiment_direct(
             r_meta_file = os.path.join(r_path, "meta.yaml")
             if os.path.isfile(r_meta_file):
                 try:
-                    with open(r_meta_file, "r", encoding="utf-8", errors="ignore") as f:
+                    with open(r_meta_file, encoding="utf-8", errors="ignore") as f:
                         r_meta = yaml.safe_load(f)
                     if isinstance(r_meta, dict) and r_meta.get("lifecycle_stage") == "deleted":
                         continue
@@ -211,7 +213,9 @@ def export_experiment_direct(
         print("All runs are already exported.")
         return
 
-    print(f"Extracting metrics from {len(runs_to_process)} runs in parallel ({max_workers} worker threads)...")
+    print(
+        f"Extracting metrics from {len(runs_to_process)} runs in parallel ({max_workers} worker threads)..."
+    )
     current_df = existing_df.copy()
 
     run_pbar = tqdm(total=len(runs_to_process), desc="Exporting runs", unit="run")
@@ -240,7 +244,9 @@ def export_experiment_direct(
                 run_pbar.update(1)
                 run_pbar.set_postfix(points=len(current_df))
     except KeyboardInterrupt:
-        print(f"\nExport interrupted by user. Intermediate progress saved: {len(current_df)} rows in {output_file}.")
+        print(
+            f"\nExport interrupted by user. Intermediate progress saved: {len(current_df)} rows in {output_file}."
+        )
         return
 
     if not current_df.empty:
@@ -290,14 +296,16 @@ def export_experiment_mlflow(
         print(f"Loading existing data from {output_file}...")
         try:
             existing_df = pd.read_parquet(output_file)
-        except Exception as e:
+        except Exception:
             existing_df = pd.DataFrame()
 
     existing_run_ids = set()
     if not existing_df.empty and "run_id" in existing_df.columns:
         existing_run_ids = set(existing_df["run_id"].unique())
 
-    runs_to_process = [row for _, row in runs_df.iterrows() if row["run_id"] not in existing_run_ids]
+    runs_to_process = [
+        row for _, row in runs_df.iterrows() if row["run_id"] not in existing_run_ids
+    ]
     skipped_count = len(runs_df) - len(runs_to_process)
     if skipped_count > 0:
         print(f"Skipping {skipped_count} runs already present in {output_file}.")
@@ -349,7 +357,9 @@ def export_experiment_mlflow(
                     run_metric_keys = metric_keys
 
                 run_metrics = []
-                metric_pbar = tqdm(total=len(run_metric_keys), desc="Metrics", leave=False, unit="metric")
+                metric_pbar = tqdm(
+                    total=len(run_metric_keys), desc="Metrics", leave=False, unit="metric"
+                )
                 future_to_metric = {
                     executor.submit(fetch_metric, run_id, k): k for k in run_metric_keys
                 }
@@ -377,7 +387,9 @@ def export_experiment_mlflow(
 
                 run_pbar.set_postfix(points=len(current_df))
     except KeyboardInterrupt:
-        print(f"\nExport interrupted by user. Intermediate progress saved: {len(current_df)} rows in {output_file}.")
+        print(
+            f"\nExport interrupted by user. Intermediate progress saved: {len(current_df)} rows in {output_file}."
+        )
         return
 
     if not current_df.empty:
@@ -395,14 +407,10 @@ def export_experiment(
 ):
     tracking_uri = tracking_uri.strip()
     if tracking_uri.startswith("http://") or tracking_uri.startswith("https://"):
-        export_experiment_mlflow(
-            experiment_name, output_file, tracking_uri, history, max_workers
-        )
+        export_experiment_mlflow(experiment_name, output_file, tracking_uri, history, max_workers)
     else:
         tracking_dir = parse_tracking_dir(tracking_uri)
-        export_experiment_direct(
-            experiment_name, output_file, tracking_dir, history, max_workers
-        )
+        export_experiment_direct(experiment_name, output_file, tracking_dir, history, max_workers)
 
 
 if __name__ == "__main__":

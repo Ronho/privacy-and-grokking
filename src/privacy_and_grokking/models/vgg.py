@@ -8,13 +8,12 @@ the classifier is a single linear layer applied to the global-average-pooled
 feature map. Default ``cfg='A'`` yields VGG-11.
 """
 
-from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
 import torch.nn as nn
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 # Numbers are output channels for conv layers. "M" denotes a 2x2 max-pool.
 _VGG_CFGS: dict[str, list[int | str]] = {
@@ -113,7 +112,9 @@ class VGG(ModelBase):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, verbose: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, verbose: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         out = self.features(x)
         out = torch.nn.functional.adaptive_avg_pool2d(out, 1)
         z = torch.flatten(out, 1)

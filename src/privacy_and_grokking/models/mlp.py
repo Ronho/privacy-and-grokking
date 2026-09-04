@@ -1,11 +1,10 @@
-from privacy_and_grokking.models.base import ModelBase
 from typing import Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 
 class MLP(ModelBase):

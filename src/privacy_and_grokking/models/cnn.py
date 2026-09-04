@@ -1,4 +1,3 @@
-from privacy_and_grokking.models.base import ModelBase
 from math import floor
 from typing import Literal
 
@@ -6,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from privacy_and_grokking.models.base import ModelConfig
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 
 class CNN(ModelBase):

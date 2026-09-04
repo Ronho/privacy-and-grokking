@@ -1,19 +1,16 @@
-from privacy_and_grokking.config import TrainConfig
 import argparse
-import mlflow
-import os
-import pandas as pd
-import requests
-import torch
+import concurrent.futures
 import json
-import hashlib
+import multiprocessing as mp
+import os
+
+import mlflow
 import numpy as np
+import pandas as pd
+import torch
 from sklearn.metrics import auc, roc_curve
 
-from collections import defaultdict
-import concurrent.futures
-import multiprocessing as mp
-
+from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.utils.logger import Logger
 
 NUM_MAX_SAMPLES = 500
@@ -138,52 +135,58 @@ def get_rmia_mean_out_signals(
     ref_memberships = all_memberships[:-1, :]
     non_members = ~ref_memberships.to(torch.bool)
     out_signals = ref_signals * non_members
-    
+
     sums = out_signals.sum(dim=0)
     counts = non_members.sum(dim=0).float()
-    counts = torch.clamp(counts, min=1.0) # avoid division by zero
+    counts = torch.clamp(counts, min=1.0)  # avoid division by zero
     return sums / counts
+
 
 def run_informia(
     all_signals: torch.Tensor,
     population_signals: torch.Tensor,
     all_memberships: torch.Tensor,
-    offline_a: float
-    ) -> torch.Tensor:
-    """ Compute InfoRMIA membership scores.
-    
+    offline_a: float,
+) -> torch.Tensor:
+    """Compute InfoRMIA membership scores.
+
     Args:
         all_signals: Softmax scores of all samples.
         population_signals: Softmax scores of population samples.
         all_memberships: Membership matrix for all models.
         offline_a: Offline correction coefficient used to approximate p(x) using P_out.
-    
+
     Returns:
         Membership inference scores for all samples. Larger values indicate higher membership likelihood.
     """
     # Target model signals
-    target_signals = all_signals[-1, :] # target/val model is -1
+    target_signals = all_signals[-1, :]  # target/val model is -1
     mean_out_x = get_rmia_mean_out_signals(all_signals, all_memberships)
 
-    mean_x = (  ((1 + offline_a) / 2) * mean_out_x + ((1 - offline_a) / 2) ) # Offline estimation of P(x) according to RMIA
+    mean_x = ((1 + offline_a) / 2) * mean_out_x + (
+        (1 - offline_a) / 2
+    )  # Offline estimation of P(x) according to RMIA
     mean_x = torch.clamp(mean_x, min=1e-12)
-    
+
     # log (p(x|theta) / p(x))
     log_ratio_x = torch.log(torch.clamp(target_signals.ravel() / mean_x, min=1e-12))
-    
+
     if population_signals.numel() == 0:
         expectation = 0.0
     else:
-        population_memberships = torch.zeros_like(  population_signals, dtype=torch.bool, ) # population samples are OUT
-        z_signals = population_signals[-1, :] # target/val model is -1
-        mean_out_z = get_rmia_mean_out_signals(  population_signals, population_memberships)
+        population_memberships = torch.zeros_like(
+            population_signals,
+            dtype=torch.bool,
+        )  # population samples are OUT
+        z_signals = population_signals[-1, :]  # target/val model is -1
+        mean_out_z = get_rmia_mean_out_signals(population_signals, population_memberships)
 
-        mean_z = (  ((1 + offline_a) / 2) * mean_out_z + ((1 - offline_a) / 2) )
+        mean_z = ((1 + offline_a) / 2) * mean_out_z + ((1 - offline_a) / 2)
         mean_z = torch.clamp(mean_z, min=1e-12)
         prob_ratio_z = torch.clamp(z_signals.ravel() / mean_z, min=1e-12)
         expectation = torch.sum(mean_z * torch.log(prob_ratio_z)) / mean_z.sum()
-        
-    test_statistic = (  log_ratio_x - expectation )
+
+    test_statistic = log_ratio_x - expectation
 
     fpr_list, tpr_list, _ = roc_curve(
         all_memberships[-1, :].cpu().numpy(), test_statistic.cpu().numpy()
@@ -202,6 +205,7 @@ def run_informia(
             metrics[f"tpr_at_{fpr}_fpr"] = 0.0
 
     return metrics
+
 
 def get_default_tracking_uri() -> str:
     """Returns default tracking URI based on environment or local storage."""
@@ -250,11 +254,14 @@ def get_local_artifact_path(
             return p
     return candidates[0]
 
+
 @torch.no_grad()
-def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, norm_std=None, batch_size=1024):
+def compute_signals_in_batches(
+    model, dataset, indices, device, norm_mean=None, norm_std=None, batch_size=1024
+):
     subset = torch.utils.data.Subset(dataset, indices.tolist())
     dataloader = torch.utils.data.DataLoader(subset, batch_size=batch_size, shuffle=False)
-    
+
     if norm_mean is not None:
         norm_mean = torch.tensor(norm_mean, device=device).view(1, -1, 1, 1)
     if norm_std is not None:
@@ -271,6 +278,7 @@ def compute_signals_in_batches(model, dataset, indices, device, norm_mean=None, 
         true_prob = prob.gather(1, batch_y.view(-1, 1)).squeeze(1)
         all_probs.append(true_prob.cpu())
     return torch.cat(all_probs) if all_probs else torch.tensor([])
+
 
 def handle_group_runs(
     group_id,
@@ -293,10 +301,10 @@ def handle_group_runs(
             local_config_path = get_local_artifact_path(
                 experiment_name, r_id, "training_config.json", mlruns_dir, experiment_id
             )
-            with open(local_config_path, "r") as f:
+            with open(local_config_path) as f:
                 config_dict = json.load(f)
             cfgs[r_id] = TrainConfig.model_validate(config_dict)
-        
+
         target_run_info = mlflow.get_run(run_ids[0])
         run_name = (
             target_run_info.info.run_name
@@ -307,8 +315,10 @@ def handle_group_runs(
         val_run_id = str(run_ids[1])
         ref_run_ids = [str(r) for r in run_ids[2:]]
         all_run_ids = [str(r) for r in run_ids]
-        print(f"Processing group '{group_id}': target={target_run_id}, val={val_run_id}, refs={ref_run_ids}")
-        
+        print(
+            f"Processing group '{group_id}': target={target_run_id}, val={val_run_id}, refs={ref_run_ids}"
+        )
+
         # Get Dataset Containers for Target and Validation Models
         target_data_container = cfgs[run_ids[0]].data()
         val_data_container = cfgs[run_ids[1]].data()
@@ -320,28 +330,60 @@ def handle_group_runs(
         )
 
         # Target model samples: IN from target train, OUT from val train (disjoint partition of 50k pool)
-        num_target_samples = min(NUM_MAX_SAMPLES, len(target_data_container.train), len(val_data_container.train))
-        target_in = torch.randperm(len(target_data_container.train), generator=rng)[:num_target_samples]
-        target_out = torch.randperm(len(val_data_container.train), generator=rng)[:num_target_samples]
-        population_out = torch.randperm(len(target_data_container.test), generator=rng)[:min(NUM_MAX_SAMPLES, len(target_data_container.test))]
+        num_target_samples = min(
+            NUM_MAX_SAMPLES, len(target_data_container.train), len(val_data_container.train)
+        )
+        target_in = torch.randperm(len(target_data_container.train), generator=rng)[
+            :num_target_samples
+        ]
+        target_out = torch.randperm(len(val_data_container.train), generator=rng)[
+            :num_target_samples
+        ]
+        population_out = torch.randperm(len(target_data_container.test), generator=rng)[
+            : min(NUM_MAX_SAMPLES, len(target_data_container.test))
+        ]
 
         if has_canary:
-            num_canary_target = min(NUM_MAX_CANARY_SAMPLES, len(target_data_container.train_canary), len(val_data_container.train_canary))
-            target_canary_in = torch.randperm(len(target_data_container.train_canary), generator=rng)[:num_canary_target]
-            target_canary_out = torch.randperm(len(val_data_container.train_canary), generator=rng)[:num_canary_target]
-            population_canary_out = torch.randperm(len(target_data_container.test_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES, len(target_data_container.test_canary))]
+            num_canary_target = min(
+                NUM_MAX_CANARY_SAMPLES,
+                len(target_data_container.train_canary),
+                len(val_data_container.train_canary),
+            )
+            target_canary_in = torch.randperm(
+                len(target_data_container.train_canary), generator=rng
+            )[:num_canary_target]
+            target_canary_out = torch.randperm(len(val_data_container.train_canary), generator=rng)[
+                :num_canary_target
+            ]
+            population_canary_out = torch.randperm(
+                len(target_data_container.test_canary), generator=rng
+            )[: min(NUM_MAX_CANARY_SAMPLES, len(target_data_container.test_canary))]
 
         # Validation model samples (used to tune offline_a): IN from val train, OUT from target train
-        num_val_samples = min(NUM_MAX_SAMPLES, len(val_data_container.train), len(target_data_container.train))
+        num_val_samples = min(
+            NUM_MAX_SAMPLES, len(val_data_container.train), len(target_data_container.train)
+        )
         val_in = torch.randperm(len(val_data_container.train), generator=rng)[:num_val_samples]
         val_out = torch.randperm(len(target_data_container.train), generator=rng)[:num_val_samples]
-        val_population_out = torch.randperm(len(val_data_container.test), generator=rng)[:min(NUM_MAX_SAMPLES, len(val_data_container.test))]
+        val_population_out = torch.randperm(len(val_data_container.test), generator=rng)[
+            : min(NUM_MAX_SAMPLES, len(val_data_container.test))
+        ]
 
         if has_canary:
-            num_canary_val = min(NUM_MAX_CANARY_SAMPLES, len(val_data_container.train_canary), len(target_data_container.train_canary))
-            val_canary_in = torch.randperm(len(val_data_container.train_canary), generator=rng)[:num_canary_val]
-            val_canary_out = torch.randperm(len(target_data_container.train_canary), generator=rng)[:num_canary_val]
-            val_population_canary_out = torch.randperm(len(val_data_container.test_canary), generator=rng)[:min(NUM_MAX_CANARY_SAMPLES, len(val_data_container.test_canary))]
+            num_canary_val = min(
+                NUM_MAX_CANARY_SAMPLES,
+                len(val_data_container.train_canary),
+                len(target_data_container.train_canary),
+            )
+            val_canary_in = torch.randperm(len(val_data_container.train_canary), generator=rng)[
+                :num_canary_val
+            ]
+            val_canary_out = torch.randperm(len(target_data_container.train_canary), generator=rng)[
+                :num_canary_val
+            ]
+            val_population_canary_out = torch.randperm(
+                len(val_data_container.test_canary), generator=rng
+            )[: min(NUM_MAX_CANARY_SAMPLES, len(val_data_container.test_canary))]
 
         # Preload reference training index sets for membership lookups
         ref_train_indices = {}
@@ -373,8 +415,12 @@ def handle_group_runs(
             )
 
         if has_canary:
-            target_canary_in_indices = torch.tensor(target_data_container.train_canary.indices)[target_canary_in].tolist()
-            target_canary_out_indices = torch.tensor(val_data_container.train_canary.indices)[target_canary_out].tolist()
+            target_canary_in_indices = torch.tensor(target_data_container.train_canary.indices)[
+                target_canary_in
+            ].tolist()
+            target_canary_out_indices = torch.tensor(val_data_container.train_canary.indices)[
+                target_canary_out
+            ].tolist()
 
             target_memberships_canary = torch.zeros(len(run_ids) - 1, len(target_canary_in))
             target_memberships_canary[-1, :] = 1.0
@@ -413,8 +459,12 @@ def handle_group_runs(
             )
 
         if has_canary:
-            val_canary_in_indices = torch.tensor(val_data_container.train_canary.indices)[val_canary_in].tolist()
-            val_canary_out_indices = torch.tensor(target_data_container.train_canary.indices)[val_canary_out].tolist()
+            val_canary_in_indices = torch.tensor(val_data_container.train_canary.indices)[
+                val_canary_in
+            ].tolist()
+            val_canary_out_indices = torch.tensor(target_data_container.train_canary.indices)[
+                val_canary_out
+            ].tolist()
 
             val_memberships_canary = torch.zeros(len(run_ids) - 1, len(val_canary_in))
             val_memberships_canary[-1, :] = 1.0
@@ -446,7 +496,9 @@ def handle_group_runs(
             mode = eval_spec.get("mode", "step").lower()
             target_points = eval_spec.get("points", [])
             if not target_points:
-                print(f"Warning: Empty target points in STATIC_EVAL_POINTS for {run_name}. Skipping group.")
+                print(
+                    f"Warning: Empty target points in STATIC_EVAL_POINTS for {run_name}. Skipping group."
+                )
                 return []
 
             train_size = len(target_data_container.train)
@@ -459,7 +511,9 @@ def handle_group_runs(
                 steps_per_epoch = max(1, (train_size + batch_size - 1) // batch_size)
 
             available_per_run = [
-                set(get_available_checkpoint_steps(experiment_name, r_id, mlruns_dir, experiment_id))
+                set(
+                    get_available_checkpoint_steps(experiment_name, r_id, mlruns_dir, experiment_id)
+                )
                 for r_id in run_ids
             ]
             common_steps = (
@@ -503,16 +557,13 @@ def handle_group_runs(
                     experiment_id,
                 )
                 if not os.path.exists(model_path):
-                    print(
-                        f"Warning: model path {model_path} does not exist. Skipping step {step}."
-                    )
+                    print(f"Warning: model path {model_path} does not exist. Skipping step {step}.")
                     continue
                 models[id] = model_path
-            
+
             if len(models) < len(run_ids):
                 continue
 
-            
             # Inference for target model data
             target_in_probs = torch.zeros(len(run_ids) - 1, len(target_in))
             target_out_probs = torch.zeros(len(run_ids) - 1, len(target_out))
@@ -520,7 +571,9 @@ def handle_group_runs(
             if has_canary:
                 target_canary_in_probs = torch.zeros(len(run_ids) - 1, len(target_canary_in))
                 target_canary_out_probs = torch.zeros(len(run_ids) - 1, len(target_canary_out))
-                target_canary_population_out_probs = torch.zeros(len(run_ids) - 1, len(population_canary_out))
+                target_canary_population_out_probs = torch.zeros(
+                    len(run_ids) - 1, len(population_canary_out)
+                )
 
             for enum_idx, r_id in enumerate(run_ids):
                 if enum_idx == 0:
@@ -532,32 +585,81 @@ def handle_group_runs(
 
                 reference_model_path = models[r_id]
                 reference_model_config = cfgs[r_id]
-                reference_model = reference_model_config.model(input_dim=target_data_container.input_shape, num_classes=target_data_container.num_classes)
-                reference_model.load_state_dict(torch.load(reference_model_path, map_location=DEVICE, weights_only=True))
+                reference_model = reference_model_config.model(
+                    input_dim=target_data_container.input_shape,
+                    num_classes=target_data_container.num_classes,
+                )
+                reference_model.load_state_dict(
+                    torch.load(reference_model_path, map_location=DEVICE, weights_only=True)
+                )
                 reference_model.to(DEVICE)
                 reference_model.eval()
 
-                norm_mean = target_data_container.normalization.mean if target_data_container.normalization else None
-                norm_std = target_data_container.normalization.std if target_data_container.normalization else None
+                norm_mean = (
+                    target_data_container.normalization.mean
+                    if target_data_container.normalization
+                    else None
+                )
+                norm_std = (
+                    target_data_container.normalization.std
+                    if target_data_container.normalization
+                    else None
+                )
                 # Inference for reference model data
                 target_in_probs[idx] = compute_signals_in_batches(
-                    reference_model, target_data_container.train, target_in, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    target_data_container.train,
+                    target_in,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 target_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, val_data_container.train, target_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    val_data_container.train,
+                    target_out,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 target_population_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, target_data_container.test, population_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    target_data_container.test,
+                    population_out,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 if has_canary:
                     target_canary_in_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.train_canary, target_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        target_data_container.train_canary,
+                        target_canary_in,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
                     target_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.train_canary, target_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        val_data_container.train_canary,
+                        target_canary_out,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
                     target_canary_population_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.test_canary, population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        target_data_container.test_canary,
+                        population_canary_out,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
 
             # Inference for validation model data
@@ -567,7 +669,9 @@ def handle_group_runs(
             if has_canary:
                 val_canary_in_probs = torch.zeros(len(run_ids) - 1, len(val_canary_in))
                 val_canary_out_probs = torch.zeros(len(run_ids) - 1, len(val_canary_out))
-                val_canary_population_out_probs = torch.zeros(len(run_ids) - 1, len(val_population_canary_out))
+                val_canary_population_out_probs = torch.zeros(
+                    len(run_ids) - 1, len(val_population_canary_out)
+                )
 
             for enum_idx, r_id in enumerate(run_ids):
                 if enum_idx == 0:
@@ -579,32 +683,81 @@ def handle_group_runs(
 
                 reference_model_path = models[r_id]
                 reference_model_config = cfgs[r_id]
-                reference_model = reference_model_config.model(input_dim=val_data_container.input_shape, num_classes=val_data_container.num_classes)
-                reference_model.load_state_dict(torch.load(reference_model_path, map_location=DEVICE, weights_only=True))
+                reference_model = reference_model_config.model(
+                    input_dim=val_data_container.input_shape,
+                    num_classes=val_data_container.num_classes,
+                )
+                reference_model.load_state_dict(
+                    torch.load(reference_model_path, map_location=DEVICE, weights_only=True)
+                )
                 reference_model.to(DEVICE)
                 reference_model.eval()
 
-                norm_mean = val_data_container.normalization.mean if val_data_container.normalization else None
-                norm_std = val_data_container.normalization.std if val_data_container.normalization else None
+                norm_mean = (
+                    val_data_container.normalization.mean
+                    if val_data_container.normalization
+                    else None
+                )
+                norm_std = (
+                    val_data_container.normalization.std
+                    if val_data_container.normalization
+                    else None
+                )
                 # Inference for reference model data
                 val_in_probs[idx] = compute_signals_in_batches(
-                    reference_model, val_data_container.train, val_in, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    val_data_container.train,
+                    val_in,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 val_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, target_data_container.train, val_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    target_data_container.train,
+                    val_out,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 val_population_out_probs[idx] = compute_signals_in_batches(
-                    reference_model, val_data_container.test, val_population_out, DEVICE, norm_mean, norm_std, batch_size=200
+                    reference_model,
+                    val_data_container.test,
+                    val_population_out,
+                    DEVICE,
+                    norm_mean,
+                    norm_std,
+                    batch_size=200,
                 )
                 if has_canary:
                     val_canary_in_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.train_canary, val_canary_in, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        val_data_container.train_canary,
+                        val_canary_in,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
                     val_canary_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, target_data_container.train_canary, val_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        target_data_container.train_canary,
+                        val_canary_out,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
                     val_canary_population_out_probs[idx] = compute_signals_in_batches(
-                        reference_model, val_data_container.test_canary, val_population_canary_out, DEVICE, norm_mean, norm_std, batch_size=200
+                        reference_model,
+                        val_data_container.test_canary,
+                        val_population_canary_out,
+                        DEVICE,
+                        norm_mean,
+                        norm_std,
+                        batch_size=200,
                     )
 
             # Get optimal a
@@ -616,7 +769,7 @@ def handle_group_runs(
                     all_signals=torch.cat([val_in_probs, val_out_probs], dim=1),
                     population_signals=val_population_out_probs,
                     all_memberships=torch.cat([val_memberships, val_out_memberships], dim=1),
-                    offline_a=a
+                    offline_a=a,
                 )
                 if val_metrics["auc"] > optimal_auc:
                     optimal_auc = val_metrics["auc"]
@@ -627,7 +780,7 @@ def handle_group_runs(
                 all_signals=torch.cat([target_in_probs, target_out_probs], dim=1),
                 population_signals=target_population_out_probs,
                 all_memberships=torch.cat([target_memberships, target_out_memberships], dim=1),
-                offline_a=optimal_a
+                offline_a=optimal_a,
             )
             target_metrics["step"] = step
             target_metrics["optimal_a"] = float(optimal_a)
@@ -643,7 +796,6 @@ def handle_group_runs(
                 target_metrics.update(step_metadata_map[step])
 
             metrics.append(target_metrics)
-            
 
             # Compute target utility
             if has_canary:
@@ -654,8 +806,10 @@ def handle_group_runs(
                     val_metrics = run_informia(
                         all_signals=torch.cat([val_canary_in_probs, val_canary_out_probs], dim=1),
                         population_signals=val_canary_population_out_probs,
-                        all_memberships=torch.cat([val_memberships_canary, val_out_memberships_canary], dim=1),
-                        offline_a=a
+                        all_memberships=torch.cat(
+                            [val_memberships_canary, val_out_memberships_canary], dim=1
+                        ),
+                        offline_a=a,
                     )
                     if val_metrics["auc"] > optimal_canary_auc:
                         optimal_canary_auc = val_metrics["auc"]
@@ -664,8 +818,10 @@ def handle_group_runs(
                 target_canary_metrics = run_informia(
                     all_signals=torch.cat([target_canary_in_probs, target_canary_out_probs], dim=1),
                     population_signals=target_canary_population_out_probs,
-                    all_memberships=torch.cat([target_memberships_canary, target_out_memberships_canary], dim=1),
-                    offline_a=optimal_canary_a
+                    all_memberships=torch.cat(
+                        [target_memberships_canary, target_out_memberships_canary], dim=1
+                    ),
+                    offline_a=optimal_canary_a,
                 )
 
                 target_canary_metrics["id"] = group_id
@@ -687,6 +843,7 @@ def handle_group_runs(
     except Exception as e:
         print(f"Error processing group {group_id}: {e}")
         return []
+
 
 def get_runs(args, existing_df):
     experiments = mlflow.search_experiments(filter_string=f"name = '{args.experiment_name}'")
@@ -806,9 +963,7 @@ def main():
     mlflow.set_tracking_uri(args.tracking_uri)
 
     output_filename = args.output_filename or (
-        "informia_static_results.parquet"
-        if args.static_eval_points
-        else "informia_results.parquet"
+        "informia_static_results.parquet" if args.static_eval_points else "informia_results.parquet"
     )
     output_path = os.path.join(cache_path, output_filename)
     if os.path.exists(output_path):

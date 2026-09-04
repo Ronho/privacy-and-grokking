@@ -1,7 +1,11 @@
-import pytest
 import torch
-from privacy_and_grokking.datasets.sets.modular_addition import ModularAdditionDataset, ModularAdditionConfig
+
 from privacy_and_grokking.datasets.masking.paired_stratified import PairedStratifiedMasking
+from privacy_and_grokking.datasets.sets.modular_addition import (
+    ModularAdditionConfig,
+    ModularAdditionDataset,
+)
+
 
 def test_modular_addition_defaults():
     # Test default behavior
@@ -32,14 +36,14 @@ def test_modular_addition_explicit_counts():
         train=True,
         num_train_per_class=num_train_per_class,
         num_test_per_class=num_test_per_class,
-        seed=42
+        seed=42,
     )
     test_dataset = ModularAdditionDataset(
         p=p,
         train=False,
         num_train_per_class=num_train_per_class,
         num_test_per_class=num_test_per_class,
-        seed=42
+        seed=42,
     )
 
     assert len(train_dataset) == p * num_train_per_class
@@ -53,11 +57,7 @@ def test_modular_addition_explicit_counts():
 
     # Apply paired_stratified mask (50% split)
     masking = PairedStratifiedMasking(
-        num_samples=len(train_dataset),
-        num_classes=p,
-        num_models=2,
-        p=0.5,
-        seed=42
+        num_samples=len(train_dataset), num_classes=p, num_models=2, p=0.5, seed=42
     )
     mask = masking._generate_mask(train_dataset.labels)
 
@@ -80,6 +80,6 @@ def test_modular_addition_config_validation():
         num_test_per_class=23,
     )
     container = config()
-    
+
     assert len(container.train) == 113 * 90
     assert len(container.test) == 113 * 23

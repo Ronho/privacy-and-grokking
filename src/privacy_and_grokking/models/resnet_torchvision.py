@@ -1,10 +1,11 @@
-from privacy_and_grokking.models.base import ModelBase
-import torch
-from torch import Tensor, nn
-import torchvision.models as models
 from typing import Literal
 
-from privacy_and_grokking.models.base import ModelConfig
+import torch
+import torchvision.models as models
+from torch import Tensor, nn
+
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
+
 
 class TorchvisionResNet(ModelBase):
     """Wrapper for torchvision's ResNet18 modified for MNIST/CIFAR-sized images."""
@@ -35,7 +36,7 @@ class TorchvisionResNet(ModelBase):
         x = self.model.avgpool(x)
         z = torch.flatten(x, 1)
         out = self.model.fc(z)
-        
+
         if verbose:
             return out, z
         return out

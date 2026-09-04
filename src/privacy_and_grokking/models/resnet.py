@@ -1,9 +1,9 @@
-from privacy_and_grokking.models.base import ModelBase
-import torch
-from torch import Tensor, nn
 from typing import Literal
 
-from privacy_and_grokking.models.base import ModelConfig
+import torch
+from torch import Tensor, nn
+
+from privacy_and_grokking.models.base import ModelBase, ModelConfig
 
 # Ref: https://github.com/keitaroskmt/collapse-dynamics/blob/master/src/models/resnet.py
 
@@ -73,12 +73,12 @@ class ResNet(ModelBase):
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=1, stride=1, padding=0)
-        
+
         self.layer1 = self._make_layer(block, 64, layers[0], stride=1)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        
+
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -104,14 +104,10 @@ class ResNet(ModelBase):
         stride: int,
     ) -> nn.Sequential:
         layers = []
-        layers.append(
-            block(self.inplanes, planes, stride)
-        )
+        layers.append(block(self.inplanes, planes, stride))
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
-            layers.append(
-                block(self.inplanes, planes, stride=1)
-            )
+            layers.append(block(self.inplanes, planes, stride=1))
 
         return nn.Sequential(*layers)
 
@@ -133,7 +129,7 @@ class ResNet(ModelBase):
         x = self.avgpool(x)
         z = torch.flatten(x, 1)
         out = self.fc(z)
-        
+
         if verbose:
             return out, z
         return out

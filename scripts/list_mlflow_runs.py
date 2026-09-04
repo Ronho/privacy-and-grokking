@@ -22,12 +22,17 @@ def fetch_run_config(
     # 1. Direct artifact_uri path if file:// based
     if artifact_uri.startswith("file://"):
         local_path = artifact_uri[7:]
-        if os.name == "nt" and len(local_path) >= 3 and local_path[0] == "/" and local_path[2] == ":":
+        if (
+            os.name == "nt"
+            and len(local_path) >= 3
+            and local_path[0] == "/"
+            and local_path[2] == ":"
+        ):
             local_path = local_path[1:]
         cfg_file = os.path.join(local_path, "training_config.json")
         if os.path.isfile(cfg_file):
             try:
-                with open(cfg_file, "r", encoding="utf-8") as f:
+                with open(cfg_file, encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 pass
@@ -47,7 +52,7 @@ def fetch_run_config(
         for c in candidates:
             if os.path.isfile(c):
                 try:
-                    with open(c, "r", encoding="utf-8") as f:
+                    with open(c, encoding="utf-8") as f:
                         return json.load(f)
                 except Exception:
                     pass
@@ -68,7 +73,7 @@ def fetch_run_config(
             for c in candidates:
                 if os.path.isfile(c):
                     try:
-                        with open(c, "r", encoding="utf-8") as f:
+                        with open(c, encoding="utf-8") as f:
                             return json.load(f)
                     except Exception:
                         pass
@@ -77,7 +82,7 @@ def fetch_run_config(
                 for sub in os.listdir(base):
                     sub_cfg = os.path.join(base, sub, run_id, "artifacts", "training_config.json")
                     if os.path.isfile(sub_cfg):
-                        with open(sub_cfg, "r", encoding="utf-8") as f:
+                        with open(sub_cfg, encoding="utf-8") as f:
                             return json.load(f)
             except Exception:
                 pass
@@ -87,7 +92,7 @@ def fetch_run_config(
         try:
             local_cfg = client.download_artifacts(run_id, "training_config.json")
             if os.path.isfile(local_cfg):
-                with open(local_cfg, "r", encoding="utf-8") as f:
+                with open(local_cfg, encoding="utf-8") as f:
                     return json.load(f)
         except Exception:
             pass
@@ -155,12 +160,16 @@ def enrich_runs_with_seeds(runs_df: pd.DataFrame, tracking_uri: str) -> pd.DataF
     if "params.data.mask.seed" not in runs_df.columns:
         runs_df["params.data.mask.seed"] = pd.Series(mask_seed_map, dtype="object")
     else:
-        runs_df["params.data.mask.seed"] = runs_df["params.data.mask.seed"].fillna(pd.Series(mask_seed_map))
+        runs_df["params.data.mask.seed"] = runs_df["params.data.mask.seed"].fillna(
+            pd.Series(mask_seed_map)
+        )
 
     if "params.data.mask.model_index" not in runs_df.columns:
         runs_df["params.data.mask.model_index"] = pd.Series(model_idx_map, dtype="object")
     else:
-        runs_df["params.data.mask.model_index"] = runs_df["params.data.mask.model_index"].fillna(pd.Series(model_idx_map))
+        runs_df["params.data.mask.model_index"] = runs_df["params.data.mask.model_index"].fillna(
+            pd.Series(model_idx_map)
+        )
 
     # Also map direct names for convenience
     for param_key in ["seed", "data.seed", "data.mask.seed", "data.mask.model_index"]:
@@ -169,7 +178,6 @@ def enrich_runs_with_seeds(runs_df: pd.DataFrame, tracking_uri: str) -> pd.DataF
             runs_df[param_key] = runs_df[col]
 
     return runs_df
-
 
 
 def get_default_tracking_uri() -> str:
@@ -430,16 +438,18 @@ def list_runs(
                 param_parts.append(f"{param_name}={val}")
         params_str = ", ".join(param_parts) if param_parts else "-"
 
-        rows.append({
-            "#": idx,
-            "Run ID": run_id,
-            "Run Name": run_name,
-            "Experiment": exp_name,
-            "Status": status,
-            "Duration": dur,
-            "Start Time": start,
-            "Parameters": params_str,
-        })
+        rows.append(
+            {
+                "#": idx,
+                "Run ID": run_id,
+                "Run Name": run_name,
+                "Experiment": exp_name,
+                "Status": status,
+                "Duration": dur,
+                "Start Time": start,
+                "Parameters": params_str,
+            }
+        )
 
     header_line = (
         f"{'#':<4} | {'Run ID':<32} | {'Run Name':<25} | {'Status':<10} | "

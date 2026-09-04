@@ -1,20 +1,20 @@
+
 import pandas as pd
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-import uvicorn
-import math
 
 # Load the data
 print("Loading parquet data...")
-df = pd.read_parquet('grokking_metrics.parquet')
+df = pd.read_parquet("grokking_metrics.parquet")
 print(f"Loaded {len(df)} rows.")
 
 # Extract unique runs and parameters
-param_cols = [c for c in df.columns if c.startswith('params.')]
-runs_df = df[['run_id'] + param_cols].drop_duplicates('run_id')
+param_cols = [c for c in df.columns if c.startswith("params.")]
+runs_df = df[["run_id"] + param_cols].drop_duplicates("run_id")
 # Replace NaNs with None for JSON serialization
 runs_df = runs_df.where(pd.notnull(runs_df), None)
-runs_list = runs_df.to_dict(orient='records')
+runs_list = runs_df.to_dict(orient="records")
 
 app = FastAPI()
 
@@ -528,29 +528,33 @@ HTML_CONTENT = """
 </html>
 """
 
+
 @app.get("/")
 def read_root():
     return HTMLResponse(content=HTML_CONTENT)
+
 
 @app.get("/api/runs")
 def get_runs():
     return runs_list
 
+
 @app.get("/api/runs/{run_id}")
 def get_run_data(run_id: str):
     # Filter for the run
-    run_data = df[df['run_id'] == run_id]
-    
+    run_data = df[df["run_id"] == run_id]
+
     # Drop duplicates in case a step was logged multiple times for the same metric
-    run_data = run_data.drop_duplicates(subset=['step', 'metric_name'], keep='last')
-    
+    run_data = run_data.drop_duplicates(subset=["step", "metric_name"], keep="last")
+
     # Pivot so we have one row per step, and columns are metrics
-    pivot_df = run_data.pivot(index='step', columns='metric_name', values='value').reset_index()
-    
+    pivot_df = run_data.pivot(index="step", columns="metric_name", values="value").reset_index()
+
     # Fill missing values with None for JSON serialization
     pivot_df = pivot_df.where(pd.notnull(pivot_df), None)
-    
-    return pivot_df.to_dict(orient='list')
+
+    return pivot_df.to_dict(orient="list")
+
 
 if __name__ == "__main__":
     print("Starting Grokking Run Viewer on http://127.0.0.1:8080")

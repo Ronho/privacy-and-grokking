@@ -8,15 +8,26 @@ from .mlp import MLPConfig
 from .mlp_batchnorm import MLPBatchNormConfig
 from .mlp_extended import MLPExtendedConfig
 from .mlp_nc import MLPNCConfig
+from .modular_transformer import ModularTransformerConfig
 from .resnet import ResNetConfig
 from .resnet_torchvision import ResNetTorchvisionConfig
 from .vgg import VGGConfig
 from .vit import ViTConfig
 from .vit_torchvision import ViTTorchvisionConfig
-from .modular_transformer import ModularTransformerConfig
 
 Model = Annotated[
-    MLPConfig | MLPBatchNormConfig | MLPExtendedConfig | MLPNCConfig | CNNConfig | CNNExtendedConfig | ResNetConfig | ResNetTorchvisionConfig | VGGConfig | ViTConfig | ViTTorchvisionConfig | ModularTransformerConfig,
+    MLPConfig
+    | MLPBatchNormConfig
+    | MLPExtendedConfig
+    | MLPNCConfig
+    | CNNConfig
+    | CNNExtendedConfig
+    | ResNetConfig
+    | ResNetTorchvisionConfig
+    | VGGConfig
+    | ViTConfig
+    | ViTTorchvisionConfig
+    | ModularTransformerConfig,
     Field(discriminator="name"),
 ]
 

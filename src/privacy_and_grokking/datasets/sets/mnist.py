@@ -1,5 +1,6 @@
 from typing import Literal
 
+from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
 from privacy_and_grokking.datasets.sets.base import (
@@ -9,8 +10,6 @@ from privacy_and_grokking.datasets.sets.base import (
     Normalization,
 )
 
-
-from torch.utils.data import Subset
 
 class MNISTConfig(DatasetConfig):
     name: Literal["mnist"] = "mnist"
@@ -26,10 +25,11 @@ class MNISTConfig(DatasetConfig):
 
         CACHE_PATH.mkdir(exist_ok=True)
         train = datasets.MNIST(root=CACHE_PATH, train=True, download=True, transform=transform)
-        
+
         # NOTE: Deterministically sample a perfectly balanced 50k dataset (5000 per class).
         # This ensures every run selects the exact same 50k samples.
         import torch
+
         balanced_indices = []
         for c in range(10):
             c_indices = (train.targets == c).nonzero().view(-1)

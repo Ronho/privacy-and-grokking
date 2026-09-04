@@ -25,46 +25,48 @@ class ETFDataset(Dataset):
         self.num_classes = num_classes
         self.dimension = dimension
         self.noise_std = noise_std
-        
+
         if dimension < num_classes - 1:
-            raise ValueError(f"Dimension ({dimension}) must be at least num_classes - 1 ({num_classes - 1}) for a Simplex ETF.")
-            
+            raise ValueError(
+                f"Dimension ({dimension}) must be at least num_classes - 1 ({num_classes - 1}) for a Simplex ETF."
+            )
+
         rng = torch.Generator().manual_seed(seed)
-        
+
         # Construct Simplex ETF in R^K
         # M = sqrt(K / (K-1)) * (I - 1/K 1 1^T)
         I = torch.eye(num_classes)
         ones = torch.ones(num_classes, num_classes)
         # The columns of etf_K are the ETF vertices (shape: K x K)
         etf_K = math.sqrt(num_classes / (num_classes - 1)) * (I - (1.0 / num_classes) * ones)
-        
+
         # Adjust dimension
         if dimension > num_classes:
             padded_etf = torch.zeros(dimension, num_classes)
             padded_etf[:num_classes, :] = etf_K
-            
+
             # Generate random orthogonal matrix in R^dimension to rotate the ETF randomly
             random_matrix = torch.randn(dimension, dimension, generator=rng)
             Q, _ = torch.linalg.qr(random_matrix)
-            
+
             self.class_means = Q @ padded_etf
         elif dimension == num_classes:
             self.class_means = etf_K
-        else: # dimension == num_classes - 1
+        else:  # dimension == num_classes - 1
             # SVD to drop the zero singular value dimension
             U, _, _ = torch.linalg.svd(etf_K)
             # The rank is K-1, so we take the first K-1 left singular vectors
             # Project ETF into K-1 dimensions
             self.class_means = U[:, :dimension].T @ etf_K
-            
+
         # self.class_means is of shape (dimension, num_classes)
-        
+
         # Generate samples
         self.labels = torch.randint(0, num_classes, (num_samples,), generator=rng)
-        
+
         # Base points: shape (num_samples, dimension)
-        self.features = self.class_means[:, self.labels].T 
-        
+        self.features = self.class_means[:, self.labels].T
+
         # Add noise
         if noise_std > 0:
             noise = torch.randn(num_samples, dimension, generator=rng) * noise_std

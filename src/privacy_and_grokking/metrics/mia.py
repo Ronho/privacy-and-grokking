@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 
 
@@ -43,10 +42,10 @@ def margin_distance_lf(
     dists: dict[int, torch.Tensor] = {}
     num_classes = w.shape[0]
     device = features.device
-    
+
     if b is None:
         b = torch.zeros(num_classes, device=w.device)
-    
+
     w = w.to(device)
     b = b.to(device)
 
@@ -54,9 +53,9 @@ def margin_distance_lf(
         mask_c = labels == c
         if mask_c.sum() == 0:
             continue
-        
+
         f_sub = features[mask_c].float()
-        
+
         def get_all_margins(f_in):
             margins = []
             for k in range(num_classes):
@@ -76,12 +75,12 @@ def margin_distance_lf(
 
         w_proxy = w[c] / torch.norm(w[c]) * pool_mean_norm
         w_proxy = w_proxy.unsqueeze(0)
-        
+
         proxy_margins = get_all_margins(w_proxy)
         proxy_margin_mean = proxy_margins[0]
-        
+
         sample_margins = get_all_margins(f_sub)
-        
+
         dists[c] = torch.norm(sample_margins - proxy_margin_mean, dim=1).cpu()
-        
+
     return dists
