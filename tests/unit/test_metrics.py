@@ -10,6 +10,7 @@ from privacy_and_grokking.metrics.distribution_overlap import (
     compute_mmd,
 )
 from privacy_and_grokking.metrics.evaluate import evaluate
+from privacy_and_grokking.metrics.neural_collapse import compute_all_nc_metrics
 from privacy_and_grokking.metrics.norms import compute_gradient_norms, compute_weight_norms
 from privacy_and_grokking.metrics.roc import compute_roc_metrics_single_step
 from privacy_and_grokking.models.base import ModelBase
@@ -345,3 +346,54 @@ class TestEvaluate:
         assert "eval/loss/train_plus_canary_vs_test/mse/overlap" in metrics
 
         mock_log_metrics.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Neural Collapse (Papyan et al. 2020)
+# ---------------------------------------------------------------------------
+
+
+class TestNeuralCollapse:
+    def test_ideal_simplex_etf_collapse(self):
+        C = 4
+        # Standard simplex ETF vertices in R^4
+        V = torch.tensor([
+            [1.0, 1.0, 1.0, 0.0],
+            [1.0, -1.0, -1.0, 0.0],
+            [-1.0, 1.0, -1.0, 0.0],
+            [-1.0, -1.0, 1.0, 0.0],
+        ]) / (3.0**0.5)
+
+        N_c = 10
+        train_features = []
+        train_labels = []
+        for c in range(C):
+            train_features.append(V[c].unsqueeze(0).repeat(N_c, 1))
+            train_labels.append(torch.full((N_c,), c, dtype=torch.long))
+
+        train_features = torch.cat(train_features, dim=0)
+        train_labels = torch.cat(train_labels, dim=0)
+        classifier_weight = V.clone()
+        train_predictions = train_labels.clone()
+        test_features = train_features.clone()
+        test_labels = train_labels.clone()
+        test_predictions = test_labels.clone()
+
+        nc = compute_all_nc_metrics(
+            train_features=train_features,
+            train_labels=train_labels,
+            test_features=test_features,
+            test_labels=test_labels,
+            train_predictions=train_predictions,
+            classifier_weight=classifier_weight,
+            test_predictions=test_predictions,
+        )
+
+        assert abs(nc.nc1) < 1e-6
+        assert abs(nc.nc2_equinorm) < 1e-6
+        assert abs(nc.nc2_equinorm_weights) < 1e-6
+        assert abs(nc.nc2_equiangularity) < 1e-6
+        assert abs(nc.nc2_maximal_angle_equiangularity) < 1e-6
+        assert abs(nc.nc3) < 1e-6
+        assert nc.nc4 == 0.0
+        assert nc.nc4_test == 0.0

@@ -35,6 +35,7 @@ class NeuralCollapseMetrics:
     nc2_maximal_angle_equiangularity_weights: float
     nc3: float
     nc4: float
+    nc4_test: float | None = None
 
 
 def compute_all_nc_metrics(
@@ -44,6 +45,7 @@ def compute_all_nc_metrics(
     test_labels: torch.Tensor,
     train_predictions: torch.Tensor,
     classifier_weight: torch.Tensor,
+    test_predictions: torch.Tensor | None = None,
 ) -> NeuralCollapseMetrics:
     """Compute all neural collapse metrics at once.
 
@@ -124,6 +126,18 @@ def compute_all_nc_metrics(
     mismatch_mask = train_predictions != ncc_predictions_idx
     nc4 = torch.mean(mismatch_mask.float()).item()
 
+    nc4_test = None
+    if test_predictions is not None and test_features.numel() > 0:
+        if isinstance(test_predictions, list):
+            test_predictions = torch.cat(test_predictions, dim=0)
+        test_predictions = test_predictions.to(train_features.device)
+        if test_predictions.dim() > 1:
+            test_predictions = test_predictions.argmax(dim=1)
+        test_distances = torch.cdist(test_features.to(train_features.device), mu_c, p=2.0)
+        ncc_test_predictions_idx = torch.argmin(test_distances, dim=1)
+        test_mismatch_mask = test_predictions != ncc_test_predictions_idx
+        nc4_test = torch.mean(test_mismatch_mask.float()).item()
+
     # RNC1 according to the paper
     B_g_train = train_features.norm(p=2, dim=1).max()
     g_tilde_train = train_features / B_g_train
@@ -203,4 +217,5 @@ def compute_all_nc_metrics(
         nc2_maximal_angle_equiangularity_weights=nc2_maximal_angle_equiangularity_weights,
         nc3=nc3,
         nc4=nc4,
+        nc4_test=nc4_test,
     )

@@ -411,6 +411,9 @@ def evaluate(
         train_predictions = (
             train_logits.argmax(dim=1) if train_logits.numel() > 0 else torch.tensor([])
         )
+        test_predictions = (
+            test_logits.argmax(dim=1) if test_logits.numel() > 0 else torch.tensor([])
+        )
         nc = compute_all_nc_metrics(
             train_activations,
             train_labels,
@@ -418,6 +421,7 @@ def evaluate(
             test_labels,
             train_predictions,
             model.classifier().weight,
+            test_predictions=test_predictions,
         )
         metrics["nc/rnc1/train"] = nc.rnc1_train
         metrics["nc/rnc1/test"] = nc.rnc1_test
@@ -436,6 +440,8 @@ def evaluate(
         )
         metrics["nc/nc3"] = nc.nc3
         metrics["nc/nc4"] = nc.nc4
+        if nc.nc4_test is not None:
+            metrics["nc/nc4_test"] = nc.nc4_test
 
     # TODO: check
     # if train_activations.numel() > 0 and test_activations.numel() > 0 and compute_heavy_metrics and metrics_config.attack_distance_to_class_mean:
