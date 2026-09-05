@@ -1,7 +1,6 @@
 {
     "model": {
-        "name": "mlp",
-        "initialization_scale": 8.0
+        "name": "mlp"
     },
     "seed": 0,
     "batch_size": 200,

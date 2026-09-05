@@ -4,7 +4,7 @@
 #SBATCH --output=logs/reproduction_nc_grokking_%j.log
 #SBATCH --error=logs/reproduction_nc_grokking_%j.err
 #SBATCH --partition=defq
-#SBATCH --nodelist=BCM-DGX-A100-2
+#SBATCH --nodelist=BCM-SM-A100-01
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=40
