@@ -5,7 +5,7 @@
 #SBATCH --error=logs/hyper_sweep_%A_%a.err
 #SBATCH --array=0-5
 #SBATCH --partition=defq
-#SBATCH --nodelist=BCM-DGX-A100-2
+#SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=40
