@@ -3,7 +3,7 @@
 #SBATCH --job-name=hyper_sweep
 #SBATCH --output=logs/hyper_sweep_%A_%a.log
 #SBATCH --error=logs/hyper_sweep_%A_%a.err
-#SBATCH --array=0-5
+#SBATCH --array=0-4
 #SBATCH --partition=defq
 #SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
 #SBATCH --nodes=1
