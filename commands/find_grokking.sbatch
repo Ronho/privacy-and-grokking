@@ -42,7 +42,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/find_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
+cat commands/find_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control

@@ -8,8 +8,8 @@
 #SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=40
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=60
+#SBATCH --mem=96G
 #SBATCH --gpus=1
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
@@ -43,7 +43,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs for task $SLURM_ARRAY_TASK_ID..."
 
-cat commands/hyper_sweep_${SLURM_ARRAY_TASK_ID}.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 10)); {}"
+cat commands/hyper_sweep_${SLURM_ARRAY_TASK_ID}.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control

@@ -36,6 +36,14 @@ def config_priority(config_path):
         return 4
     return 99
 
+def get_steps(config_path):
+    name = config_path.name
+    if "MADD" in name:
+        return 50000
+    if "MNIST" in name:
+        return 150000
+    return 150000
+
 def get_deterministic_seed(*args, salt=seed):
     """Generates a deterministic integer seed from arguments to ensure idempotency."""
     s = str(salt) + "_" + "_".join(str(a) for a in args)
@@ -50,7 +58,8 @@ configs_list = [c for c in configs_list if not c.name.startswith("_")]
 configs_list.sort(key=config_priority)
 
 def cmd(config, seed, data_seed, model_index, canary_json, name_prefix="", postfix=None):
-    cmd_str = f"pag train canary-selection-v1 {config.name} 150000 --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
+    steps = get_steps(config)
+    cmd_str = f"pag train canary-selection-v1 {config.name} {steps} --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index} -o data.canary='{canary_json}'"
     if load_all_to_gpu:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:

@@ -305,7 +305,7 @@ def train_handle(
                 current_epoch = step / steps_per_epoch
 
                 if (
-                    (step < 50)
+                    (step < 50 and step % 10 == 0)
                     or (step < log_frequency and step % 100 == 0)
                     or (step % log_frequency == 0)
                     or (
