@@ -383,10 +383,11 @@ def train_handle(
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 task_loss = loss_fn(logits, y)
-                if config.loss.name == "mse" and config.model.name in ["modular_transformer"]:
-                    loss = task_loss * data_container.num_classes
-                else:
-                    loss = task_loss
+                loss = task_loss
+                # if config.loss.name == "mse" and config.model.name in ["modular_transformer"]:
+                #     loss = task_loss * data_container.num_classes
+                # else:
+                #     loss = task_loss
 
                 reg_value = None
                 if regularizer_fn is not None:

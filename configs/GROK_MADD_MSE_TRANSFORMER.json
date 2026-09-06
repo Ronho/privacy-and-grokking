@@ -3,8 +3,7 @@
         "name": "modular_transformer",
         "embed_dim": 128,
         "num_heads": 4,
-        "hidden_dim": 512,
-        "initialization_scale": 3.0
+        "hidden_dim": 512
     },
     "seed": 0,
     "batch_size": -1,
