@@ -17,7 +17,7 @@ initialization_scale = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 weight_decay = [10.0, 1.0, 0.1, 0.01, 0.001, 0.0001]
 train_size = [50_000, 25_000, 10_000, 5_000, 2_000, 1_000, 500]
 train_size_madd = [10_170, 4_972, 2_034, 904, 452]
-num_repetitions = 1
+num_repetitions = 6
 num_files = 5
 seed = 4712
 shuffle = False
@@ -39,16 +39,19 @@ all_commands = []
 def config_priority(config_path):
     name = config_path.name.lstrip("+_")
     if "MNIST" in name and "MSE" in name and "MLP" in name:
-        return 0
-    if "MNIST" in name and "CE" in name and "MLP" in name:
-        return 1
-    if "VIT" in name:
-        return 2
-    if "MADD" in name and "CE" in name:
-        return 3
-    if "MADD" in name and "MSE" in name:
-        return 4
-    return 99
+        p = 0
+    elif "MNIST" in name and "CE" in name and "MLP" in name:
+        p = 1
+    elif "VIT" in name:
+        p = 2
+    elif "MADD" in name and "CE" in name:
+        p = 3
+    elif "MADD" in name and "MSE" in name:
+        p = 4
+    else:
+        p = 99
+    sub = 0 if "NO_GROK" in name else 1
+    return (p, sub)
 
 
 def get_steps(config_path):
@@ -176,6 +179,7 @@ def cmd(
 
 
 total_runs_per_rep = 0
+config_combos = []
 for config in configs_list:
     steps = get_steps(config)
     current_train_sizes = train_size_madd if "MADD" in config.name else train_size
@@ -194,15 +198,21 @@ for config in configs_list:
         f"(defaults: scale={def_scale}, decay={def_decay}, train_size={def_size})"
     )
     total_runs_per_rep += len(param_combos)
+    config_combos.append((config, steps, param_combos))
 
-    for scale, decay, size in param_combos:
-        data_seed = get_deterministic_seed(config.name, scale, decay, size, "data_seed")
-        for i in range(num_repetitions):
+file_lines = {f: [] for f in range(num_files)}
+start_file = 0
+
+for i in range(num_repetitions):
+    rep_commands = []
+    for config, steps, param_combos in config_combos:
+        for scale, decay, size in param_combos:
+            data_seed = get_deterministic_seed(config.name, scale, decay, size, "data_seed")
             c_num = 226 if "MADD" in config.name else num_canaries
             canary_dict = {"name": f"{canary_type}", "num": c_num}
             canary_json = json.dumps(canary_dict)
             run_seed = get_deterministic_seed(config.name, scale, decay, size, i, "run_seed")
-            all_commands.append(
+            rep_commands.append(
                 cmd(
                     config,
                     run_seed,
@@ -217,15 +227,17 @@ for config in configs_list:
                 )
             )
 
+    if shuffle:
+        random.shuffle(rep_commands)
+
+    all_commands.extend(rep_commands)
+
+    # Distribute this repetition's commands evenly across the files
+    for idx, command in enumerate(rep_commands):
+        file_lines[(start_file + idx) % num_files].append(command)
+    start_file = (start_file + len(rep_commands)) % num_files
+
 print(f"Total commands generated: {len(all_commands)}")
-
-if shuffle:
-    random.shuffle(all_commands)
-
-# Distribute commands evenly across num_files (round-robin)
-file_lines = {f: [] for f in range(num_files)}
-for idx, command in enumerate(all_commands):
-    file_lines[idx % num_files].append(command)
 
 # Clean up any existing hyper_sweep_*.txt files in SCRIPT_DIR
 for old_file in SCRIPT_DIR.glob("hyper_sweep_*.txt"):
