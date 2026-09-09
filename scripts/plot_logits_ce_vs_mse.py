@@ -20,16 +20,20 @@ import sys
 from pathlib import Path
 from typing import Literal
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if "MPLCONFIGDIR" not in os.environ:
+    os.environ["MPLCONFIGDIR"] = str(PROJECT_ROOT / "scratch" / ".matplotlib")
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import requests
 import torch
 import torch.nn.functional as F
 from sklearn.metrics import auc, roc_curve
 from torch.utils.data import DataLoader, Dataset
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(SCRIPT_DIR) not in sys.path:
@@ -39,16 +43,17 @@ from privacy_and_grokking.config import TrainConfig
 from privacy_and_grokking.utils.logger import Logger
 
 DEFAULT_TRACKING_URI = "http://localhost:5051"
+DEFAULT_PARQUET = PROJECT_ROOT / "cache" / "canary-selection-v1_mlflow_export.parquet"
 DEFAULT_STEP = 20000
 
 # 6 Runs für NO_GROK_MADD_CE_TRANSFORMER (Experiment: canary-selection-1, Seed: 696484)
 CE_RUNS = [
-    "eea8533958ce406685499608f1630431",  # model_index: 0 (Target)
-    "c249f656d0f94b4ca961180e4731d31b",  # model_index: 1 (Validation)
-    "ff4945cf80514c36b3016cf111eff0c9",  # model_index: 2 (Ref 0)
-    "3483cffcb67143b085618ac7ceb1f789",  # model_index: 3 (Ref 1)
-    "04eb9c08b30c4ba7a2a6310737663215",  # model_index: 4 (Ref 2)
-    "13216e8b669840dc9920e9b23d493f93",  # model_index: 5 (Ref 3)
+    "0a341d15fecf4c3fa471fb6a35fb5e26",  # model_index: 0 (Target)
+    "d0c6dd6ca6694ebfb978fa6575f77163",  # model_index: 1 (Validation)
+    "175346abb6054cdcbcd9c7b1c8fa7bb8",  # model_index: 2 (Ref 0)
+    "4166ce0921d142b49bb629eef2e4a493",  # model_index: 3 (Ref 1)
+    "4071bcece5604426bedb1521bcfb40ad",  # model_index: 4 (Ref 2)
+    "3978800e6aa542068b75fb8f599b96d5",  # model_index: 5 (Ref 3)
 ]
 
 # CE_RUNS = [
@@ -62,12 +67,12 @@ CE_RUNS = [
 
 # 6 Runs für NO_GROK_MADD_MSE_TRANSFORMER (Experiment: canary-selection-1, Seed: 725792)
 MSE_RUNS = [
-    "be694eeef9c14b61be064c1d0dd00273",  # model_index: 0 (Target)
-    "b613d9f3f06b4cd0b07117a7849a5942",  # model_index: 1 (Validation)
-    "7e7e9b67e2984edf8a26a07e29770360",  # model_index: 2 (Ref 0)
-    "c01d9573e11f4f89be46bb293a8c4031",  # model_index: 3 (Ref 1)
-    "4efcb3be04b7453b823b25350e57221a",  # model_index: 4 (Ref 2)
-    "a396b524b0d34bb1879b9a44be03d4eb",  # model_index: 5 (Ref 3)
+    "94558a882eca40b9b4a15972b2ee6f20",  # model_index: 0 (Target)
+    "bb77cb85eb3742a5843a7f6d445dc71f",  # model_index: 1 (Validation)
+    "f6be708ddce6408892f15adc948826a7",  # model_index: 2 (Ref 0)
+    "41d3bfe6a9f44aac8f733be73e761e0e",  # model_index: 3 (Ref 1)
+    "bbbda71e139b4a51ba3496c942167e74",  # model_index: 4 (Ref 2)
+    "f9001c82258f42bbac54f7727ca78d5d",  # model_index: 5 (Ref 3)
 ]
 # cannary-selection
 # MSE_RUNS = [
@@ -283,6 +288,53 @@ def compute_informia_scores(
     # 4. Test-Statistik (InfoRMIA Score)
     scores = log_ratio_x - expectation
     return scores
+
+
+def tune_optimal_a(
+    val_p_in: np.ndarray,
+    val_p_out: np.ndarray,
+    ref_p_val_in: np.ndarray,
+    ref_p_val_out: np.ndarray,
+    mem_val_in: np.ndarray,
+    mem_val_out: np.ndarray,
+    val_pop_target_p: np.ndarray,
+    val_pop_ref_p: np.ndarray,
+    split_name: str = "regular",
+) -> tuple[float, float, dict[float, float]]:
+    """Tuned offline_a auf dem Validation-Modell (model_index 1) in 0.1 Schritten (0.0 bis 1.0).
+    
+    Wählt dasjenige a, welches die ROC-AUC auf dem Validierungsdatensatz maximiert.
+    Gibt (optimal_a, bester_val_auc, sweep_dict) zurück.
+    """
+    best_a = 0.5
+    best_auc = -1.0
+    sweep_results = {}
+
+    for a in np.arange(0.0, 1.05, 0.1):
+        a_val = round(float(a), 1)
+        in_scores = compute_informia_scores(
+            target_probs=val_p_in,
+            ref_probs_matrix=ref_p_val_in,
+            ref_memberships=mem_val_in,
+            pop_target_probs=val_pop_target_p,
+            pop_ref_probs=val_pop_ref_p,
+            offline_a=a_val,
+        )
+        out_scores = compute_informia_scores(
+            target_probs=val_p_out,
+            ref_probs_matrix=ref_p_val_out,
+            ref_memberships=mem_val_out,
+            pop_target_probs=val_pop_target_p,
+            pop_ref_probs=val_pop_ref_p,
+            offline_a=a_val,
+        )
+        auc_val, _, _ = compute_roc_and_auc(in_scores, out_scores)
+        sweep_results[a_val] = auc_val
+        if auc_val > best_auc:
+            best_auc = auc_val
+            best_a = a_val
+
+    return best_a, best_auc, sweep_results
 
 
 def plot_loss_overlay(
@@ -501,7 +553,270 @@ def plot_informia_overlay(
     ax.legend(fontsize=8, loc="upper right")
 
 
-def plot_2row_5col_figure(
+def compute_tpr_at_fpr(fpr: np.ndarray, tpr: np.ndarray, target_fpr: float = 0.01) -> float:
+    """Berechnet den TPR-Wert bei einer Ziel-FPR (Default: 0.01 = 1%)."""
+    if len(fpr) == 0 or len(tpr) == 0:
+        return 0.0
+    idx = np.where(fpr <= target_fpr)[0]
+    if len(idx) == 0:
+        return float(tpr[0])
+    return float(tpr[idx[-1]])
+
+
+def load_parquet_metrics(parquet_path: Path, run_ids: list[str]) -> pd.DataFrame:
+    """Lädt Metriken für die übergebenen run_ids aus dem Parquet-Cache."""
+    if not parquet_path.is_file():
+        return pd.DataFrame()
+    columns = ["run_id", "run_name", "metric_name", "step", "value"]
+    try:
+        df = pd.read_parquet(parquet_path, columns=columns)
+        df_filtered = df[df["run_id"].isin(run_ids)].copy()
+        return df_filtered
+    except Exception as e:
+        print(f"  [WARNUNG] Fehler beim Laden der Parquet-Datei '{parquet_path}': {e}")
+        return pd.DataFrame()
+
+
+def plot_accuracy_and_overlap_panel(
+    ax: plt.Axes,
+    df_metrics: pd.DataFrame,
+    target_run_id: str,
+    all_run_ids: list[str],
+    is_canary: bool,
+    real_loss_type: Literal["ce", "mse"],
+    selected_step: int,
+):
+    """Spalte 0: Zeichnet Genauigkeit (Train & Test) und Loss Overlap über die Zeit (Schritte)."""
+    if df_metrics.empty:
+        ax.text(0.5, 0.5, "Keine Parquet-Daten", ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_ylabel("Genauigkeit & Overlap", fontsize=9)
+        ax.set_xlabel("Schritt ($t$)", fontsize=9)
+        return
+
+    acc_train_key = "eval/train/canary_accuracy" if is_canary else "eval/train/accuracy"
+    acc_test_key = "eval/test/canary_accuracy" if is_canary else "eval/test/accuracy"
+
+    if not is_canary:
+        real_ovl_key = "eval/loss/ce/overlap" if real_loss_type == "ce" else "eval/loss/mse/overlap"
+        other_ovl_key = "eval/loss/mse/overlap" if real_loss_type == "ce" else "eval/loss/ce/overlap"
+    else:
+        real_ovl_key = "eval/loss/canary_ce/overlap" if real_loss_type == "ce" else "eval/loss/canary_mse/overlap"
+        other_ovl_key = "eval/loss/canary_mse/overlap" if real_loss_type == "ce" else "eval/loss/canary_ce/overlap"
+
+    curve_configs = [
+        (acc_train_key, "Train Acc", "#2563eb", "-", 2.0),
+        (acc_test_key, "Test Acc", "#16a34a", "-", 2.0),
+        (real_ovl_key, f"Realer OVL ({real_loss_type.upper()})", "#d97706", "--", 1.8),
+        (other_ovl_key, f"Anderer OVL ({('mse' if real_loss_type == 'ce' else 'ce').upper()})", "#9333ea", ":", 1.8),
+    ]
+
+    for m_key, label_name, color, linestyle, lw in curve_configs:
+        sub_df = df_metrics[df_metrics["metric_name"] == m_key]
+        if sub_df.empty:
+            continue
+
+        target_sub = sub_df[sub_df["run_id"] == target_run_id].sort_values("step")
+        if not target_sub.empty:
+            t_clean = target_sub.drop_duplicates(subset=["step"])
+            ax.plot(
+                t_clean["step"],
+                t_clean["value"],
+                label=label_name,
+                color=color,
+                linestyle=linestyle,
+                linewidth=lw,
+                alpha=0.95,
+                zorder=4,
+            )
+            val_at_step = t_clean[t_clean["step"] == selected_step]
+            if not val_at_step.empty:
+                val = float(val_at_step["value"].iloc[0])
+                ax.scatter([selected_step], [val], color=color, s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    ax.axvline(
+        x=selected_step,
+        color="#475569",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.85,
+        label=f"t={selected_step:,}",
+        zorder=5,
+    )
+
+    ax.set_xlabel("Trainings-Schritt ($t$)", fontsize=9.5)
+    ax.set_ylabel("Genauigkeit & Overlap", fontsize=9.5)
+    ax.set_ylim(-0.02, 1.05)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y*100:.0f}%"))
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+
+
+def plot_attack_auc_panel(
+    ax: plt.Axes,
+    df_metrics: pd.DataFrame,
+    target_run_id: str,
+    all_run_ids: list[str],
+    is_canary: bool,
+    real_loss_type: Literal["ce", "mse"],
+    selected_step: int,
+    informia_auc: float | None = None,
+):
+    """Spalte 1: Zeichnet Attack AUC über die Zeit (Schritte) mit Referenzlinie bei 0.5 und InfoRMIA am Schritt t."""
+    if df_metrics.empty:
+        ax.text(0.5, 0.5, "Keine Parquet-Daten", ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_ylabel("Attack AUC", fontsize=9)
+        ax.set_xlabel("Schritt ($t$)", fontsize=9)
+        return
+
+    if not is_canary:
+        real_auc_key = "eval/attack/ce_loss/auc" if real_loss_type == "ce" else "eval/attack/mse_loss/auc"
+        other_auc_key = "eval/attack/mse_loss/auc" if real_loss_type == "ce" else "eval/attack/ce_loss/auc"
+    else:
+        real_auc_key = "eval/attack/canary_ce_loss/auc" if real_loss_type == "ce" else "eval/attack/canary_mse_loss/auc"
+        other_auc_key = "eval/attack/canary_mse_loss/auc" if real_loss_type == "ce" else "eval/attack/canary_ce_loss/auc"
+
+    curve_configs = [
+        (real_auc_key, f"Realer Loss ({real_loss_type.upper()})", "#059669", "-", 2.0),
+        (other_auc_key, f"Anderer Loss ({('mse' if real_loss_type == 'ce' else 'ce').upper()})", "#7c3aed", "-", 2.0),
+    ]
+
+    for m_key, label_name, color, linestyle, lw in curve_configs:
+        sub_df = df_metrics[df_metrics["metric_name"] == m_key]
+        if sub_df.empty:
+            continue
+
+        target_sub = sub_df[sub_df["run_id"] == target_run_id].sort_values("step")
+        if not target_sub.empty:
+            t_clean = target_sub.drop_duplicates(subset=["step"])
+            ax.plot(
+                t_clean["step"],
+                t_clean["value"],
+                label=label_name,
+                color=color,
+                linestyle=linestyle,
+                linewidth=lw,
+                alpha=0.95,
+                zorder=4,
+            )
+            val_at_step = t_clean[t_clean["step"] == selected_step]
+            if not val_at_step.empty:
+                val = float(val_at_step["value"].iloc[0])
+                ax.scatter([selected_step], [val], color=color, s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    if informia_auc is not None:
+        ax.scatter(
+            [selected_step],
+            [informia_auc],
+            color="#ea580c",
+            s=95,
+            marker="*",
+            zorder=8,
+            label=f"InfoRMIA ($t$): {informia_auc:.3f}",
+            edgecolors="#ffffff",
+            linewidths=1.2,
+        )
+
+    ax.axhline(y=0.5, color="#94a3b8", linestyle=":", linewidth=1.2, label="Zufall (0.50)", zorder=3)
+    ax.axvline(
+        x=selected_step,
+        color="#475569",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.85,
+        zorder=5,
+    )
+
+    ax.set_xlabel("Trainings-Schritt ($t$)", fontsize=9.5)
+    ax.set_ylabel("Attack ROC AUC", fontsize=9.5)
+    ax.set_ylim(0.40, 1.03)
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+
+
+def plot_attack_tpr_panel(
+    ax: plt.Axes,
+    df_metrics: pd.DataFrame,
+    target_run_id: str,
+    all_run_ids: list[str],
+    is_canary: bool,
+    real_loss_type: Literal["ce", "mse"],
+    selected_step: int,
+    informia_tpr1: float | None = None,
+):
+    """Spalte 2: Zeichnet Attack TPR @ 1% FPR über die Zeit (Schritte) mit Referenzlinie bei 0.01 und InfoRMIA am Schritt t."""
+    if df_metrics.empty:
+        ax.text(0.5, 0.5, "Keine Parquet-Daten", ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_ylabel("TPR @ 1% FPR", fontsize=9)
+        ax.set_xlabel("Schritt ($t$)", fontsize=9)
+        return
+
+    if not is_canary:
+        real_tpr_key = "eval/attack/ce_loss/tpr-at-fpr/1" if real_loss_type == "ce" else "eval/attack/mse_loss/tpr-at-fpr/1"
+        other_tpr_key = "eval/attack/mse_loss/tpr-at-fpr/1" if real_loss_type == "ce" else "eval/attack/ce_loss/tpr-at-fpr/1"
+    else:
+        real_tpr_key = "eval/attack/canary_ce_loss/tpr-at-fpr/1" if real_loss_type == "ce" else "eval/attack/canary_mse_loss/tpr-at-fpr/1"
+        other_tpr_key = "eval/attack/canary_mse_loss/tpr-at-fpr/1" if real_loss_type == "ce" else "eval/attack/canary_ce_loss/tpr-at-fpr/1"
+
+    curve_configs = [
+        (real_tpr_key, f"Realer Loss ({real_loss_type.upper()})", "#059669", "-", 2.0),
+        (other_tpr_key, f"Anderer Loss ({('mse' if real_loss_type == 'ce' else 'ce').upper()})", "#7c3aed", "-", 2.0),
+    ]
+
+    for m_key, label_name, color, linestyle, lw in curve_configs:
+        sub_df = df_metrics[df_metrics["metric_name"] == m_key]
+        if sub_df.empty:
+            continue
+
+        target_sub = sub_df[sub_df["run_id"] == target_run_id].sort_values("step")
+        if not target_sub.empty:
+            t_clean = target_sub.drop_duplicates(subset=["step"])
+            ax.plot(
+                t_clean["step"],
+                t_clean["value"],
+                label=label_name,
+                color=color,
+                linestyle=linestyle,
+                linewidth=lw,
+                alpha=0.95,
+                zorder=4,
+            )
+            val_at_step = t_clean[t_clean["step"] == selected_step]
+            if not val_at_step.empty:
+                val = float(val_at_step["value"].iloc[0])
+                ax.scatter([selected_step], [val], color=color, s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    if informia_tpr1 is not None:
+        ax.scatter(
+            [selected_step],
+            [informia_tpr1],
+            color="#ea580c",
+            s=95,
+            marker="*",
+            zorder=8,
+            label=f"InfoRMIA ($t$): {informia_tpr1:.3f}",
+            edgecolors="#ffffff",
+            linewidths=1.2,
+        )
+
+    ax.axhline(y=0.01, color="#94a3b8", linestyle=":", linewidth=1.2, label="Zufall (0.01)", zorder=3)
+    ax.axvline(
+        x=selected_step,
+        color="#475569",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.85,
+        zorder=5,
+    )
+
+    ax.set_xlabel("Trainings-Schritt ($t$)", fontsize=9.5)
+    ax.set_ylabel("TPR @ 1% FPR", fontsize=9.5)
+    ax.set_ylim(-0.02, 1.03)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y*100:.0f}%"))
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+
+
+def plot_2row_8col_figure(
     target_model_name: str,
     logits_res: dict[str, tuple[np.ndarray, np.ndarray]],
     real_loss_label: str,
@@ -511,21 +826,25 @@ def plot_2row_5col_figure(
     other_loss_type: Literal["ce", "mse"],
     other_loss_res: dict[str, np.ndarray],
     informia_res: dict[str, np.ndarray],
+    attack_results: dict,
+    df_metrics: pd.DataFrame | None,
+    target_run_id: str,
+    all_run_ids: list[str],
     step: int,
     output_path: Path,
 ):
-    """Erstellt eine optimierte 2x5 Abbildung pro Modell."""
-    fig, axes = plt.subplots(2, 5, figsize=(26, 10.5))
+    """Erstellt eine optimierte 2x8 Abbildung pro Modell mit Dynamikkurven über die Zeit und Verteilungen."""
+    fig, axes = plt.subplots(2, 8, figsize=(38, 10.5))
     fig.suptitle(
-        f"Verteilungsanalyse: {target_model_name} (Schritt t = {step})",
-        fontsize=17,
+        f"Verteilungs- & Dynamikanalyse: {target_model_name} (Schritt t = {step:,})",
+        fontsize=18,
         fontweight="bold",
         y=0.985,
     )
 
     row_configs = [
-        ("Reguläre Daten", "train_reg", "test_reg", "Train", "Test"),
-        ("Canary Daten", "train_canary", "test_canary", "Canary Train", "Canary Test"),
+        ("Reguläre Daten", "regular", "train_reg", "test_reg", "Train", "Test", False),
+        ("Canary Daten", "canary", "train_canary", "test_canary", "Canary Train", "Canary Test", True),
     ]
 
     real_loss_header = (
@@ -540,19 +859,65 @@ def plot_2row_5col_figure(
     )
 
     col_headers = [
-        "Logit-Verteilung (Train)",
-        "Logit-Verteilung (Test)",
+        "Genauigkeit & Loss-Overlap\nüber Zeit",
+        "Attack AUC\nüber Zeit",
+        "Attack TPR @ 1% FPR\nüber Zeit",
+        "Logit-Verteilung\n(Train)",
+        "Logit-Verteilung\n(Test)",
         f"{real_loss_header}\nTrain vs. Test",
         f"{other_loss_header}\nTrain vs. Test",
         "InfoRMIA Score\nTrain vs. Test",
     ]
 
     for c_idx, head in enumerate(col_headers):
-        axes[0, c_idx].set_title(head, fontsize=12, fontweight="bold", pad=12)
+        axes[0, c_idx].set_title(head, fontsize=11.5, fontweight="bold", pad=12)
 
-    for row_idx, (row_label, in_key, out_key, in_name, out_name) in enumerate(row_configs):
-        # Spalte 0: Logit-Verteilung Train
-        ax_l_train = axes[row_idx, 0]
+    df_m = df_metrics if df_metrics is not None else pd.DataFrame()
+
+    for row_idx, (row_label, split_key, in_key, out_key, in_name, out_name, is_canary) in enumerate(row_configs):
+        split_att = attack_results.get(split_key, {})
+        auc_info = split_att.get("informia", (None, None, None))[0]
+        fpr_info = split_att.get("informia", (None, None, None))[1]
+        tpr_info = split_att.get("informia", (None, None, None))[2]
+        tpr1_info = compute_tpr_at_fpr(fpr_info, tpr_info, 0.01) if fpr_info is not None and tpr_info is not None else None
+
+        # Spalte 0: Genauigkeit & Loss-Overlap über Zeit
+        plot_accuracy_and_overlap_panel(
+            ax=axes[row_idx, 0],
+            df_metrics=df_m,
+            target_run_id=target_run_id,
+            all_run_ids=all_run_ids,
+            is_canary=is_canary,
+            real_loss_type=real_loss_type,
+            selected_step=step,
+        )
+
+        # Spalte 1: Attack AUC über Zeit
+        plot_attack_auc_panel(
+            ax=axes[row_idx, 1],
+            df_metrics=df_m,
+            target_run_id=target_run_id,
+            all_run_ids=all_run_ids,
+            is_canary=is_canary,
+            real_loss_type=real_loss_type,
+            selected_step=step,
+            informia_auc=auc_info,
+        )
+
+        # Spalte 2: Attack TPR @ 1% FPR über Zeit
+        plot_attack_tpr_panel(
+            ax=axes[row_idx, 2],
+            df_metrics=df_m,
+            target_run_id=target_run_id,
+            all_run_ids=all_run_ids,
+            is_canary=is_canary,
+            real_loss_type=real_loss_type,
+            selected_step=step,
+            informia_tpr1=tpr1_info,
+        )
+
+        # Spalte 3: Logit-Verteilung Train
+        ax_l_train = axes[row_idx, 3]
         corr_in, wrong_in = logits_res.get(in_key, (np.array([]), np.array([])))
         if len(corr_in) > 0:
             ax_l_train.hist(
@@ -577,14 +942,14 @@ def plot_2row_5col_figure(
                 linestyle="--",
                 linewidth=0.8,
             )
-        ax_l_train.set_xlabel("Logit-Wert ($z$)", fontsize=10)
-        ax_l_train.set_ylabel("Dichte", fontsize=10)
+        ax_l_train.set_xlabel("Logit-Wert ($z$)", fontsize=9.5)
+        ax_l_train.set_ylabel("Dichte", fontsize=9.5)
         ax_l_train.grid(True, linestyle=":", alpha=0.6)
         if len(corr_in) > 0 or len(wrong_in) > 0:
-            ax_l_train.legend(fontsize=8, loc="upper right")
+            ax_l_train.legend(fontsize=7.2, loc="upper right")
 
-        # Spalte 1: Logit-Verteilung Test
-        ax_l_test = axes[row_idx, 1]
+        # Spalte 4: Logit-Verteilung Test
+        ax_l_test = axes[row_idx, 4]
         corr_out, wrong_out = logits_res.get(out_key, (np.array([]), np.array([])))
         if len(corr_out) > 0:
             ax_l_test.hist(
@@ -609,15 +974,15 @@ def plot_2row_5col_figure(
                 linestyle="--",
                 linewidth=0.8,
             )
-        ax_l_test.set_xlabel("Logit-Wert ($z$)", fontsize=10)
-        ax_l_test.set_ylabel("Dichte", fontsize=10)
+        ax_l_test.set_xlabel("Logit-Wert ($z$)", fontsize=9.5)
+        ax_l_test.set_ylabel("Dichte", fontsize=9.5)
         ax_l_test.grid(True, linestyle=":", alpha=0.6)
         if len(corr_out) > 0 or len(wrong_out) > 0:
-            ax_l_test.legend(fontsize=8, loc="upper right")
+            ax_l_test.legend(fontsize=7.2, loc="upper right")
 
-        # Spalte 2: Realer Loss (Train vs. Test)
+        # Spalte 5: Realer Loss (Train vs. Test)
         plot_loss_overlay(
-            ax=axes[row_idx, 2],
+            ax=axes[row_idx, 5],
             in_vals=real_loss_res.get(in_key, np.array([])),
             out_vals=real_loss_res.get(out_key, np.array([])),
             in_name=in_name,
@@ -627,9 +992,9 @@ def plot_2row_5col_figure(
             color_out="#f59e0b",
         )
 
-        # Spalte 3: Anderer Loss (Train vs. Test)
+        # Spalte 6: Anderer Loss (Train vs. Test)
         plot_loss_overlay(
-            ax=axes[row_idx, 3],
+            ax=axes[row_idx, 6],
             in_vals=other_loss_res.get(in_key, np.array([])),
             out_vals=other_loss_res.get(out_key, np.array([])),
             in_name=in_name,
@@ -639,9 +1004,9 @@ def plot_2row_5col_figure(
             color_out="#ec4899",
         )
 
-        # Spalte 4: InfoRMIA Score (Train vs. Test)
+        # Spalte 7: InfoRMIA Score (Train vs. Test)
         plot_informia_overlay(
-            ax=axes[row_idx, 4],
+            ax=axes[row_idx, 7],
             in_vals=informia_res.get(in_key, np.array([])),
             out_vals=informia_res.get(out_key, np.array([])),
             in_name=in_name,
@@ -656,19 +1021,23 @@ def plot_2row_5col_figure(
             0.5,
             row_label,
             transform=axes[row_idx, 0].transAxes,
-            fontsize=13,
+            fontsize=12,
             fontweight="bold",
             va="center",
             ha="center",
             rotation=90,
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="#f8fafc", edgecolor="#94a3b8", linewidth=1.3),
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="#f8fafc", edgecolor="#94a3b8", linewidth=1.2),
         )
 
-    plt.subplots_adjust(left=0.065, right=0.985, top=0.90, bottom=0.08, hspace=0.30, wspace=0.22)
+    plt.subplots_adjust(left=0.045, right=0.99, top=0.90, bottom=0.08, hspace=0.30, wspace=0.25)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=200)
     plt.close()
-    print(f"Optimierter 2x5 Verteilungs-Plot gespeichert unter:\n  -> {output_path}")
+    print(f"Optimierter 2x8 Verteilungs- & Dynamik-Plot gespeichert unter:\n  -> {output_path}")
+
+
+# Kompatibilitäts-Alias
+plot_2row_5col_figure = plot_2row_8col_figure
 
 
 def compute_roc_and_auc(in_scores: np.ndarray, out_scores: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
@@ -714,6 +1083,7 @@ def plot_auc_comparison(
             auc_real, fpr_real, tpr_real = data["real_loss"]
             auc_other, fpr_other, tpr_other = data["other_loss"]
             auc_info, fpr_info, tpr_info = data["informia"]
+            opt_a = data.get("optimal_a", 0.5)
 
             ax.plot(
                 fpr_real,
@@ -735,7 +1105,7 @@ def plot_auc_comparison(
                 color="#ea580c",
                 linewidth=2.5,
                 linestyle="-",
-                label=f"InfoRMIA: AUC = {auc_info:.3f}",
+                label=f"InfoRMIA (a={opt_a:.1f}): AUC = {auc_info:.3f}",
             )
 
             ax.plot([0, 1], [0, 1], color="#94a3b8", linestyle="--", linewidth=1.2, label="Zufall (AUC = 0.500)")
@@ -763,8 +1133,18 @@ def evaluate_model_group(
     device: str,
     tracking_uri: str,
     output_dir: Path,
+    fallback_a: float = 0.5,
+    skip_val_tuning: bool = False,
+    df_metrics: pd.DataFrame | None = None,
 ) -> dict:
-    """Führt die vollständige Auswertung für eine 6-Run-Modellgruppe durch."""
+    """Führt die vollständige Auswertung für eine 6-Run-Modellgruppe durch.
+    
+    1. Lädt Target-Modell (run_ids[0]) und berechnet Realen/Anderen Loss sowie Logits.
+    2. Lädt Referenz-Modelle (run_ids[2:]).
+    3. Lädt Validation-Modell (run_ids[1]) und tuned optimal_a in 0.1 Schritten (0.0 bis 1.0)
+       separat für reguläre Daten und Canary-Daten.
+    4. Berechnet InfoRMIA Scores für das Target-Modell unter Verwendung der optimalen a-Werte.
+    """
     print(f"\n=======================================================")
     print(f"Starte Auswertung für: {model_name}")
     print(f"Target Run ID: {run_ids[0]} (model_index 0)")
@@ -823,13 +1203,13 @@ def evaluate_model_group(
         ref_models.append(m_ref)
         ref_dcs.append(dc_ref)
 
-    print("  Berechne Vorhersagen der Referenzmodelle...")
+    print("  Berechne Vorhersagen der Referenzmodelle auf Target-Daten...")
     ref_p_train = np.array([evaluate_probs_only(m, dc_target.train, device, norm_mean, norm_std) for m in ref_models])
     ref_p_test = np.array([evaluate_probs_only(m, dc_target.test, device, norm_mean, norm_std) for m in ref_models])
     ref_p_ctrain = np.array([evaluate_probs_only(m, dc_target.train_canary, device, norm_mean, norm_std) for m in ref_models])
     ref_p_ctest = np.array([evaluate_probs_only(m, dc_target.test_canary, device, norm_mean, norm_std) for m in ref_models])
 
-    # Memberships
+    # Memberships für Target-Daten
     train_idx = dc_target.train.indices
     ctrain_idx = dc_target.train_canary.indices
 
@@ -838,12 +1218,87 @@ def evaluate_model_group(
     mem_ctrain = np.array([[1.0 if idx in set(dc.train_canary.indices) else 0.0 for idx in ctrain_idx] for dc in ref_dcs])
     mem_ctest = np.zeros((len(ref_dcs), len(tec_p)))
 
-    # InfoRMIA Scores (Population ist immer das reguläre Test-Set!)
-    print("  Berechne InfoRMIA Scores...")
-    informia_train = compute_informia_scores(t_p, ref_p_train, mem_train, te_p, ref_p_test, offline_a=0.5)
-    informia_test = compute_informia_scores(te_p, ref_p_test, mem_test, te_p, ref_p_test, offline_a=0.5)
-    informia_ctrain = compute_informia_scores(tc_p, ref_p_ctrain, mem_ctrain, te_p, ref_p_test, offline_a=0.5)
-    informia_ctest = compute_informia_scores(tec_p, ref_p_ctest, mem_ctest, te_p, ref_p_test, offline_a=0.5)
+    # 3. Validation-Modell evaluieren & optimal_a in 0.1 Schritten bestimmen
+    opt_a_reg = fallback_a
+    opt_a_canary = fallback_a
+    val_auc_reg = None
+    val_auc_canary = None
+    val_run_id = run_ids[1] if len(run_ids) > 1 else None
+
+    if val_run_id and not skip_val_tuning:
+        try:
+            print(f"  Lade Validation-Modell ({val_run_id}) für optimal_a Tuning...")
+            m_val, dc_val, _ = load_model_and_data(val_run_id, step, device, tracking_uri)
+            norm_val_mean = dc_val.normalization.mean if dc_val.normalization else None
+            norm_val_std = dc_val.normalization.std if dc_val.normalization else None
+
+            print("  Berechne Vorhersagen für Validation-Modell...")
+            val_p_train = evaluate_probs_only(m_val, dc_val.train, device, norm_val_mean, norm_val_std)
+            val_p_test = evaluate_probs_only(m_val, dc_val.test, device, norm_val_mean, norm_val_std)
+            val_p_ctrain = evaluate_probs_only(m_val, dc_val.train_canary, device, norm_val_mean, norm_val_std)
+            val_p_ctest = evaluate_probs_only(m_val, dc_val.test_canary, device, norm_val_mean, norm_val_std)
+
+            print("  Berechne Referenzmodell-Vorhersagen auf Validation-Daten...")
+            ref_p_val_train = np.array([evaluate_probs_only(m, dc_val.train, device, norm_val_mean, norm_val_std) for m in ref_models])
+            ref_p_val_test = np.array([evaluate_probs_only(m, dc_val.test, device, norm_val_mean, norm_val_std) for m in ref_models])
+            ref_p_val_ctrain = np.array([evaluate_probs_only(m, dc_val.train_canary, device, norm_val_mean, norm_val_std) for m in ref_models])
+            ref_p_val_ctest = np.array([evaluate_probs_only(m, dc_val.test_canary, device, norm_val_mean, norm_val_std) for m in ref_models])
+
+            val_train_idx = dc_val.train.indices
+            val_ctrain_idx = dc_val.train_canary.indices
+
+            mem_val_train = np.array([[1.0 if idx in set(dc.train.indices) else 0.0 for idx in val_train_idx] for dc in ref_dcs])
+            mem_val_test = np.zeros((len(ref_dcs), len(val_p_test)))
+            mem_val_ctrain = np.array([[1.0 if idx in set(dc.train_canary.indices) else 0.0 for idx in val_ctrain_idx] for dc in ref_dcs])
+            mem_val_ctest = np.zeros((len(ref_dcs), len(val_p_ctest)))
+
+            print("  [Tuning] Prüfe optimal_a in 0.1 Schritten (0.0 bis 1.0) auf Validation-Modell...")
+            opt_a_reg, val_auc_reg, sweep_reg = tune_optimal_a(
+                val_p_in=val_p_train,
+                val_p_out=val_p_test,
+                ref_p_val_in=ref_p_val_train,
+                ref_p_val_out=ref_p_val_test,
+                mem_val_in=mem_val_train,
+                mem_val_out=mem_val_test,
+                val_pop_target_p=val_p_test,
+                val_pop_ref_p=ref_p_val_test,
+                split_name="regular",
+            )
+            print(f"    -> Regulär:  optimal_a = {opt_a_reg:.1f} (Val AUC: {val_auc_reg:.4f})")
+
+            opt_a_canary, val_auc_canary, sweep_canary = tune_optimal_a(
+                val_p_in=val_p_ctrain,
+                val_p_out=val_p_ctest,
+                ref_p_val_in=ref_p_val_ctrain,
+                ref_p_val_out=ref_p_val_ctest,
+                mem_val_in=mem_val_ctrain,
+                mem_val_out=mem_val_ctest,
+                val_pop_target_p=val_p_test,
+                val_pop_ref_p=ref_p_val_test,
+                split_name="canary",
+            )
+            print(f"    -> Canaries: optimal_a = {opt_a_canary:.1f} (Val AUC: {val_auc_canary:.4f})")
+
+            print(f"    Sweep-Details für {model_name}:")
+            for a_cand in sorted(sweep_reg.keys()):
+                reg_m = " <-- OPT" if a_cand == opt_a_reg else ""
+                can_m = " <-- OPT" if a_cand == opt_a_canary else ""
+                print(f"      a = {a_cand:3.1f} | Val AUC (Reg): {sweep_reg[a_cand]:.4f}{reg_m:<8} | Val AUC (Canary): {sweep_canary[a_cand]:.4f}{can_m}")
+
+        except Exception as e:
+            print(f"  [HINWEIS] Validation-Modell ({val_run_id}) konnte nicht geladen werden ({e}).")
+            print(f"            Verwende Fallback: optimal_a = {fallback_a:.1f}")
+            opt_a_reg = fallback_a
+            opt_a_canary = fallback_a
+    else:
+        print(f"  Verwende festen Wert offline_a = {fallback_a:.1f} (kein Validation-Tuning)")
+
+    # 4. InfoRMIA Scores für Target berechnen
+    print(f"  Berechne InfoRMIA Scores für Target (Regulär: a={opt_a_reg:.1f}, Canary: a={opt_a_canary:.1f})...")
+    informia_train = compute_informia_scores(t_p, ref_p_train, mem_train, te_p, ref_p_test, offline_a=opt_a_reg)
+    informia_test = compute_informia_scores(te_p, ref_p_test, mem_test, te_p, ref_p_test, offline_a=opt_a_reg)
+    informia_ctrain = compute_informia_scores(tc_p, ref_p_ctrain, mem_ctrain, te_p, ref_p_test, offline_a=opt_a_canary)
+    informia_ctest = compute_informia_scores(tec_p, ref_p_ctest, mem_ctest, te_p, ref_p_test, offline_a=opt_a_canary)
 
     informia_res = {
         "train_reg": informia_train,
@@ -852,23 +1307,7 @@ def evaluate_model_group(
         "test_canary": informia_ctest,
     }
 
-    # Optimierter 2x5 Verteilungsplot speichern
-    dist_out_path = output_dir / f"distribution_{model_name}_step_{step}.png"
-    plot_2row_5col_figure(
-        target_model_name=model_name,
-        logits_res=logits_res,
-        real_loss_label=real_loss_label,
-        real_loss_type=real_loss_type,
-        real_loss_res=real_loss_res,
-        other_loss_label=other_loss_label,
-        other_loss_type=other_loss_type,
-        other_loss_res=other_loss_res,
-        informia_res=informia_res,
-        step=step,
-        output_path=dist_out_path,
-    )
-
-    # 3. AUC Berechnung für ROC-Plot
+    # 5. AUC Berechnung für ROC-Plot und Dynamik-Annotationen
     real_loss_in_reg = -real_loss_res["train_reg"]
     real_loss_out_reg = -real_loss_res["test_reg"]
     real_loss_in_can = -real_loss_res["train_canary"]
@@ -884,6 +1323,8 @@ def evaluate_model_group(
             "real_loss": compute_roc_and_auc(real_loss_in_reg, real_loss_out_reg),
             "other_loss": compute_roc_and_auc(other_loss_in_reg, other_loss_out_reg),
             "informia": compute_roc_and_auc(informia_train, informia_test),
+            "optimal_a": opt_a_reg,
+            "val_auc": val_auc_reg,
             "real_loss_name": real_loss_label,
             "other_loss_name": other_loss_label,
         },
@@ -891,17 +1332,39 @@ def evaluate_model_group(
             "real_loss": compute_roc_and_auc(real_loss_in_can, real_loss_out_can),
             "other_loss": compute_roc_and_auc(other_loss_in_can, other_loss_out_can),
             "informia": compute_roc_and_auc(informia_ctrain, informia_ctest),
+            "optimal_a": opt_a_canary,
+            "val_auc": val_auc_canary,
             "real_loss_name": real_loss_label,
             "other_loss_name": other_loss_label,
         },
     }
+
+    # Optimierter 2x8 Verteilungs- & Dynamikplot speichern
+    dist_out_path = output_dir / f"distribution_{model_name}_step_{step}.png"
+    plot_2row_8col_figure(
+        target_model_name=model_name,
+        logits_res=logits_res,
+        real_loss_label=real_loss_label,
+        real_loss_type=real_loss_type,
+        real_loss_res=real_loss_res,
+        other_loss_label=other_loss_label,
+        other_loss_type=other_loss_type,
+        other_loss_res=other_loss_res,
+        informia_res=informia_res,
+        attack_results=attack_results,
+        df_metrics=df_metrics,
+        target_run_id=run_ids[0],
+        all_run_ids=run_ids,
+        step=step,
+        output_path=dist_out_path,
+    )
 
     return attack_results
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visualisiert Logit-, Loss- und InfoRMIA-Verteilungen (2x5 Grid) sowie AUC-Vergleich."
+        description="Visualisiert Dynamiken über die Zeit und Logit-, Loss- und InfoRMIA-Verteilungen (2x8 Grid) sowie AUC-Vergleich."
     )
     parser.add_argument(
         "--step",
@@ -917,6 +1380,12 @@ def main():
         help=f"MLflow Tracking-URI (Default: {DEFAULT_TRACKING_URI})",
     )
     parser.add_argument(
+        "--parquet",
+        type=str,
+        default=str(DEFAULT_PARQUET),
+        help=f"Pfad zur Parquet-Datei für Dynamiken über die Zeit (Default: {DEFAULT_PARQUET})",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
@@ -928,6 +1397,17 @@ def main():
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device (cuda / cpu)",
     )
+    parser.add_argument(
+        "--offline-a",
+        type=float,
+        default=0.5,
+        help="Fallback offline_a Parameter (Default: 0.5)",
+    )
+    parser.add_argument(
+        "--skip-val-tuning",
+        action="store_true",
+        help="Überspringt das Tuning auf dem Validation-Modell und verwendet direkt --offline-a",
+    )
 
     args = parser.parse_args()
 
@@ -936,7 +1416,16 @@ def main():
     output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"=== Gesamt-Analyse für Schritt t = {args.step} (Optimiertes 2x5 Layout) ===")
+    parquet_path = Path(args.parquet)
+    all_runs = list(dict.fromkeys(CE_RUNS + MSE_RUNS))
+    print(f"Lade Dynamik-Metriken aus Parquet: {parquet_path}")
+    df_metrics = load_parquet_metrics(parquet_path, all_runs)
+    if not df_metrics.empty:
+        print(f"  -> {len(df_metrics):,} Einträge für {len(all_runs)} Runs geladen.")
+    else:
+        print("  -> Keine Parquet-Daten geladen (Zeitreihen-Spalten bleiben leer).")
+
+    print(f"=== Gesamt-Analyse für Schritt t = {args.step} (Optimiertes 2x8 Layout) ===")
     print(f"Tracking URI: {args.tracking_uri}")
     print(f"Device:       {args.device}")
 
@@ -949,6 +1438,9 @@ def main():
         device=args.device,
         tracking_uri=args.tracking_uri,
         output_dir=output_dir,
+        fallback_a=args.offline_a,
+        skip_val_tuning=args.skip_val_tuning,
+        df_metrics=df_metrics,
     )
 
     # 2. MSE Transformer Gruppe
@@ -960,6 +1452,9 @@ def main():
         device=args.device,
         tracking_uri=args.tracking_uri,
         output_dir=output_dir,
+        fallback_a=args.offline_a,
+        skip_val_tuning=args.skip_val_tuning,
+        df_metrics=df_metrics,
     )
 
     # 3. Gemeinsamer AUC & ROC Plot
@@ -971,11 +1466,11 @@ def main():
         output_path=auc_plot_path,
     )
 
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print(f"ERGEBNIS-ÜBERSICHT: AUC-Werte bei Schritt t = {args.step}")
-    print("=" * 70)
-    print(f"{'Modell':<32} | {'Datensatz':<10} | {'Realer Loss':<12} | {'Anderer Loss':<12} | {'InfoRMIA':<10}")
-    print("-" * 70)
+    print("=" * 80)
+    print(f"{'Modell':<30} | {'Datensatz':<9} | {'Realer Loss':<11} | {'Anderer Loss':<12} | {'opt a':<6} | {'InfoRMIA':<8}")
+    print("-" * 80)
 
     for m_name, res in [
         ("NO_GROK_MADD_CE_TRANSFORMER", ce_attack_res),
@@ -986,8 +1481,9 @@ def main():
             auc_r = d["real_loss"][0]
             auc_o = d["other_loss"][0]
             auc_i = d["informia"][0]
-            print(f"{m_name:<32} | {s_label:<10} | {auc_r:<12.4f} | {auc_o:<12.4f} | {auc_i:<10.4f}")
-    print("=" * 70)
+            opt_a = d.get("optimal_a", args.offline_a)
+            print(f"{m_name:<30} | {s_label:<9} | {auc_r:<11.4f} | {auc_o:<12.4f} | {opt_a:<6.1f} | {auc_i:<8.4f}")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
