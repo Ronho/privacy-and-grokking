@@ -118,7 +118,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate aggregated canary accuracy plots per model configuration"
     )
-    default_input = "cache/canary-selection_mlflow_export.parquet"
+    default_input = "cache/canary-selection-v1_mlflow_export.parquet"
     if not os.path.exists(default_input) and os.path.exists(
         "canary-selection_mlflow_export.parquet"
     ):

@@ -51,13 +51,29 @@ def get_available_checkpoints_via_api(tracking_uri: str, run_id: str) -> list[in
         return []
 
 
-def get_available_checkpoints_local(mlruns_dir: str, run_id: str) -> list[int]:
+def get_available_checkpoints_local(search_dir: str | Path, run_id: str) -> list[int]:
     """Scans local filesystem for checkpoint steps."""
-    for root, _dirs, _ in os.walk(mlruns_dir):
+    search_path = Path(search_dir)
+    # Direct candidate paths
+    direct_candidates = [
+        search_path / "downloaded_artifacts" / run_id / "checkpoints",
+        search_path / "checkpoints" / run_id,
+        search_path / run_id / "artifacts" / "checkpoints",
+        search_path / run_id / "checkpoints",
+    ]
+    for cand in direct_candidates:
+        if cand.is_dir():
+            steps = [int(p.name) for p in cand.iterdir() if p.is_dir() and p.name.isdigit()]
+            if steps:
+                return sorted(steps)
+
+    for root, _dirs, _ in os.walk(str(search_path)):
         if os.path.basename(root) == run_id:
-            checkpoints_dir = os.path.join(root, "artifacts", "checkpoints")
-            if os.path.isdir(checkpoints_dir):
-                return sorted([int(p) for p in os.listdir(checkpoints_dir) if p.isdigit()])
+            for sub in [os.path.join(root, "artifacts", "checkpoints"), os.path.join(root, "checkpoints")]:
+                if os.path.isdir(sub):
+                    steps = [int(p) for p in os.listdir(sub) if p.isdigit()]
+                    if steps:
+                        return sorted(steps)
     return []
 
 
@@ -72,6 +88,10 @@ def download_or_load_checkpoint(
 
     if cached_file.is_file() and cached_file.stat().st_size > 0:
         return torch.load(cached_file, map_location="cpu", weights_only=True)
+
+    alt_cached = cache_dir / "downloaded_artifacts" / run_id / "checkpoints" / str(step) / "model.pth"
+    if alt_cached.is_file() and alt_cached.stat().st_size > 0:
+        return torch.load(alt_cached, map_location="cpu", weights_only=True)
 
     # Download from HTTP tracking server
     base_uri = tracking_uri.rstrip("/")
@@ -111,6 +131,23 @@ def extract_flattened_weights(state_dict: dict[str, torch.Tensor]) -> np.ndarray
     return torch.cat(float_tensors).numpy()
 
 
+def get_parameter_layout(
+    state_dict: dict[str, torch.Tensor],
+) -> tuple[list[str], list[list[int]], list[int], list[str]]:
+    """Extracts metadata to map a flattened parameter vector back to state_dict."""
+    param_names = []
+    param_shapes = []
+    param_numels = []
+    param_dtypes = []
+    for k, v in sorted(state_dict.items()):
+        if torch.is_tensor(v) and v.dtype.is_floating_point:
+            param_names.append(k)
+            param_shapes.append(list(v.shape))
+            param_numels.append(v.numel())
+            param_dtypes.append(str(v.dtype).replace("torch.", ""))
+    return param_names, param_shapes, param_numels, param_dtypes
+
+
 def fetch_metric_map(
     client: MlflowClient, run_id: str, metric_keys: list[str]
 ) -> dict[str, dict[int, float]]:
@@ -147,6 +184,7 @@ def compute_checkpoint_pca(
     loss_metric: str = "auto",
     cache_dir: Path = DEFAULT_CACHE_DIR,
     output_path: Path | None = None,
+    save_basis: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """Main execution function: loads checkpoints, runs PCA, and saves cache files."""
     cache_dir = Path(cache_dir)
@@ -154,20 +192,24 @@ def compute_checkpoint_pca(
 
     print(f"Connecting to MLflow tracking server: {tracking_uri}")
     client = MlflowClient(tracking_uri)
+    run = None
+    run_name = run_id
 
     try:
         run = client.get_run(run_id)
         run_name = run.data.tags.get("mlflow.runName", run.info.run_name or run_id)
         print(f"Found Run: '{run_name}' (ID: {run_id}, Status: {run.info.status})")
     except Exception as e:
-        print(f"Error fetching run '{run_id}' from MLflow: {e}")
-        sys.exit(1)
+        print(f"Warning: Could not fetch run '{run_id}' from MLflow ({e}). Continuing with local cache...")
 
     # 1. Discover available checkpoint steps
     print(f"Discovering checkpoints for run {run_id}...")
+    steps = []
     if tracking_uri.startswith("http://") or tracking_uri.startswith("https://"):
         steps = get_available_checkpoints_via_api(tracking_uri, run_id)
-    else:
+    if not steps:
+        steps = get_available_checkpoints_local(cache_dir, run_id)
+    if not steps and not (tracking_uri.startswith("http://") or tracking_uri.startswith("https://")):
         steps = get_available_checkpoints_local(tracking_uri, run_id)
 
     if not steps:
@@ -197,7 +239,7 @@ def compute_checkpoint_pca(
         print(f"Using {len(filtered_steps)} checkpoints (range: {steps[0]} to {steps[-1]}).")
 
     # 3. Determine and fetch loss / metrics
-    available_metrics = list(run.data.metrics.keys())
+    available_metrics = list(run.data.metrics.keys()) if run else []
     chosen_loss_metric = None
 
     if loss_metric != "auto":
@@ -269,9 +311,12 @@ def compute_checkpoint_pca(
     )
     train_acc_key = "eval/train/accuracy" if "eval/train/accuracy" in metric_histories else None
 
+    sample_state_dict = None
     for step in tqdm(filtered_steps, desc="Processing checkpoints", unit="ckpt"):
         try:
             state_dict = download_or_load_checkpoint(tracking_uri, run_id, step, cache_dir)
+            if sample_state_dict is None:
+                sample_state_dict = state_dict
             w_flat = extract_flattened_weights(state_dict)
             weight_vectors.append(w_flat)
             valid_steps.append(step)
@@ -390,6 +435,23 @@ def compute_checkpoint_pca(
         json.dump(meta_info, f, indent=2)
     print(f"Saved PCA metadata to: {meta_path}")
 
+    # Save PCA reconstruction basis
+    if save_basis and sample_state_dict is not None:
+        basis_path = output_path.with_name(f"{output_path.stem}_basis.npz")
+        param_names, param_shapes, param_numels, param_dtypes = get_parameter_layout(sample_state_dict)
+        np.savez_compressed(
+            basis_path,
+            components=pca.components_[:actual_n_components],
+            mean=pca.mean_,
+            explained_variance_ratio=np.array(explained_variance_ratio),
+            singular_values=np.array(singular_values),
+            param_names=np.array(param_names),
+            param_shapes=np.array(param_shapes, dtype=object),
+            param_numels=np.array(param_numels, dtype=np.int64),
+            param_dtypes=np.array(param_dtypes),
+        )
+        print(f"Saved PCA reconstruction basis to: {basis_path}")
+
     return df, meta_info
 
 
@@ -459,6 +521,12 @@ def main():
         default=None,
         help="Custom output parquet file path (default: cache/<run_id>_pca.parquet).",
     )
+    parser.add_argument(
+        "--save-basis",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Save PCA basis vectors (PC1, PC2, mean, and parameter layout) to cache (default: True).",
+    )
 
     args = parser.parse_args()
 
@@ -473,6 +541,7 @@ def main():
         loss_metric=args.loss_metric,
         cache_dir=Path(args.cache_dir),
         output_path=Path(args.output) if args.output else None,
+        save_basis=args.save_basis,
     )
 
 

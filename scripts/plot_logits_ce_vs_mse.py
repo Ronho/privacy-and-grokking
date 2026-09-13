@@ -47,7 +47,7 @@ DEFAULT_PARQUET = PROJECT_ROOT / "cache" / "canary-selection-v1_mlflow_export.pa
 DEFAULT_STEP = 20000
 
 # 6 Runs für NO_GROK_MADD_CE_TRANSFORMER (Experiment: canary-selection-1, Seed: 696484)
-CE_RUNS = [
+CE_RUNS_MADD = [
     "0a341d15fecf4c3fa471fb6a35fb5e26",  # model_index: 0 (Target)
     "d0c6dd6ca6694ebfb978fa6575f77163",  # model_index: 1 (Validation)
     "175346abb6054cdcbcd9c7b1c8fa7bb8",  # model_index: 2 (Ref 0)
@@ -56,17 +56,8 @@ CE_RUNS = [
     "3978800e6aa542068b75fb8f599b96d5",  # model_index: 5 (Ref 3)
 ]
 
-# CE_RUNS = [
-#     "0272bca3642744aea30ee1cc53344d7b",  # model_index: 0 (Target)
-#     "7760a52da11b43f59bead76276dd4ad8",  # model_index: 1 (Validation)
-#     "ec8f2fb64273492faa9ca920962483e9",  # model_index: 2 (Ref 0)
-#     "1212e8c23dbe4e9493a8b109915e971f",  # model_index: 3 (Ref 1)
-#     "c8b1b58957bb43139bd24984eadb7a36",  # model_index: 4 (Ref 2)
-#     "2ff63a95288f4f1ea3f3dd27ce9a9eeb",  # model_index: 5 (Ref 3)
-# ]
-
 # 6 Runs für NO_GROK_MADD_MSE_TRANSFORMER (Experiment: canary-selection-1, Seed: 725792)
-MSE_RUNS = [
+MSE_RUNS_MADD = [
     "94558a882eca40b9b4a15972b2ee6f20",  # model_index: 0 (Target)
     "bb77cb85eb3742a5843a7f6d445dc71f",  # model_index: 1 (Validation)
     "f6be708ddce6408892f15adc948826a7",  # model_index: 2 (Ref 0)
@@ -74,15 +65,29 @@ MSE_RUNS = [
     "bbbda71e139b4a51ba3496c942167e74",  # model_index: 4 (Ref 2)
     "f9001c82258f42bbac54f7727ca78d5d",  # model_index: 5 (Ref 3)
 ]
-# cannary-selection
-# MSE_RUNS = [
-#     "b8fcc291e92148819b494f21958e6185",  # model_index: 0 (Target)
-#     "acfb1cfbd3b74c408c5aae81a45ddc33",  # model_index: 1 (Validation)
-#     "abecbf78934042628770006a8fe16bc4",  # model_index: 2 (Ref 0)
-#     "a09fc740c6bf42f28a89ef7473cd701d",  # model_index: 3 (Ref 1)
-#     "8a6f06b5417349a2ada0a58d6d958ad8",  # model_index: 4 (Ref 2)
-#     "201ee5b911ab4cecb76b4f790e8bb1fb",  # model_index: 5 (Ref 3)
-# ]
+
+# 6 Runs für GROK_MNIST_CE_MLP (canary-selection-v1)
+CE_RUNS_MNIST = [
+    "424b983a0b1949ef860708d7c81bd58f",  # Target
+    "24eda2cbcd0b47e2a417f07ab1c852ba",  # Validation
+    "35eeb04439984209be3289cf1717f5b9",  # Ref 0
+    "3d1e5759deef4af99248ebc6c581cc5a",  # Ref 1
+    "a451633d20bd4523b66fba5cf6ecdfa2",  # Ref 2
+    "0317a20721584e08afe789a612e2db41",  # Ref 3
+]
+
+# 6 Runs für GROK_MNIST_MSE_MLP (canary-selection-v1)
+MSE_RUNS_MNIST = [
+    "8db2fdccab07431b88271c095c8a3340",  # Target
+    "1c1f36ceade64664a2a13a1c968481ed",  # Validation
+    "4e4e974897a3432e92b547a2535174a9",  # Ref 0
+    "5ef3b7e613a44a97b5820436eed0c7cb",  # Ref 1
+    "78dfb6381fef43f1bb66946ee467961a",  # Ref 2
+    "f32c7e6585834823937b801942d05e1d",  # Ref 3
+]
+
+CE_RUNS = CE_RUNS_MADD
+MSE_RUNS = MSE_RUNS_MADD
 
 def download_artifact_bytes(
     run_id: str,
@@ -343,12 +348,13 @@ def plot_loss_overlay(
     out_vals: np.ndarray,
     in_name: str,
     out_name: str,
-    loss_type: Literal["ce", "mse"],
+    loss_type: Literal["ce", "mse", "mse_tc"],
     color_in: str,
     color_out: str,
     num_bins: int = 35,
+    auc: float | None = None,
 ):
-    """Plottet Realen bzw. Anderen Loss mit log10-Skalierung für Cross-Entropy."""
+    """Plottet Realen, Anderen oder Klassen-MSE Loss mit Dichte-Histogrammen und AUC-Badge."""
     if len(in_vals) == 0 and len(out_vals) == 0:
         ax.text(0.5, 0.5, "Keine Daten", ha="center", va="center", color="gray")
         return
@@ -384,10 +390,42 @@ def plot_loss_overlay(
             label=f"{out_name} (N={len(out_vals)}, $\\mu_{{\\log10}}={np.mean(out_p):.2f}$)",
         )
         ax.set_xlabel("CE-Loss: $\\log_{10}(\\text{CE})$", fontsize=10)
-    else:
-        # Standard lineare Skalierung für One-Hot MSE
+    elif loss_type == "mse_tc":
+        # Klassen-MSE (nur wahre Klasse): (z_y - 1)^2
         val_min = min(in_vals.min(), out_vals.min())
         val_max = max(in_vals.max(), out_vals.max())
+        if np.isclose(val_min, val_max):
+            val_max = val_min + 1.0
+        bins = np.linspace(val_min, val_max, num_bins + 1)
+
+        ax.hist(
+            in_vals,
+            bins=bins,
+            density=True,
+            alpha=0.55,
+            color=color_in,
+            edgecolor=color_in,
+            linewidth=0.8,
+            label=f"{in_name} (N={len(in_vals)}, $\\mu={np.mean(in_vals):.3g}$)",
+        )
+        ax.hist(
+            out_vals,
+            bins=bins,
+            density=True,
+            alpha=0.45,
+            color=color_out,
+            edgecolor=color_out,
+            linestyle="--",
+            linewidth=0.8,
+            label=f"{out_name} (N={len(out_vals)}, $\\mu={np.mean(out_vals):.3g}$)",
+        )
+        ax.set_xlabel("Klassen-MSE: $(z_y - 1)^2$", fontsize=10)
+    else:
+        # Standard lineare Skalierung für One-Hot MSE über alle Klassen
+        val_min = min(in_vals.min(), out_vals.min())
+        val_max = max(in_vals.max(), out_vals.max())
+        if np.isclose(val_min, val_max):
+            val_max = val_min + 1.0
         bins = np.linspace(val_min, val_max, num_bins + 1)
 
         ax.hist(
@@ -413,6 +451,19 @@ def plot_loss_overlay(
         )
         ax.set_xlabel("MSE-Loss (One-Hot): $\\frac{1}{C}\\sum (z_c - y_c)^2$", fontsize=10)
 
+    if auc is not None:
+        ax.text(
+            0.04,
+            0.92,
+            f"Attack AUC: {auc:.3f}",
+            transform=ax.transAxes,
+            fontsize=9.5,
+            fontweight="bold",
+            color="#0f172a",
+            bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#94a3b8", alpha=0.92, linewidth=1.0),
+            zorder=10,
+        )
+
     ax.set_ylabel("Dichte", fontsize=10)
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend(fontsize=8, loc="upper right")
@@ -427,6 +478,7 @@ def plot_informia_overlay(
     color_in: str = "#ea580c",
     color_out: str = "#06b6d4",
     num_bins: int = 35,
+    auc: float | None = None,
 ):
     """Plottet InfoRMIA-Scores mit robustem Zoom bzw. Broken-Axis bei extremen Abständen."""
     if len(in_vals) == 0 and len(out_vals) == 0:
@@ -476,6 +528,19 @@ def plot_informia_overlay(
         ax_l.spines["right"].set_visible(False)
         ax_r.spines["left"].set_visible(False)
         ax_r.yaxis.set_ticks([])
+
+        if auc is not None:
+            ax_l.text(
+                0.06,
+                0.90,
+                f"Attack AUC: {auc:.3f}",
+                transform=ax_l.transAxes,
+                fontsize=9.0,
+                fontweight="bold",
+                color="#0f172a",
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#ffffff", edgecolor="#94a3b8", alpha=0.92, linewidth=1.0),
+                zorder=10,
+            )
 
         d = 0.03
         kwargs = dict(transform=ax_l.transAxes, color="k", clip_on=False, linewidth=1.2)
@@ -534,10 +599,24 @@ def plot_informia_overlay(
         label=f"{out_name} (N={len(out_vals)}, $\\mu={np.mean(out_vals):.3g}$)",
     )
 
-    if n_outliers > 0:
+    if auc is not None:
         ax.text(
-            0.03,
-            0.88,
+            0.04,
+            0.92,
+            f"Attack AUC: {auc:.3f}",
+            transform=ax.transAxes,
+            fontsize=9.5,
+            fontweight="bold",
+            color="#0f172a",
+            bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#94a3b8", alpha=0.92, linewidth=1.0),
+            zorder=10,
+        )
+
+    if n_outliers > 0:
+        y_pos = 0.81 if auc is not None else 0.88
+        ax.text(
+            0.04,
+            y_pos,
             f"[{n_outliers} Ausreißer < {robust_min:.1f}]",
             transform=ax.transAxes,
             fontsize=8,
@@ -648,7 +727,172 @@ def plot_accuracy_and_overlap_panel(
     ax.set_ylim(-0.02, 1.05)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y*100:.0f}%"))
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+    legend_loc = "lower right" if not is_canary else "center right"
+    ax.legend(loc=legend_loc, fontsize=7.0, framealpha=0.88, labelspacing=0.25, handlelength=1.4, borderpad=0.35)
+
+
+def plot_loss_over_time_panel(
+    ax: plt.Axes,
+    df_metrics: pd.DataFrame,
+    target_run_id: str,
+    all_run_ids: list[str],
+    is_canary: bool,
+    real_loss_type: Literal["ce", "mse"],
+    selected_step: int,
+):
+    """Spalte 1: Zeichnet Train- und Test-Loss über die Zeit (Schritte) auf logarithmischer Skala."""
+    if df_metrics.empty:
+        ax.text(0.5, 0.5, "Keine Parquet-Daten", ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_ylabel("Loss", fontsize=9)
+        ax.set_xlabel("Schritt ($t$)", fontsize=9)
+        return
+
+    loss_name = "CE" if real_loss_type == "ce" else "MSE"
+    loss_field = "cross_entropy" if real_loss_type == "ce" else "mse"
+
+    if not is_canary:
+        train_key = f"eval/train/loss/{loss_field}/mean"
+        test_key = f"eval/test/loss/{loss_field}/mean"
+        label_train = f"Train ({loss_name})"
+        label_test = f"Test ({loss_name})"
+    else:
+        train_key = f"eval/train/canary_loss/{loss_field}/mean"
+        test_key = f"eval/test/canary_loss/{loss_field}/mean"
+        label_train = f"Canary Train ({loss_name})"
+        label_test = f"Canary Test ({loss_name})"
+
+    curve_configs = [
+        (train_key, label_train, "#2563eb", "-", 2.0),
+        (test_key, label_test, "#16a34a", "--", 2.0),
+    ]
+
+    for m_key, label_name, color, linestyle, lw in curve_configs:
+        sub_df = df_metrics[df_metrics["metric_name"] == m_key]
+        if sub_df.empty:
+            continue
+
+        target_sub = sub_df[sub_df["run_id"] == target_run_id].sort_values("step")
+        if not target_sub.empty:
+            t_clean = target_sub.drop_duplicates(subset=["step"])
+            t_valid = t_clean[t_clean["value"] > 0]
+            if not t_valid.empty:
+                ax.plot(
+                    t_valid["step"],
+                    t_valid["value"],
+                    label=label_name,
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=lw,
+                    alpha=0.95,
+                    zorder=4,
+                )
+                val_at_step = t_valid[t_valid["step"] == selected_step]
+                if not val_at_step.empty:
+                    val = float(val_at_step["value"].iloc[0])
+                    ax.scatter([selected_step], [val], color=color, s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    ax.axvline(
+        x=selected_step,
+        color="#475569",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.85,
+        label=f"t={selected_step:,}",
+        zorder=5,
+    )
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Trainings-Schritt ($t$)", fontsize=9.5)
+    ax.set_ylabel(f"Realer Loss ({loss_name}, log)", fontsize=9.5)
+    ax.grid(True, linestyle=":", alpha=0.6, which="both")
+    legend_loc = "upper right"
+    ax.legend(loc=legend_loc, fontsize=7.0, framealpha=0.88, labelspacing=0.25, handlelength=1.4, borderpad=0.35)
+
+
+def plot_norms_over_time_panel(
+    ax: plt.Axes,
+    df_metrics: pd.DataFrame,
+    target_run_id: str,
+    all_run_ids: list[str],
+    is_canary: bool,
+    real_loss_type: Literal["ce", "mse"],
+    selected_step: int,
+):
+    """Spalte 2: Zeichnet Gradientennorm (log-scale) und Gewichtsnorm ||W|| über die Zeit mit Doppel-Y-Achse."""
+    if df_metrics.empty:
+        ax.text(0.5, 0.5, "Keine Parquet-Daten", ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_ylabel("Norm", fontsize=9)
+        ax.set_xlabel("Schritt ($t$)", fontsize=9)
+        return
+
+    sub_g = df_metrics[(df_metrics["run_id"] == target_run_id) & (df_metrics["metric_name"] == "eval/grad_norm/total")].drop_duplicates("step").sort_values("step")
+    sub_w = df_metrics[(df_metrics["run_id"] == target_run_id) & (df_metrics["metric_name"] == "eval/weight_norm/total")].drop_duplicates("step").sort_values("step")
+
+    ax_w = ax.twinx()
+    l1, l2 = None, None
+
+    if not sub_g.empty:
+        sub_g_valid = sub_g[sub_g["value"] > 0]
+        if not sub_g_valid.empty:
+            l1 = ax.plot(
+                sub_g_valid["step"],
+                sub_g_valid["value"],
+                color="#dc2626",
+                linestyle="-",
+                linewidth=2.0,
+                alpha=0.95,
+                label="Grad-Norm (log)",
+                zorder=4,
+            )
+            val_at_s = sub_g_valid[sub_g_valid["step"] == selected_step]
+            if not val_at_s.empty:
+                val = float(val_at_s["value"].iloc[0])
+                ax.scatter([selected_step], [val], color="#dc2626", s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    if not sub_w.empty:
+        l2 = ax_w.plot(
+            sub_w["step"],
+            sub_w["value"],
+            color="#7c3aed",
+            linestyle="--",
+            linewidth=2.0,
+            alpha=0.95,
+            label="Gewichts-Norm ||W||",
+            zorder=4,
+        )
+        val_w_at_s = sub_w[sub_w["step"] == selected_step]
+        if not val_w_at_s.empty:
+            val_w = float(val_w_at_s["value"].iloc[0])
+            ax_w.scatter([selected_step], [val_w], color="#7c3aed", s=35, zorder=6, edgecolors="#ffffff", linewidths=1.0)
+
+    ax.axvline(
+        x=selected_step,
+        color="#475569",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.85,
+        label=f"t={selected_step:,}",
+        zorder=5,
+    )
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Trainings-Schritt ($t$)", fontsize=9.5)
+    ax.set_ylabel("Grad-Norm (total, log)", color="#dc2626", fontsize=9.5)
+    ax.tick_params(axis="y", labelcolor="#dc2626")
+    ax_w.set_ylabel("Gewichts-Norm ||W||", color="#7c3aed", fontsize=9.5)
+    ax_w.tick_params(axis="y", labelcolor="#7c3aed")
+    ax.grid(True, linestyle=":", alpha=0.6, which="both")
+
+    # Einheitliche Legende
+    lines = []
+    if l1:
+        lines.extend(l1)
+    if l2:
+        lines.extend(l2)
+    lines.append(plt.Line2D([0], [0], color="#475569", linestyle="--", linewidth=1.4, label=f"t={selected_step:,}"))
+    labels = [line.get_label() for line in lines]
+    legend_loc = "upper right"
+    ax.legend(lines, labels, loc=legend_loc, fontsize=6.8, framealpha=0.88, labelspacing=0.25, handlelength=1.4, borderpad=0.35)
 
 
 def plot_attack_auc_panel(
@@ -730,7 +974,8 @@ def plot_attack_auc_panel(
     ax.set_ylabel("Attack ROC AUC", fontsize=9.5)
     ax.set_ylim(0.40, 1.03)
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+    legend_loc = "upper right" if not is_canary else "center right"
+    ax.legend(loc=legend_loc, fontsize=7.0, framealpha=0.88, labelspacing=0.25, handlelength=1.4, borderpad=0.35)
 
 
 def plot_attack_tpr_panel(
@@ -813,10 +1058,11 @@ def plot_attack_tpr_panel(
     ax.set_ylim(-0.02, 1.03)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y*100:.0f}%"))
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper left", fontsize=7.2, framealpha=0.90)
+    legend_loc = "upper right" if not is_canary else "center right"
+    ax.legend(loc=legend_loc, fontsize=7.0, framealpha=0.88, labelspacing=0.25, handlelength=1.4, borderpad=0.35)
 
 
-def plot_2row_8col_figure(
+def plot_2row_11col_figure(
     target_model_name: str,
     logits_res: dict[str, tuple[np.ndarray, np.ndarray]],
     real_loss_label: str,
@@ -825,6 +1071,7 @@ def plot_2row_8col_figure(
     other_loss_label: str,
     other_loss_type: Literal["ce", "mse"],
     other_loss_res: dict[str, np.ndarray],
+    tc_mse_res: dict[str, np.ndarray],
     informia_res: dict[str, np.ndarray],
     attack_results: dict,
     df_metrics: pd.DataFrame | None,
@@ -833,8 +1080,8 @@ def plot_2row_8col_figure(
     step: int,
     output_path: Path,
 ):
-    """Erstellt eine optimierte 2x8 Abbildung pro Modell mit Dynamikkurven über die Zeit und Verteilungen."""
-    fig, axes = plt.subplots(2, 8, figsize=(38, 10.5))
+    """Erstellt eine optimierte 2x11 Abbildung pro Modell mit Dynamikkurven über die Zeit (Loss, Normen) und Verteilungen."""
+    fig, axes = plt.subplots(2, 11, figsize=(51, 10.5))
     fig.suptitle(
         f"Verteilungs- & Dynamikanalyse: {target_model_name} (Schritt t = {step:,})",
         fontsize=18,
@@ -860,12 +1107,15 @@ def plot_2row_8col_figure(
 
     col_headers = [
         "Genauigkeit & Loss-Overlap\nüber Zeit",
+        "Train- & Test-Loss\nüber Zeit",
+        "Gradienten- & Gewichts-Norm\nüber Zeit",
         "Attack AUC\nüber Zeit",
         "Attack TPR @ 1% FPR\nüber Zeit",
-        "Logit-Verteilung\n(Train)",
-        "Logit-Verteilung\n(Test)",
+        "Logit-Verteilung: Richtig ($y$)\nTrain vs. Test",
+        "Logit-Verteilung: Falsch ($j \\neq y$)\nTrain vs. Test",
         f"{real_loss_header}\nTrain vs. Test",
         f"{other_loss_header}\nTrain vs. Test",
+        "Klassen-MSE: $(z_y - 1)^2$\nTrain vs. Test",
         "InfoRMIA Score\nTrain vs. Test",
     ]
 
@@ -876,6 +1126,10 @@ def plot_2row_8col_figure(
 
     for row_idx, (row_label, split_key, in_key, out_key, in_name, out_name, is_canary) in enumerate(row_configs):
         split_att = attack_results.get(split_key, {})
+        auc_real = split_att.get("real_loss", (None,))[0]
+        auc_other = split_att.get("other_loss", (None,))[0]
+        auc_tc_mse = split_att.get("tc_mse", (None,))[0]
+        auc_logit = split_att.get("logit_corr", (None,))[0]
         auc_info = split_att.get("informia", (None, None, None))[0]
         fpr_info = split_att.get("informia", (None, None, None))[1]
         tpr_info = split_att.get("informia", (None, None, None))[2]
@@ -892,9 +1146,31 @@ def plot_2row_8col_figure(
             selected_step=step,
         )
 
-        # Spalte 1: Attack AUC über Zeit
-        plot_attack_auc_panel(
+        # Spalte 1: Train- und Test-Loss über Zeit (log-scale)
+        plot_loss_over_time_panel(
             ax=axes[row_idx, 1],
+            df_metrics=df_m,
+            target_run_id=target_run_id,
+            all_run_ids=all_run_ids,
+            is_canary=is_canary,
+            real_loss_type=real_loss_type,
+            selected_step=step,
+        )
+
+        # Spalte 2: Gradienten- und Gewichtsnorm über Zeit (Doppel-Y-Achse)
+        plot_norms_over_time_panel(
+            ax=axes[row_idx, 2],
+            df_metrics=df_m,
+            target_run_id=target_run_id,
+            all_run_ids=all_run_ids,
+            is_canary=is_canary,
+            real_loss_type=real_loss_type,
+            selected_step=step,
+        )
+
+        # Spalte 3: Attack AUC über Zeit
+        plot_attack_auc_panel(
+            ax=axes[row_idx, 3],
             df_metrics=df_m,
             target_run_id=target_run_id,
             all_run_ids=all_run_ids,
@@ -904,9 +1180,9 @@ def plot_2row_8col_figure(
             informia_auc=auc_info,
         )
 
-        # Spalte 2: Attack TPR @ 1% FPR über Zeit
+        # Spalte 4: Attack TPR @ 1% FPR über Zeit
         plot_attack_tpr_panel(
-            ax=axes[row_idx, 2],
+            ax=axes[row_idx, 4],
             df_metrics=df_m,
             target_run_id=target_run_id,
             all_run_ids=all_run_ids,
@@ -916,73 +1192,103 @@ def plot_2row_8col_figure(
             informia_tpr1=tpr1_info,
         )
 
-        # Spalte 3: Logit-Verteilung Train
-        ax_l_train = axes[row_idx, 3]
         corr_in, wrong_in = logits_res.get(in_key, (np.array([]), np.array([])))
-        if len(corr_in) > 0:
-            ax_l_train.hist(
-                corr_in,
-                bins=40,
-                density=True,
-                alpha=0.5,
-                color="#2563eb",
-                label=f"Richtig ($y$, N={len(corr_in)})",
-                edgecolor="#1d4ed8",
-                linewidth=0.8,
-            )
-        if len(wrong_in) > 0:
-            ax_l_train.hist(
-                wrong_in,
-                bins=50,
-                density=True,
-                alpha=0.4,
-                color="#dc2626",
-                label=f"Falsch ($j \\neq y$, N={len(wrong_in)})",
-                edgecolor="#b91c1c",
-                linestyle="--",
-                linewidth=0.8,
-            )
-        ax_l_train.set_xlabel("Logit-Wert ($z$)", fontsize=9.5)
-        ax_l_train.set_ylabel("Dichte", fontsize=9.5)
-        ax_l_train.grid(True, linestyle=":", alpha=0.6)
-        if len(corr_in) > 0 or len(wrong_in) > 0:
-            ax_l_train.legend(fontsize=7.2, loc="upper right")
-
-        # Spalte 4: Logit-Verteilung Test
-        ax_l_test = axes[row_idx, 4]
         corr_out, wrong_out = logits_res.get(out_key, (np.array([]), np.array([])))
-        if len(corr_out) > 0:
-            ax_l_test.hist(
-                corr_out,
-                bins=40,
+
+        # Spalte 5: Logit-Verteilung Richtig (Train vs. Test)
+        ax_l_corr = axes[row_idx, 5]
+        if len(corr_in) > 0 and len(corr_out) > 0:
+            c_min = min(float(np.min(corr_in)), float(np.min(corr_out)))
+            c_max = max(float(np.max(corr_in)), float(np.max(corr_out)))
+            if np.isclose(c_min, c_max):
+                c_max = c_min + 1.0
+            bins_c = np.linspace(c_min, c_max, 45)
+            ax_l_corr.hist(
+                corr_in,
+                bins=bins_c,
                 density=True,
                 alpha=0.5,
                 color="#2563eb",
-                label=f"Richtig ($y$, N={len(corr_out)})",
+                label=f"{in_name} (N={len(corr_in):,})",
                 edgecolor="#1d4ed8",
                 linewidth=0.8,
             )
-        if len(wrong_out) > 0:
-            ax_l_test.hist(
-                wrong_out,
-                bins=50,
+            ax_l_corr.hist(
+                corr_out,
+                bins=bins_c,
                 density=True,
-                alpha=0.4,
-                color="#dc2626",
-                label=f"Falsch ($j \\neq y$, N={len(wrong_out)})",
-                edgecolor="#b91c1c",
-                linestyle="--",
+                alpha=0.45,
+                color="#f59e0b",
+                label=f"{out_name} (N={len(corr_out):,})",
+                edgecolor="#d97706",
                 linewidth=0.8,
             )
-        ax_l_test.set_xlabel("Logit-Wert ($z$)", fontsize=9.5)
-        ax_l_test.set_ylabel("Dichte", fontsize=9.5)
-        ax_l_test.grid(True, linestyle=":", alpha=0.6)
-        if len(corr_out) > 0 or len(wrong_out) > 0:
-            ax_l_test.legend(fontsize=7.2, loc="upper right")
+        elif len(corr_in) > 0:
+            ax_l_corr.hist(corr_in, bins=40, density=True, alpha=0.5, color="#2563eb", label=f"{in_name} (N={len(corr_in):,})")
+        elif len(corr_out) > 0:
+            ax_l_corr.hist(corr_out, bins=40, density=True, alpha=0.45, color="#f59e0b", label=f"{out_name} (N={len(corr_out):,})")
 
-        # Spalte 5: Realer Loss (Train vs. Test)
+        if auc_logit is not None:
+            ax_l_corr.text(
+                0.04,
+                0.92,
+                f"Attack AUC: {auc_logit:.3f}",
+                transform=ax_l_corr.transAxes,
+                fontsize=9.5,
+                fontweight="bold",
+                color="#0f172a",
+                bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#94a3b8", alpha=0.92, linewidth=1.0),
+                zorder=10,
+            )
+
+        ax_l_corr.set_xlabel("Logit-Wert ($z_y$)", fontsize=9.5)
+        ax_l_corr.set_ylabel("Dichte", fontsize=9.5)
+        ax_l_corr.grid(True, linestyle=":", alpha=0.6)
+        if len(corr_in) > 0 or len(corr_out) > 0:
+            ax_l_corr.legend(fontsize=7.2, loc="upper right")
+
+        # Spalte 6: Logit-Verteilung Falsch (Train vs. Test)
+        ax_l_wrong = axes[row_idx, 6]
+        if len(wrong_in) > 0 and len(wrong_out) > 0:
+            w_min = min(float(np.min(wrong_in)), float(np.min(wrong_out)))
+            w_max = max(float(np.max(wrong_in)), float(np.max(wrong_out)))
+            if np.isclose(w_min, w_max):
+                w_max = w_min + 1.0
+            bins_w = np.linspace(w_min, w_max, 50)
+            ax_l_wrong.hist(
+                wrong_in,
+                bins=bins_w,
+                density=True,
+                alpha=0.5,
+                color="#dc2626",
+                label=f"{in_name} (N={len(wrong_in):,})",
+                edgecolor="#b91c1c",
+                linewidth=0.8,
+            )
+            ax_l_wrong.hist(
+                wrong_out,
+                bins=bins_w,
+                density=True,
+                alpha=0.45,
+                color="#7c3aed",
+                label=f"{out_name} (N={len(wrong_out):,})",
+                edgecolor="#6d28d9",
+                linewidth=0.8,
+            )
+        elif len(wrong_in) > 0:
+            ax_l_wrong.hist(wrong_in, bins=50, density=True, alpha=0.5, color="#dc2626", label=f"{in_name} (N={len(wrong_in):,})")
+        elif len(wrong_out) > 0:
+            ax_l_wrong.hist(wrong_out, bins=50, density=True, alpha=0.45, color="#7c3aed", label=f"{out_name} (N={len(wrong_out):,})")
+
+        ax_l_wrong.set_xlabel("Logit-Wert ($z_j, j \\neq y$)", fontsize=9.5)
+        ax_l_wrong.set_ylabel("Dichte", fontsize=9.5)
+        ax_l_wrong.grid(True, linestyle=":", alpha=0.6)
+        if len(wrong_in) > 0 or len(wrong_out) > 0:
+            ax_l_wrong.legend(fontsize=7.2, loc="upper right")
+
+        # Spalte 7: Realer Loss (Train vs. Test)
         plot_loss_overlay(
-            ax=axes[row_idx, 5],
+            ax=axes[row_idx, 7],
             in_vals=real_loss_res.get(in_key, np.array([])),
             out_vals=real_loss_res.get(out_key, np.array([])),
             in_name=in_name,
@@ -990,11 +1296,12 @@ def plot_2row_8col_figure(
             loss_type=real_loss_type,
             color_in="#059669",
             color_out="#f59e0b",
+            auc=auc_real,
         )
 
-        # Spalte 6: Anderer Loss (Train vs. Test)
+        # Spalte 8: Anderer Loss (Train vs. Test)
         plot_loss_overlay(
-            ax=axes[row_idx, 6],
+            ax=axes[row_idx, 8],
             in_vals=other_loss_res.get(in_key, np.array([])),
             out_vals=other_loss_res.get(out_key, np.array([])),
             in_name=in_name,
@@ -1002,17 +1309,32 @@ def plot_2row_8col_figure(
             loss_type=other_loss_type,
             color_in="#7c3aed",
             color_out="#ec4899",
+            auc=auc_other,
         )
 
-        # Spalte 7: InfoRMIA Score (Train vs. Test)
+        # Spalte 9: Klassen-MSE (Train vs. Test): (z_y - 1)^2
+        plot_loss_overlay(
+            ax=axes[row_idx, 9],
+            in_vals=tc_mse_res.get(in_key, np.array([])),
+            out_vals=tc_mse_res.get(out_key, np.array([])),
+            in_name=in_name,
+            out_name=out_name,
+            loss_type="mse_tc",
+            color_in="#d97706",
+            color_out="#6366f1",
+            auc=auc_tc_mse,
+        )
+
+        # Spalte 10: InfoRMIA Score (Train vs. Test)
         plot_informia_overlay(
-            ax=axes[row_idx, 7],
+            ax=axes[row_idx, 10],
             in_vals=informia_res.get(in_key, np.array([])),
             out_vals=informia_res.get(out_key, np.array([])),
             in_name=in_name,
             out_name=out_name,
             color_in="#ea580c",
             color_out="#06b6d4",
+            auc=auc_info,
         )
 
         # Zeilenbeschriftung ganz links
@@ -1029,15 +1351,18 @@ def plot_2row_8col_figure(
             bbox=dict(boxstyle="round,pad=0.4", facecolor="#f8fafc", edgecolor="#94a3b8", linewidth=1.2),
         )
 
-    plt.subplots_adjust(left=0.045, right=0.99, top=0.90, bottom=0.08, hspace=0.30, wspace=0.25)
+    plt.subplots_adjust(left=0.035, right=0.99, top=0.90, bottom=0.08, hspace=0.30, wspace=0.32)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=200)
     plt.close()
-    print(f"Optimierter 2x8 Verteilungs- & Dynamik-Plot gespeichert unter:\n  -> {output_path}")
+    print(f"Optimierter 2x11 Verteilungs- & Dynamik-Plot gespeichert unter:\n  -> {output_path}")
 
 
-# Kompatibilitäts-Alias
-plot_2row_5col_figure = plot_2row_8col_figure
+# Kompatibilitäts-Aliase
+plot_2row_10col_figure = plot_2row_11col_figure
+plot_2row_9col_figure = plot_2row_11col_figure
+plot_2row_8col_figure = plot_2row_11col_figure
+plot_2row_5col_figure = plot_2row_11col_figure
 
 
 def compute_roc_and_auc(in_scores: np.ndarray, out_scores: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
@@ -1067,8 +1392,8 @@ def plot_auc_comparison(
     )
 
     models_data = [
-        ("NO_GROK_MADD_CE_TRANSFORMER", ce_attack_results, 0),
-        ("NO_GROK_MADD_MSE_TRANSFORMER", mse_attack_results, 1),
+        (ce_attack_results.get("model_name", "CE-Modell"), ce_attack_results, 0),
+        (mse_attack_results.get("model_name", "MSE-Modell"), mse_attack_results, 1),
     ]
 
     for model_name, res, row_idx in models_data:
@@ -1099,6 +1424,16 @@ def plot_auc_comparison(
                 linewidth=2.2,
                 label=f"Anderer Loss ({data['other_loss_name']}): AUC = {auc_other:.3f}",
             )
+            if "tc_mse" in data:
+                auc_tc, fpr_tc, tpr_tc = data["tc_mse"]
+                ax.plot(
+                    fpr_tc,
+                    tpr_tc,
+                    color="#d97706",
+                    linewidth=2.0,
+                    linestyle=":",
+                    label=f"Klassen-MSE $(z_y-1)^2$: AUC = {auc_tc:.3f}",
+                )
             ax.plot(
                 fpr_info,
                 tpr_info,
@@ -1307,7 +1642,20 @@ def evaluate_model_group(
         "test_canary": informia_ctest,
     }
 
-    # 5. AUC Berechnung für ROC-Plot und Dynamik-Annotationen
+    # 5. Klassen-MSE (nur wahre Klasse): (z_y - 1)^2
+    t_tc_mse = (t_corr - 1.0) ** 2
+    te_tc_mse = (te_corr - 1.0) ** 2
+    tc_tc_mse = (tc_corr - 1.0) ** 2
+    tec_tc_mse = (tec_corr - 1.0) ** 2
+
+    tc_mse_res = {
+        "train_reg": t_tc_mse,
+        "test_reg": te_tc_mse,
+        "train_canary": tc_tc_mse,
+        "test_canary": tec_tc_mse,
+    }
+
+    # 6. AUC Berechnung für ROC-Plot und Dynamik-Annotationen
     real_loss_in_reg = -real_loss_res["train_reg"]
     real_loss_out_reg = -real_loss_res["test_reg"]
     real_loss_in_can = -real_loss_res["train_canary"]
@@ -1318,10 +1666,18 @@ def evaluate_model_group(
     other_loss_in_can = -other_loss_res["train_canary"]
     other_loss_out_can = -other_loss_res["test_canary"]
 
+    tc_mse_in_reg = -tc_mse_res["train_reg"]
+    tc_mse_out_reg = -tc_mse_res["test_reg"]
+    tc_mse_in_can = -tc_mse_res["train_canary"]
+    tc_mse_out_can = -tc_mse_res["test_canary"]
+
     attack_results = {
+        "model_name": model_name,
         "regular": {
             "real_loss": compute_roc_and_auc(real_loss_in_reg, real_loss_out_reg),
             "other_loss": compute_roc_and_auc(other_loss_in_reg, other_loss_out_reg),
+            "tc_mse": compute_roc_and_auc(tc_mse_in_reg, tc_mse_out_reg),
+            "logit_corr": compute_roc_and_auc(t_corr, te_corr),
             "informia": compute_roc_and_auc(informia_train, informia_test),
             "optimal_a": opt_a_reg,
             "val_auc": val_auc_reg,
@@ -1331,6 +1687,8 @@ def evaluate_model_group(
         "canary": {
             "real_loss": compute_roc_and_auc(real_loss_in_can, real_loss_out_can),
             "other_loss": compute_roc_and_auc(other_loss_in_can, other_loss_out_can),
+            "tc_mse": compute_roc_and_auc(tc_mse_in_can, tc_mse_out_can),
+            "logit_corr": compute_roc_and_auc(tc_corr, tec_corr),
             "informia": compute_roc_and_auc(informia_ctrain, informia_ctest),
             "optimal_a": opt_a_canary,
             "val_auc": val_auc_canary,
@@ -1339,9 +1697,9 @@ def evaluate_model_group(
         },
     }
 
-    # Optimierter 2x8 Verteilungs- & Dynamikplot speichern
+    # Optimierter 2x11 Verteilungs- & Dynamikplot speichern
     dist_out_path = output_dir / f"distribution_{model_name}_step_{step}.png"
-    plot_2row_8col_figure(
+    plot_2row_11col_figure(
         target_model_name=model_name,
         logits_res=logits_res,
         real_loss_label=real_loss_label,
@@ -1350,6 +1708,7 @@ def evaluate_model_group(
         other_loss_label=other_loss_label,
         other_loss_type=other_loss_type,
         other_loss_res=other_loss_res,
+        tc_mse_res=tc_mse_res,
         informia_res=informia_res,
         attack_results=attack_results,
         df_metrics=df_metrics,
@@ -1398,6 +1757,13 @@ def main():
         help="Device (cuda / cpu)",
     )
     parser.add_argument(
+        "--preset",
+        type=str,
+        default="madd",
+        choices=["madd", "mnist_mlp", "no_grok_mnist_mlp"],
+        help="Modell-Preset: 'madd' (MADD Transformer), 'mnist_mlp' (GROK MNIST MLP) oder 'no_grok_mnist_mlp'",
+    )
+    parser.add_argument(
         "--offline-a",
         type=float,
         default=0.5,
@@ -1416,8 +1782,38 @@ def main():
     output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.preset == "mnist_mlp":
+        ce_model_name = "GROK_MNIST_CE_MLP"
+        mse_model_name = "GROK_MNIST_MSE_MLP"
+        ce_runs = CE_RUNS_MNIST
+        mse_runs = MSE_RUNS_MNIST
+    elif args.preset == "no_grok_mnist_mlp":
+        ce_model_name = "NO_GROK_MNIST_CE_MLP"
+        mse_model_name = "NO_GROK_MNIST_MSE_MLP"
+        ce_runs = [
+            "0b3934d3bf794857809d3ad1937f63f2",
+            "9868e73cd699490dad741637936a64cd",
+            "f0bf6393069b4b9c935e0a9a562199a0",
+            "3b7d5fe0e3a34231ad2558676c6acf81",
+            "ff21f1138d3e41c6b01764c2de3119e6",
+            "088b42f7979f4c769bd6256d29b08ee0",
+        ]
+        mse_runs = [
+            "8316021fe2b04ff181119c35e9b04c9e",
+            "5b1baa4e4bb84b6389ea9a1cbe75d230",
+            "c0825a6c1d684a319bd053d5ae5cf700",
+            "16b26006f6e2472c86a7cf3b2943daaf",
+            "4cf3d1ba5ff64058b20cf3fc02cee8f6",
+            "93b1d61dad86440b88c43e777ed09205",
+        ]
+    else:
+        ce_model_name = "NO_GROK_MADD_CE_TRANSFORMER"
+        mse_model_name = "NO_GROK_MADD_MSE_TRANSFORMER"
+        ce_runs = CE_RUNS_MADD
+        mse_runs = MSE_RUNS_MADD
+
     parquet_path = Path(args.parquet)
-    all_runs = list(dict.fromkeys(CE_RUNS + MSE_RUNS))
+    all_runs = list(dict.fromkeys(ce_runs + mse_runs))
     print(f"Lade Dynamik-Metriken aus Parquet: {parquet_path}")
     df_metrics = load_parquet_metrics(parquet_path, all_runs)
     if not df_metrics.empty:
@@ -1426,13 +1822,16 @@ def main():
         print("  -> Keine Parquet-Daten geladen (Zeitreihen-Spalten bleiben leer).")
 
     print(f"=== Gesamt-Analyse für Schritt t = {args.step} (Optimiertes 2x8 Layout) ===")
+    print(f"Preset:       {args.preset}")
+    print(f"CE Modell:    {ce_model_name}")
+    print(f"MSE Modell:   {mse_model_name}")
     print(f"Tracking URI: {args.tracking_uri}")
     print(f"Device:       {args.device}")
 
-    # 1. CE Transformer Gruppe
+    # 1. CE Gruppe
     ce_attack_res = evaluate_model_group(
-        model_name="NO_GROK_MADD_CE_TRANSFORMER",
-        run_ids=CE_RUNS,
+        model_name=ce_model_name,
+        run_ids=ce_runs,
         real_loss_type="ce",
         step=args.step,
         device=args.device,
@@ -1443,10 +1842,10 @@ def main():
         df_metrics=df_metrics,
     )
 
-    # 2. MSE Transformer Gruppe
+    # 2. MSE Gruppe
     mse_attack_res = evaluate_model_group(
-        model_name="NO_GROK_MADD_MSE_TRANSFORMER",
-        run_ids=MSE_RUNS,
+        model_name=mse_model_name,
+        run_ids=mse_runs,
         real_loss_type="mse",
         step=args.step,
         device=args.device,
@@ -1466,24 +1865,25 @@ def main():
         output_path=auc_plot_path,
     )
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 96)
     print(f"ERGEBNIS-ÜBERSICHT: AUC-Werte bei Schritt t = {args.step}")
-    print("=" * 80)
-    print(f"{'Modell':<30} | {'Datensatz':<9} | {'Realer Loss':<11} | {'Anderer Loss':<12} | {'opt a':<6} | {'InfoRMIA':<8}")
-    print("-" * 80)
+    print("=" * 96)
+    print(f"{'Modell':<24} | {'Datensatz':<9} | {'Realer Loss':<11} | {'Anderer Loss':<12} | {'Klassen-MSE':<11} | {'opt a':<6} | {'InfoRMIA':<8}")
+    print("-" * 96)
 
     for m_name, res in [
-        ("NO_GROK_MADD_CE_TRANSFORMER", ce_attack_res),
-        ("NO_GROK_MADD_MSE_TRANSFORMER", mse_attack_res),
+        (ce_model_name, ce_attack_res),
+        (mse_model_name, mse_attack_res),
     ]:
         for s_key, s_label in [("regular", "Regulär"), ("canary", "Canary")]:
             d = res[s_key]
             auc_r = d["real_loss"][0]
             auc_o = d["other_loss"][0]
+            auc_tc = d.get("tc_mse", (0.0,))[0]
             auc_i = d["informia"][0]
             opt_a = d.get("optimal_a", args.offline_a)
-            print(f"{m_name:<30} | {s_label:<9} | {auc_r:<11.4f} | {auc_o:<12.4f} | {opt_a:<6.1f} | {auc_i:<8.4f}")
-    print("=" * 80)
+            print(f"{m_name:<24} | {s_label:<9} | {auc_r:<11.4f} | {auc_o:<12.4f} | {auc_tc:<11.4f} | {opt_a:<6.1f} | {auc_i:<8.4f}")
+    print("=" * 96)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 cache/
 data/
+media/
 *.png
 *.pdf
 *.parquet
