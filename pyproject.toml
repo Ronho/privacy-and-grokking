@@ -19,7 +19,6 @@ dependencies = [
     "structlog==25.5.0",
     "tqdm==4.67.1",
     "typer==0.20.0",
-    "manim>=0.21.0",
 ]
 
 [dependency-groups]
@@ -34,6 +33,9 @@ dev = [
 pag = "privacy_and_grokking.cli:app"
 
 [project.optional-dependencies]
+viz = [
+  "manim==0.21.0",
+]
 cpu = [
   "torch==2.9.0",
   "torchvision>=0.24.0",

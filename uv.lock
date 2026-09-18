@@ -2490,7 +2490,6 @@ dependencies = [
     { name = "av" },
     { name = "captum" },
     { name = "ipykernel" },
-    { name = "manim" },
     { name = "matplotlib" },
     { name = "mlflow" },
     { name = "numpy" },
@@ -2521,6 +2520,9 @@ cu130 = [
     { name = "torchvision", version = "0.24.0", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(python_full_version < '3.15' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-20-privacy-and-grokking-cu130') or (python_full_version >= '3.15' and extra == 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (platform_machine != 'aarch64' and extra == 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (sys_platform != 'linux' and extra == 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu128') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
     { name = "torchvision", version = "0.24.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(python_full_version >= '3.15' and extra == 'extra-20-privacy-and-grokking-cu130') or (python_full_version < '3.15' and extra == 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (platform_machine != 'aarch64' and extra == 'extra-20-privacy-and-grokking-cu130') or (platform_python_implementation != 'CPython' and extra == 'extra-20-privacy-and-grokking-cu130') or (sys_platform != 'linux' and extra != 'extra-20-privacy-and-grokking-cu128' and extra == 'extra-20-privacy-and-grokking-cu130') or (sys_platform != 'linux' and extra != 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu128') or (extra == 'extra-20-privacy-and-grokking-cpu' and extra == 'extra-20-privacy-and-grokking-cu130')" },
 ]
+viz = [
+    { name = "manim" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2535,7 +2537,7 @@ requires-dist = [
     { name = "av", specifier = "==16.1.0" },
     { name = "captum", specifier = "==0.7.0" },
     { name = "ipykernel", specifier = "==7.0.1" },
-    { name = "manim", specifier = ">=0.21.0" },
+    { name = "manim", marker = "extra == 'viz'", specifier = "==0.21.0" },
     { name = "matplotlib", specifier = "==3.10.7" },
     { name = "mlflow", specifier = "==3.10.0" },
     { name = "numpy", specifier = "==2.3.4" },
@@ -2554,7 +2556,7 @@ requires-dist = [
     { name = "tqdm", specifier = "==4.67.1" },
     { name = "typer", specifier = "==0.20.0" },
 ]
-provides-extras = ["cpu", "cu128", "cu130"]
+provides-extras = ["viz", "cpu", "cu128", "cu130"]
 
 [package.metadata.requires-dev]
 dev = [
