@@ -16,6 +16,8 @@ from tqdm import tqdm
 from typing import Annotated
 
 DEFAULT_TRACKING_URI = "http://localhost:5051"
+_tracking_uri = DEFAULT_TRACKING_URI
+
 BASE_DIR = Path(__file__).parent.parent.parent
 CACHE_DIR = f"{BASE_DIR}/cache"
 # Runs
@@ -33,7 +35,7 @@ GRID_FILE = f"{TRAJECTORY_DIR}/grid.json"
 app = typer.Typer()
 
 def fetch_run(run_id: str):
-    client = MlflowClient(DEFAULT_TRACKING_URI)
+    client = MlflowClient(_tracking_uri)
     try:
         run = client.get_run(run_id)
         run_name = run.data.tags.get("mlflow.runName", run.info.run_name or run_id)
@@ -49,7 +51,7 @@ def get_available_checkpoints(run_id: str) -> list[int]:
     if info_file.exists():
         return sorted(json.loads(info_file.read_bytes())["steps"])
     
-    url = f"{DEFAULT_TRACKING_URI}/api/2.0/mlflow/artifacts/list?run_id={run_id}&path=checkpoints"
+    url = f"{_tracking_uri}/api/2.0/mlflow/artifacts/list?run_id={run_id}&path=checkpoints"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -74,8 +76,7 @@ def get_checkpoint_weight(run_id: str, step: int):
     if model_file.exists():
         return torch.load(model_file, map_location="cpu", weights_only=True)
 
-
-    url = f"{DEFAULT_TRACKING_URI}/get-artifact?path=checkpoints/{step}/model.pth&run_uuid={run_id}"
+    url = f"{_tracking_uri}/get-artifact?path=checkpoints/{step}/model.pth&run_uuid={run_id}"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -98,7 +99,7 @@ def get_training_config(run_id: str) -> TrainConfig:
         config = TrainConfig.model_validate(json.loads(config_file.read_bytes()))
         return config
 
-    url = f"{DEFAULT_TRACKING_URI}/get-artifact?path=training_config.json&run_uuid={run_id}"
+    url = f"{_tracking_uri}/get-artifact?path=training_config.json&run_uuid={run_id}"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -234,10 +235,10 @@ def compute_sharpness_power_iteration(
     max_iter: int = 6,
     use_sdpa_math: bool = False,
 ) -> float:
-    if use_sdpa_math:
+    try:
         from torch.nn.attention import SDPBackend, sdpa_kernel
         ctx = sdpa_kernel([SDPBackend.MATH])
-    else:
+    except ImportError:
         from contextlib import nullcontext
         ctx = nullcontext()
 
@@ -376,7 +377,10 @@ def main(
     grid_resolution: Annotated[int, typer.Option(help="Grid resolution (points per axis)")] = 50,
     grid_margin: Annotated[float, typer.Option(help="Grid margin beyond model bounds")] = 0.1,
     compute_hessian: Annotated[bool, typer.Option(help="Compute sharpness using power iteration")] = False,
+    tracking_uri: Annotated[str, typer.Option(help="Tracking URI for MLflow")] = DEFAULT_TRACKING_URI,
 ):
+    global _tracking_uri
+    _tracking_uri = tracking_uri
     Logger().setup()
     logger = Logger.get()
     logger.info(f"Run ID: {run_id}")

@@ -12,6 +12,7 @@ class MetricsConfig(BaseModel):
     # Logging frequency
     log_frequency: int = 1000
     heavy_metrics_log_frequency: int = 1000
+    optimizer_metrics_log_frequency: int | None = None
     log_every_n_epochs: int | None = 10
     heavy_log_every_n_epochs: int | None = 10
 
@@ -20,6 +21,7 @@ class MetricsConfig(BaseModel):
     accuracy: bool = True
     weight_norms: bool = True
     gradient_norms: bool = True
+    optimizer_internals: bool = True
 
     # Distribution comparison metrics (between train/test losses)
     distribution_overlap: bool = True

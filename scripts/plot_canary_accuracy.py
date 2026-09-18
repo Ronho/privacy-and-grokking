@@ -136,6 +136,9 @@ def main():
     parser.add_argument(
         "--linear_x", action="store_true", help="Use linear scale for x-axis instead of log scale"
     )
+    parser.add_argument(
+        "--all-in-one", action="store_true", help="Generate a single combined plot for all models."
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -179,6 +182,65 @@ def main():
 
     grouped_models = df.groupby("model_group")
     print(f"Found {len(grouped_models)} unique model configurations.")
+
+    if args.all_in_one:
+        all_avail_canaries = df["canary_label"].unique().tolist()
+        ordered_canaries = [c for c in CANARY_ORDER if c in all_avail_canaries]
+        for c in sorted(all_avail_canaries):
+            if c not in ordered_canaries:
+                ordered_canaries.append(c)
+                
+        n_rows = len(grouped_models)
+        n_cols = len(ordered_canaries)
+        if n_rows > 0 and n_cols > 0:
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.5 * n_cols, 4.5 * n_rows), sharey=True)
+            if n_rows == 1: axes = [axes]
+            
+            for row_idx, (model_name, model_df) in enumerate(grouped_models):
+                clean_model_name = str(model_name).replace("/", "-").replace(":", "-").replace(" ", "_")
+                
+                # Make axes 2D even if 1D
+                ax_row = axes[row_idx] if n_rows > 1 else axes
+                if n_cols == 1: ax_row = [ax_row]
+                
+                for col_idx, canary_name in enumerate(ordered_canaries):
+                    ax = ax_row[col_idx]
+                    canary_df = model_df[model_df["canary_label"] == canary_name]
+                    
+                    letter_prefix = chr(ord("a") + col_idx)
+                    subplot_title = f"({letter_prefix}) {canary_name}" if row_idx == 0 else ""
+                    
+                    plot_canary_subplot(
+                        ax,
+                        canary_df,
+                        target_accuracy_metrics,
+                        title=subplot_title,
+                        ylabel="Accuracy",
+                        linear_x=args.linear_x,
+                        show_ylabel=(col_idx == 0),
+                        show_legend=(row_idx == 0 and col_idx == n_cols - 1),
+                    )
+                    
+                    if col_idx == 0:
+                        ax.annotate(
+                            clean_model_name,
+                            xy=(-0.30, 0.5),
+                            xycoords="axes fraction",
+                            fontsize=13,
+                            fontweight="bold",
+                            ha="center",
+                            va="center",
+                            rotation=90,
+                        )
+
+            plt.tight_layout()
+            out_pdf = os.path.join(args.output_dir, "all_models_canary_accuracy.pdf")
+            out_png = os.path.join(args.output_dir, "all_models_canary_accuracy.png")
+            plt.savefig(out_pdf, bbox_inches="tight")
+            plt.savefig(out_png, bbox_inches="tight")
+            plt.close(fig)
+            print(f"All-in-one plot saved to '{out_pdf}' and '{out_png}'.")
+        return
 
     num_saved = 0
     for model_name, model_df in grouped_models:
@@ -227,7 +289,7 @@ def main():
 
         plt.tight_layout()
         out_pdf = os.path.join(args.output_dir, f"{clean_model_name}_canary_accuracy.pdf")
-        plt.savefig(out_pdf)
+        plt.savefig(out_pdf, bbox_inches="tight")
         plt.close(fig)
         num_saved += 1
         print(f"[{num_saved}/{len(grouped_models)}] Saved {out_pdf}")

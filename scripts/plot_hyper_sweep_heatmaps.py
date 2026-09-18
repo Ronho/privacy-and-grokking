@@ -73,11 +73,10 @@ def get_eval_spec_for_config(config_name: str) -> dict:
     return {"mode": "epoch", "points": [80, 400]}
 
 
-def get_truncated_viridis(min_val: float = 0.02, max_val: float = 0.82, n: int = 256) -> mcolors.Colormap:
-    """Creates a viridis colormap capped before neon yellow (deep purple -> blue -> teal -> spring green)."""
-    cmap = plt.get_cmap("viridis")
-    new_colors = cmap(np.linspace(min_val, max_val, n))
-    return mcolors.LinearSegmentedColormap.from_list("truncated_viridis", new_colors)
+def get_blue_cmap(n: int = 256) -> mcolors.Colormap:
+    """Creates a colormap varying intensity of the standard matplotlib blue (#1f77b4)."""
+    # From very light blue to standard C0 blue
+    return mcolors.LinearSegmentedColormap.from_list("custom_blue", ["#ebf3f9", "#1f77b4"], N=n)
 
 
 def format_param_val(val: float | int, param_type: str) -> str:
@@ -290,7 +289,7 @@ def plot_config_heatmaps_at_checkpoint(
         hspace=0.36,
     )
 
-    cmap = get_truncated_viridis()
+    cmap = get_blue_cmap()
     pretty_title = CONFIG_PRETTY_TITLES.get(config_name, config_name)
     mode_str = "Epoche" if mode == "epoch" else "Trainingsschritt"
     fig.suptitle(
@@ -341,15 +340,29 @@ def plot_config_heatmaps_at_checkpoint(
                 continue
 
             mat, x_vals, y_vals = entry
-            im = ax.imshow(
-                mat,
-                origin="lower",
-                cmap=cmap,
-                norm=norm,
-                aspect="auto",
-                interpolation="nearest",
-            )
-            im_last = im
+            x_vals_float = [float(v) for v in x_vals]
+            y_vals_float = [float(v) for v in y_vals]
+            
+            X, Y = np.meshgrid(x_vals_float, y_vals_float)
+            X_flat, Y_flat, Z_flat = X.flatten(), Y.flatten(), mat.flatten()
+            
+            mask = ~np.isnan(Z_flat)
+            if np.any(mask):
+                im = ax.scatter(
+                    X_flat[mask],
+                    Y_flat[mask],
+                    c=Z_flat[mask],
+                    s=300,
+                    cmap=cmap,
+                    norm=norm,
+                    edgecolors="black",
+                    linewidth=0.5,
+                    alpha=0.95
+                )
+                im_last = im
+
+            ax.set_xscale("log")
+            ax.set_yscale("log")
 
             # Titles on top row
             if r_idx == 0:
@@ -360,29 +373,28 @@ def plot_config_heatmaps_at_checkpoint(
             ax.set_ylabel(sl["y_label"], fontsize=10.5, fontweight="semibold")
 
             # Ticks
-            ax.set_xticks(range(len(x_vals)))
+            ax.set_xticks(x_vals_float)
             ax.set_xticklabels([format_param_val(v, sl["x_type"]) for v in x_vals], rotation=30, ha="right", fontsize=9)
-            ax.set_yticks(range(len(y_vals)))
+            ax.set_yticks(y_vals_float)
             ax.set_yticklabels([format_param_val(v, sl["y_type"]) for v in y_vals], fontsize=9)
+            ax.minorticks_off()
 
             # Annotate cells
             if annot:
                 for yi in range(len(y_vals)):
                     for xi in range(len(x_vals)):
                         cell_v = mat[yi, xi]
+                        if np.isnan(cell_v):
+                            continue
+                            
                         text_str = format_metric_value(cell_v, m_info["key"])
-                        if not np.isnan(cell_v):
-                            normed_val = norm(cell_v)
-                            # Clip to [0, 1] for contrast determination
-                            normed_clip = np.clip(normed_val, 0.0, 1.0)
-                            # Truncated viridis upper end (around 0.82) is bright green
-                            text_color = "#09090b" if normed_clip > 0.58 else "#ffffff"
-                        else:
-                            text_color = "#94a3b8"
+                        normed_val = norm(cell_v)
+                        normed_clip = np.clip(normed_val, 0.0, 1.0)
+                        text_color = "#ffffff" if normed_clip > 0.5 else "#09090b"
 
                         ax.text(
-                            xi,
-                            yi,
+                            x_vals_float[xi],
+                            y_vals_float[yi],
                             text_str,
                             ha="center",
                             va="center",

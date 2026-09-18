@@ -52,7 +52,9 @@ def _process_loader(
         "min_prob",
         "ce_loss",
         "mse_loss",
+        "mse_prob_loss",
         "correctness",
+        "incorrect_logits",
     ]
     for k in expected_keys:
         result[k] = []
@@ -78,7 +80,18 @@ def _process_loader(
                 F.one_hot(y, num_classes=logit.size(1)).float(),
             ).gather(1, y.view(-1, 1))
         )
+        result["mse_prob_loss"].append(
+            mse_criterion(
+                prob,
+                F.one_hot(y, num_classes=prob.size(1)).float(),
+            ).gather(1, y.view(-1, 1))
+        )
         result["correctness"].append((logit.argmax(dim=1) == y).float())
+        
+        mask = torch.ones_like(logit, dtype=torch.bool)
+        mask.scatter_(1, y.view(-1, 1), False)
+        result["incorrect_logits"].append(logit[mask])
+        
         if collect_penultimate_layer_features:
             feature_list_accum.append(features)
 
@@ -131,11 +144,7 @@ def _evaluate_attacks(
                 out_results["true_class_logit"],
             )
         )
-    if (
-        metrics_config.attack_ce_loss
-        and "ce_loss" in in_results
-        and "ce_loss" in out_results
-    ):
+    if metrics_config.attack_ce_loss and "ce_loss" in in_results and "ce_loss" in out_results:
         attacks.append(
             (
                 prefix_template.format(metric="ce_loss"),
@@ -143,11 +152,7 @@ def _evaluate_attacks(
                 -out_results["ce_loss"],
             )
         )
-    if (
-        metrics_config.attack_mse_loss
-        and "mse_loss" in in_results
-        and "mse_loss" in out_results
-    ):
+    if metrics_config.attack_mse_loss and "mse_loss" in in_results and "mse_loss" in out_results:
         attacks.append(
             (
                 prefix_template.format(metric="mse_loss"),
@@ -250,8 +255,32 @@ def evaluate(
             metrics["test/loss/cross_entropy/mean"] = test_results["ce_loss"].mean()
             metrics["test/loss/cross_entropy/std"] = test_results["ce_loss"].std()
 
+            metrics["train/loss/mse_prob/mean"] = train_results["mse_prob_loss"].mean()
+            metrics["train/loss/mse_prob/std"] = train_results["mse_prob_loss"].std()
+            metrics["test/loss/mse_prob/mean"] = test_results["mse_prob_loss"].mean()
+            metrics["test/loss/mse_prob/std"] = test_results["mse_prob_loss"].std()
+
+            metrics["train/logits/true_class/mean"] = train_results["true_class_logit"].mean()
+            metrics["train/logits/true_class/std"] = train_results["true_class_logit"].std()
+            metrics["test/logits/true_class/mean"] = test_results["true_class_logit"].mean()
+            metrics["test/logits/true_class/std"] = test_results["true_class_logit"].std()
+
+            metrics["train/logits/incorrect/mean"] = train_results["incorrect_logits"].mean()
+            metrics["train/logits/incorrect/std"] = train_results["incorrect_logits"].std()
+            metrics["test/logits/incorrect/mean"] = test_results["incorrect_logits"].mean()
+            metrics["test/logits/incorrect/std"] = test_results["incorrect_logits"].std()
+
+            for loss_key, metric_key in [("mse_loss", "mse"), ("ce_loss", "cross_entropy"), ("mse_prob_loss", "mse_prob")]:
+                if loss_key in train_results and len(train_results[loss_key]) >= 10:
+                    train_loss = train_results[loss_key].flatten()
+                    top10_vals, top10_idx = torch.topk(train_loss, k=10)
+                    share = top10_vals.sum() / train_loss.sum()
+                    metrics[f"train/loss/{metric_key}/top10_share"] = share.item()
+                    for i in range(10):
+                        metrics[f"train/loss/{metric_key}/top10_idx_{i}"] = float(top10_idx[i].item())
+
         if metrics_config.any_distribution_metric:
-            for loss_key in ("mse", "ce"):
+            for loss_key in ("mse", "ce", "mse_prob"):
                 train_loss = train_results[f"{loss_key}_loss"]
                 test_loss = test_results[f"{loss_key}_loss"]
                 if metrics_config.distribution_overlap:
@@ -315,6 +344,16 @@ def evaluate(
                 metrics["train/canary_loss/cross_entropy/std"] = (
                     train_canary_results["ce_loss"].std().item()
                 )
+            if (
+                "mse_prob_loss" in train_canary_results
+                and len(train_canary_results["mse_prob_loss"]) > 0
+            ):
+                metrics["train/canary_loss/mse_prob/mean"] = (
+                    train_canary_results["mse_prob_loss"].mean().item()
+                )
+                metrics["train/canary_loss/mse_prob/std"] = (
+                    train_canary_results["mse_prob_loss"].std().item()
+                )
 
         test_canary_results = None
         if test_canary_loader is not None:
@@ -336,6 +375,16 @@ def evaluate(
                 )
                 metrics["test/canary_loss/cross_entropy/std"] = (
                     test_canary_results["ce_loss"].std().item()
+                )
+            if (
+                "mse_prob_loss" in test_canary_results
+                and len(test_canary_results["mse_prob_loss"]) > 0
+            ):
+                metrics["test/canary_loss/mse_prob/mean"] = (
+                    test_canary_results["mse_prob_loss"].mean().item()
+                )
+                metrics["test/canary_loss/mse_prob/std"] = (
+                    test_canary_results["mse_prob_loss"].std().item()
                 )
 
         if train_canary_results is not None:

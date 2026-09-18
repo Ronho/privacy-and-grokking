@@ -398,30 +398,44 @@ def plot_nc_metrics_row(
 
 GROUP_CONFIGS = [
     {
-        "id": "GROK_MNIST",
-        "title": "GROK MNIST",
-        "models": [
-            ("GROK_MNIST_MSE_MLP", "(I) MLP (MSE)"),
-            ("GROK_MNIST_CE_MLP", "(II) MLP (CE)"),
-            ("GROK_MNIST_CE_VIT", "(III) ViT (CE)"),
-        ],
+        "id": "MLP_MSE_GROK",
+        "title": "(I) MLP (MSE)",
+        "models": [("GROK_MNIST_MSE_MLP", "Grokking")],
     },
     {
-        "id": "MADD",
-        "title": "MADD",
-        "models": [
-            ("GROK_MADD_CE_TRANSFORMER", "(I) Transformer (CE)"),
-            ("GROK_MADD_MSE_TRANSFORMER", "(II) Transformer (MSE)"),
-        ],
+        "id": "MLP_MSE_NOGROK",
+        "title": "(II) MLP (MSE)",
+        "models": [("NO_GROK_MNIST_MSE_MLP", "No Grokking")],
     },
     {
-        "id": "NO_GROK_MNIST",
-        "title": "NOGROK MNIST",
-        "models": [
-            ("NO_GROK_MNIST_MSE_MLP", "(I) MLP (MSE)"),
-            ("NO_GROK_MNIST_CE_MLP", "(II) MLP (CE)"),
-            ("NO_GROK_MNIST_CE_VIT", "(III) ViT (CE)"),
-        ],
+        "id": "MLP_CE_GROK",
+        "title": "(III) MLP (CE)",
+        "models": [("GROK_MNIST_CE_MLP", "Grokking")],
+    },
+    {
+        "id": "MLP_CE_NOGROK",
+        "title": "(IV) MLP (CE)",
+        "models": [("NO_GROK_MNIST_CE_MLP", "No Grokking")],
+    },
+    {
+        "id": "VIT_CE_GROK",
+        "title": "(V) ViT (CE)",
+        "models": [("GROK_MNIST_CE_VIT", "Grokking")],
+    },
+    {
+        "id": "VIT_CE_NOGROK",
+        "title": "(VI) ViT (CE)",
+        "models": [("NO_GROK_MNIST_CE_VIT", "No Grokking")],
+    },
+    {
+        "id": "MADD_CE",
+        "title": "(VII) MADD (CE)",
+        "models": [("GROK_MADD_CE_TRANSFORMER", "Grokking")],
+    },
+    {
+        "id": "MADD_MSE",
+        "title": "(VIII) MADD (MSE)",
+        "models": [("GROK_MADD_MSE_TRANSFORMER", "Grokking")],
     },
 ]
 
@@ -545,6 +559,67 @@ def plot_groups(df, all_metrics, output_dir):
     print(f"All group plots saved to '{output_dir}'.")
 
 
+def plot_all_in_one(df, all_metrics, output_dir):
+    all_models = []
+    for grp in GROUP_CONFIGS:
+        for rname, rlabel in grp["models"]:
+            all_models.append((rname, f"{grp['title']}\n{rlabel}"))
+            
+    n_rows = len(all_models)
+    
+    # --- 1. General Metrics Plot ---
+    n_cols_gm = 3
+    fig_gm, axes_gm = plt.subplots(n_rows, n_cols_gm, figsize=(5 * n_cols_gm, 4.5 * n_rows))
+    if n_rows == 1:
+        axes_gm = axes_gm.reshape(1, n_cols_gm)
+        
+    print(f"Generating all-in-one general metrics plot for {n_rows} models...")
+    for row_idx, (rname, rlabel) in enumerate(all_models):
+        m_df = extract_model_df(df, rname)
+        plot_general_metrics_row(
+            axes_gm[row_idx],
+            m_df,
+            all_metrics,
+            show_col_titles=(row_idx == 0),
+            show_xlabel=(row_idx == n_rows - 1),
+            row_label=rlabel,
+        )
+
+    plt.tight_layout()
+    out_gm_pdf = os.path.join(output_dir, "all_models_general_metrics.pdf")
+    out_gm_png = os.path.join(output_dir, "all_models_general_metrics.png")
+    plt.savefig(out_gm_pdf, bbox_inches="tight")
+    plt.savefig(out_gm_png, bbox_inches="tight")
+    plt.close(fig_gm)
+
+    # --- 2. NC Metrics Plot ---
+    n_cols_nc = 4
+    fig_nc, axes_nc = plt.subplots(n_rows, n_cols_nc, figsize=(5 * n_cols_nc, 4.5 * n_rows))
+    if n_rows == 1:
+        axes_nc = axes_nc.reshape(1, n_cols_nc)
+        
+    print(f"Generating all-in-one NC metrics plot for {n_rows} models...")
+    for row_idx, (rname, rlabel) in enumerate(all_models):
+        m_df = extract_model_df(df, rname)
+        plot_nc_metrics_row(
+            axes_nc[row_idx],
+            m_df,
+            all_metrics,
+            show_col_titles=(row_idx == 0),
+            show_xlabel=(row_idx == n_rows - 1),
+            row_label=rlabel, 
+        )
+
+    plt.tight_layout()
+    out_nc_pdf = os.path.join(output_dir, "all_models_nc_metrics.pdf")
+    out_nc_png = os.path.join(output_dir, "all_models_nc_metrics.png")
+    plt.savefig(out_nc_pdf, bbox_inches="tight")
+    plt.savefig(out_nc_png, bbox_inches="tight")
+    plt.close(fig_nc)
+
+    print(f"All-in-one plots saved to '{output_dir}'.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate plots for reproduction-nc-grokking experiment"
@@ -593,6 +668,11 @@ def main():
         action="store_true",
         help="Only generate individual model plots, skipping grouped plots.",
     )
+    parser.add_argument(
+        "--all-in-one",
+        action="store_true",
+        help="Only generate a single combined plot for all models.",
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -616,6 +696,10 @@ def main():
     df = backfill_initial_nans(df)
 
     all_metrics = df["metric_name"].unique()
+
+    if args.all_in_one:
+        plot_all_in_one(df, all_metrics, args.output_dir)
+        return
 
     if not args.groups_only:
         if "run_name" in df.columns:

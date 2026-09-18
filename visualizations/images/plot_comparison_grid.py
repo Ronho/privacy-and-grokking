@@ -37,20 +37,50 @@ DEFAULT_TRACKING_URI = "http://localhost:5051"
 # Ordered list of models exactly matching the reference specification
 MODELS = [
     {
-        "run_id": "39ca6f59220d438d9d14de7fdb0be8c9",
-        "label": "(I) MLP (MSE)",
+        "run_id": "580fc01a67d04a6697626730a88e7bb7",
+        "label": "(I) MLP (MSE) Grokking",
         "loss_metric": "eval/train/loss/mse/mean",
         "test_loss_metric": "eval/test/loss/mse/mean",
     },
     {
-        "run_id": "82c4f9ab35bb4b7180fdacc194ce7e07",
-        "label": "(II) MLP (CE)",
+        "run_id": "3817e9db087f4d4185651e823227d305",
+        "label": "(II) MLP (MSE) No Grokking",
+        "loss_metric": "eval/train/loss/mse/mean",
+        "test_loss_metric": "eval/test/loss/mse/mean",
+    },
+    {
+        "run_id": "23d2c3bbfd5d4c3eb373ec98564ba77f",
+        "label": "(III) MLP (CE) Grokking",
         "loss_metric": "eval/train/loss/cross_entropy/mean",
         "test_loss_metric": "eval/test/loss/cross_entropy/mean",
     },
     {
-        "run_id": "b75317f9447346249f0b811acec427ce",
-        "label": "(III) ViT (CE)",
+        "run_id": "51c177903c1d4f29a8f4dae05c35587f",
+        "label": "(IV) MLP (CE) No Grokking",
+        "loss_metric": "eval/train/loss/cross_entropy/mean",
+        "test_loss_metric": "eval/test/loss/cross_entropy/mean",
+    },
+    {
+        "run_id": "a46642282384408481241143a6b4bdc0",
+        "label": "(V) ViT (CE) Grokking",
+        "loss_metric": "eval/train/loss/cross_entropy/mean",
+        "test_loss_metric": "eval/test/loss/cross_entropy/mean",
+    },
+    {
+        "run_id": "0ad0d9f8dbc64e6fa407479a613726d9",
+        "label": "(VI) ViT (CE) No Grokking",
+        "loss_metric": "eval/train/loss/cross_entropy/mean",
+        "test_loss_metric": "eval/test/loss/cross_entropy/mean",
+    },
+    {
+        "run_id": "b330d269985d49119e65c7475b94e2e6",
+        "label": "(VII) Transformer MADD (MSE) Grokking",
+        "loss_metric": "eval/train/loss/mse/mean",
+        "test_loss_metric": "eval/test/loss/mse/mean",
+    },
+    {
+        "run_id": "c0fc6d063dcb407bacc7eb315819b38d",
+        "label": "(VIII) Transformer MADD (CE) Grokking",
         "loss_metric": "eval/train/loss/cross_entropy/mean",
         "test_loss_metric": "eval/test/loss/cross_entropy/mean",
     },
@@ -105,7 +135,7 @@ def get_loss_dataframe(
     if cached_path.is_file():
         try:
             df_cached = pd.read_parquet(cached_path)
-            if "grad_norm" in df_cached.columns and "weight_norm" in df_cached.columns:
+            if "grad_norm" in df_cached.columns and "weight_norm" in df_cached.columns and "optim_mt" in df_cached.columns:
                 return df_cached
         except Exception:
             pass
@@ -155,6 +185,41 @@ def get_loss_dataframe(
         except Exception:
             pass
 
+        try:
+            hist_tr_acc = client.get_metric_history(run_id, "eval/train/accuracy")
+            df_tr_acc = pd.DataFrame([{"step": m.step, "train_acc": m.value} for m in hist_tr_acc]).groupby("step", as_index=False)["train_acc"].mean()
+            df_train = pd.merge(df_train, df_tr_acc, on="step", how="outer")
+        except Exception:
+            pass
+
+        try:
+            hist_te_acc = client.get_metric_history(run_id, "eval/test/accuracy")
+            df_te_acc = pd.DataFrame([{"step": m.step, "test_acc": m.value} for m in hist_te_acc]).groupby("step", as_index=False)["test_acc"].mean()
+            df_train = pd.merge(df_train, df_te_acc, on="step", how="outer")
+        except Exception:
+            pass
+
+        try:
+            hist_mt = client.get_metric_history(run_id, "optim/global_mt_norm")
+            df_mt = pd.DataFrame([{"step": m.step, "optim_mt": m.value} for m in hist_mt]).groupby("step", as_index=False)["optim_mt"].mean()
+            df_train = pd.merge(df_train, df_mt, on="step", how="outer")
+        except Exception:
+            pass
+
+        try:
+            hist_mt_vt = client.get_metric_history(run_id, "optim/global_mt_over_sqrt_vt_norm")
+            df_mt_vt = pd.DataFrame([{"step": m.step, "optim_mt_vt": m.value} for m in hist_mt_vt]).groupby("step", as_index=False)["optim_mt_vt"].mean()
+            df_train = pd.merge(df_train, df_mt_vt, on="step", how="outer")
+        except Exception:
+            pass
+
+        try:
+            hist_vt = client.get_metric_history(run_id, "optim/global_sqrt_vt_norm")
+            df_vt = pd.DataFrame([{"step": m.step, "optim_vt": m.value} for m in hist_vt]).groupby("step", as_index=False)["optim_vt"].mean()
+            df_train = pd.merge(df_train, df_vt, on="step", how="outer")
+        except Exception:
+            pass
+
         df_train = df_train.sort_values("step").reset_index(drop=True)
         cache_dir.mkdir(parents=True, exist_ok=True)
         df_train.to_parquet(cached_path, index=False)
@@ -199,6 +264,8 @@ def render_pca_landscape_panel(
     if metric_type in ("loss", "sharpness"):
         pos = valid[valid > 0]
         p_min = float(np.min(pos)) if len(pos) > 0 else 1e-4
+        if v_max <= p_min:
+            v_max = p_min * 10.0
         norm = LogNorm(vmin=p_min, vmax=v_max)
         levels = np.logspace(np.log10(p_min), np.log10(v_max), 30)
         cmap = "Blues_r"
@@ -402,13 +469,15 @@ def plot_comparison_grid(
             output_path = output_path.with_suffix(".pdf")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    num_models = len(MODELS)
     fig, axes = plt.subplots(
-        nrows=3,
-        ncols=7,
-        figsize=(37.8, 10.8),
+        nrows=num_models,
+        ncols=8,
+        figsize=(42.8, 3.6 * num_models),
         dpi=300,
+        squeeze=False,
         gridspec_kw={
-            "width_ratios": [1.0, 1.0, 1.0, 1.0, 1.65, 1.35, 1.25],
+            "width_ratios": [1.0, 1.0, 1.0, 1.0, 1.65, 1.35, 1.35, 1.25],
             "wspace": 0.38,
             "hspace": 0.28,
         },
@@ -511,7 +580,8 @@ def plot_comparison_grid(
         ax_pca_sharp = axes[row_idx, 3]
         ax_loss = axes[row_idx, 4]
         ax_acc = axes[row_idx, 5]
-        ax_samples = axes[row_idx, 6]
+        ax_optim = axes[row_idx, 6]
+        ax_samples = axes[row_idx, 7]
 
         # -------------------------------------------------------------
         # Left Margin: Model Row Label
@@ -797,14 +867,8 @@ def plot_comparison_grid(
         max_dist = max(top_w, max(d_start), max(step_diffs[1:]) if len(step_diffs) > 1 else 1.0)
         ax_dist.set_ylim(bottom=0.0, top=max(105.0, max_dist * 1.15))
 
-        # X-axis configuration (log scale 10^1 to 10^5)
-        ax_loss.set_xscale("log")
-        ax_loss.set_xlim(left=7.0, right=1.6e5)
-        ax_loss.xaxis.set_major_locator(LogLocator(base=10.0, numticks=6))
-        ax_loss.xaxis.set_major_formatter(LogFormatterMathtext())
-        ax_loss.xaxis.set_minor_locator(
-            LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=100)
-        )
+        # X-axis configuration (linear scale)
+        ax_loss.set_xlim(left=0.0)
         ax_loss.grid(True, which="major", linestyle="-", alpha=0.3)
 
         if row_idx == 2:
@@ -831,14 +895,16 @@ def plot_comparison_grid(
         # -------------------------------------------------------------
         # Column 5: (e) Train & Test Accuracy over Time
         # -------------------------------------------------------------
-        if has_hs and "train_acc" in hs_data and "test_acc" in hs_data:
-            acc_steps = hs_data["steps"]
-            acc_train = hs_data["train_acc"] * 100.0
-            acc_test = hs_data["test_acc"] * 100.0
-
+        if "train_acc" in df_loss.columns and df_loss["train_acc"].notna().any():
+            x_acc = df_loss["step"].values
+            y_train_acc = df_loss["train_acc"].values
+            valid_tr_acc = np.isfinite(y_train_acc)
+            if y_train_acc[valid_tr_acc].max() <= 1.01:
+                y_train_acc = y_train_acc * 100.0
+                
             l_tr_acc = ax_acc.plot(
-                acc_steps,
-                acc_train,
+                x_acc[valid_tr_acc],
+                y_train_acc[valid_tr_acc],
                 color=COLOR_TRAIN_LOSS,
                 linestyle="-",
                 linewidth=2.0,
@@ -846,16 +912,23 @@ def plot_comparison_grid(
                 label="Train Acc",
                 zorder=4,
             )
-            l_te_acc = ax_acc.plot(
-                acc_steps,
-                acc_test,
-                color=COLOR_TEST_LOSS,
-                linestyle="-",
-                linewidth=2.0,
-                alpha=0.95,
-                label="Test Acc",
-                zorder=4,
-            )
+            
+            if "test_acc" in df_loss.columns and df_loss["test_acc"].notna().any():
+                y_test_acc = df_loss["test_acc"].values
+                valid_te_acc = np.isfinite(y_test_acc)
+                if y_test_acc[valid_te_acc].max() <= 1.01:
+                    y_test_acc = y_test_acc * 100.0
+                l_te_acc = ax_acc.plot(
+                    x_acc[valid_te_acc],
+                    y_test_acc[valid_te_acc],
+                    color=COLOR_TEST_LOSS,
+                    linestyle="-",
+                    linewidth=2.0,
+                    alpha=0.95,
+                    label="Test Acc",
+                    zorder=4,
+                )
+            
             # Reference 100% line
             ax_acc.axhline(
                 100.0,
@@ -871,13 +944,7 @@ def plot_comparison_grid(
             ax_acc.set_yticks([0, 20, 40, 60, 80, 100])
             ax_acc.tick_params(axis="y", colors=COLOR_TEXT, labelsize=9)
 
-            ax_acc.set_xscale("log")
-            ax_acc.set_xlim(left=7.0, right=1.6e5)
-            ax_acc.xaxis.set_major_locator(LogLocator(base=10.0, numticks=6))
-            ax_acc.xaxis.set_major_formatter(LogFormatterMathtext())
-            ax_acc.xaxis.set_minor_locator(
-                LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=100)
-            )
+            ax_acc.set_xlim(left=0.0)
             ax_acc.grid(True, which="major", linestyle="-", alpha=0.3)
 
             if row_idx == 2:
@@ -895,6 +962,75 @@ def plot_comparison_grid(
             )
             leg_acc.set_zorder(10)
             leg_acc.get_frame().set_linewidth(0.8)
+
+        # -------------------------------------------------------------
+        # Column 6: (g) Optimizer Norms over Time
+        # -------------------------------------------------------------
+        if "optim_mt" in df_loss.columns:
+            x_opt = df_loss["step"].values
+            
+            if "optim_mt" in df_loss.columns and df_loss["optim_mt"].notna().any():
+                y_mt = df_loss["optim_mt"].values
+                valid_mt = (y_mt > 0) & np.isfinite(y_mt)
+                if valid_mt.any():
+                    ax_optim.plot(
+                        x_opt[valid_mt],
+                        y_mt[valid_mt],
+                        color="#10b981", # emerald-500
+                        linestyle="-",
+                        linewidth=1.8,
+                        alpha=0.9,
+                        label=r"$||m_t||$",
+                    )
+                    
+            if "optim_mt_vt" in df_loss.columns and df_loss["optim_mt_vt"].notna().any():
+                y_mt_vt = df_loss["optim_mt_vt"].values
+                valid_mt_vt = (y_mt_vt > 0) & np.isfinite(y_mt_vt)
+                if valid_mt_vt.any():
+                    ax_optim.plot(
+                        x_opt[valid_mt_vt],
+                        y_mt_vt[valid_mt_vt],
+                        color="#8b5cf6", # violet-500
+                        linestyle="-",
+                        linewidth=1.8,
+                        alpha=0.9,
+                        label=r"$||m_t / \sqrt{v_t}||$",
+                    )
+                    
+            if "optim_vt" in df_loss.columns and df_loss["optim_vt"].notna().any():
+                y_vt = df_loss["optim_vt"].values
+                valid_vt = (y_vt > 0) & np.isfinite(y_vt)
+                if valid_vt.any():
+                    ax_optim.plot(
+                        x_opt[valid_vt],
+                        y_vt[valid_vt],
+                        color="#f59e0b", # amber-500
+                        linestyle="-",
+                        linewidth=1.8,
+                        alpha=0.9,
+                        label=r"$||\sqrt{v_t}||$",
+                    )
+                    
+            ax_optim.set_yscale("log")
+            ax_optim.set_ylabel("Norm", fontsize=10, color=COLOR_TEXT)
+            
+            ax_optim.set_xlim(left=0.0)
+            ax_optim.grid(True, which="major", linestyle="-", alpha=0.3)
+            
+            if row_idx == 2:
+                ax_optim.set_xlabel("Step", fontsize=10, fontweight="normal", color=COLOR_TEXT)
+            else:
+                ax_optim.set_xlabel("")
+                
+            leg_opt = ax_optim.legend(
+                loc="lower left",
+                framealpha=0.95,
+                facecolor="white",
+                edgecolor="#cbd5e1",
+                fontsize=7.5,
+            )
+            leg_opt.set_zorder(10)
+            leg_opt.get_frame().set_linewidth(0.8)
 
         # Top column headers for row 0
         if row_idx == 0:
@@ -940,8 +1076,15 @@ def plot_comparison_grid(
                 pad=10,
                 color=COLOR_TEXT,
             )
+            ax_optim.set_title(
+                "(g) Optimizer Norms",
+                fontsize=11.5,
+                fontweight="normal",
+                pad=10,
+                color=COLOR_TEXT,
+            )
             ax_samples.set_title(
-                "(g) Persistent Hard Samples (Step > 10k)",
+                "(h) Persistent Hard Samples (Step > 10k)",
                 fontsize=11.5,
                 fontweight="normal",
                 pad=10,
@@ -1005,7 +1148,7 @@ def plot_comparison_grid(
     plt.savefig(png_path, dpi=300)
     plt.close()
 
-    print(f"Successfully generated 3x6 comparison grid PDF and PNG:\n  - {output_path}\n  - {png_path}")
+    print(f"Successfully generated {num_models}x8 comparison grid PDF and PNG:\n  - {output_path}\n  - {png_path}")
     return output_path
 
 

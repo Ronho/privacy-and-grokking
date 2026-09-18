@@ -67,6 +67,10 @@ def compute_all_nc_metrics(
 
     classes = torch.unique(train_labels)
     C = len(classes)
+    
+    # Slice classifier_weight to match the classes present in this batch
+    classifier_weight = classifier_weight[classes]
+    
     N, d = train_features.shape
 
     # Global mean (1, d)
@@ -97,7 +101,8 @@ def compute_all_nc_metrics(
     nc2_equinorm_weights = (torch.std(weight_norm) / torch.mean(weight_norm)).item()
 
     # NC2 - equiangularity:
-    mask = ~torch.eye(C, dtype=torch.bool, device=mu_c_centered.device)
+    # Use upper triangle (excluding diagonal) to avoid duplicating symmetric pairs
+    mask = torch.triu(torch.ones(C, C, dtype=torch.bool, device=mu_c_centered.device), diagonal=1)
     cos_mu = torch.matmul(mu_c_centered, mu_c_centered.T) / torch.clamp(
         torch.outer(mu_c_norm, mu_c_norm), min=1e-8
     )  # (C,C)
@@ -123,7 +128,8 @@ def compute_all_nc_metrics(
     # NC 4 - nearest class center convergence
     distances = torch.cdist(train_features, mu_c, p=2.0)
     ncc_predictions_idx = torch.argmin(distances, dim=1)
-    mismatch_mask = train_predictions != ncc_predictions_idx
+    ncc_predictions_label = classes[ncc_predictions_idx]
+    mismatch_mask = train_predictions != ncc_predictions_label
     nc4 = torch.mean(mismatch_mask.float()).item()
 
     nc4_test = None
@@ -135,7 +141,8 @@ def compute_all_nc_metrics(
             test_predictions = test_predictions.argmax(dim=1)
         test_distances = torch.cdist(test_features.to(train_features.device), mu_c, p=2.0)
         ncc_test_predictions_idx = torch.argmin(test_distances, dim=1)
-        test_mismatch_mask = test_predictions != ncc_test_predictions_idx
+        ncc_test_predictions_label = classes[ncc_test_predictions_idx]
+        test_mismatch_mask = test_predictions != ncc_test_predictions_label
         nc4_test = torch.mean(test_mismatch_mask.float()).item()
 
     # RNC1 according to the paper

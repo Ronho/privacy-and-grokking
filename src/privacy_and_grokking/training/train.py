@@ -26,8 +26,7 @@ from privacy_and_grokking.utils import (
     setup_mlflow,
 )
 
-LOG_FREQUENCY = 1000
-HEAVY_METRICS_LOG_FREQUENCY = LOG_FREQUENCY * 10
+
 
 
 def save_model(model: nn.Module, optimizer: torch.optim.Optimizer, step: int) -> None:
@@ -374,6 +373,13 @@ def train_handle(
                         if step % epoch_interval == 0:
                             should_checkpoint = True
 
+                if (
+                    config.metrics.optimizer_metrics_log_frequency is not None
+                    and config.metrics.optimizer_metrics_log_frequency > 0
+                    and step % config.metrics.optimizer_metrics_log_frequency == 0
+                ):
+                    should_checkpoint = True
+
                 if should_checkpoint:
                     save_model(model, optimizer, step)
 
@@ -400,10 +406,27 @@ def train_handle(
                     loss = task_loss + reg_value
 
                 loss.backward()
+
+                log_optim_metrics = (
+                    config.metrics.optimizer_metrics_log_frequency is not None
+                    and config.metrics.optimizer_metrics_log_frequency > 0
+                    and step % config.metrics.optimizer_metrics_log_frequency == 0
+                )
+                if log_optim_metrics:
+                    pre_step_params = [p.clone().detach() for p in model.parameters()]
+
                 optimizer.step()
                 scheduler.step()
 
-                if step % log_frequency == 0:
+                if log_optim_metrics:
+                    optim_metrics = config.optimizer.get_tracking_metrics(
+                        optimizer=optimizer,
+                        pre_step_params=pre_step_params,
+                        model_parameters=list(model.parameters())
+                    )
+                    mlflow.log_metrics(optim_metrics, step=step)
+
+                if step % 1 == 0:
                     mlflow.log_metrics(
                         {
                             "train/task_loss": task_loss.item(),
