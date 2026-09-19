@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=reproduction_nc_grokking
-#SBATCH --output=logs/reproduction_nc_grokking_%j.log
-#SBATCH --error=logs/reproduction_nc_grokking_%j.err
+#SBATCH --job-name=find_grokking
+#SBATCH --output=logs/find_grokking_%j.log
+#SBATCH --error=logs/find_grokking_%j.err
 #SBATCH --partition=defq
 #SBATCH --nodelist=BCM-SM-A100-01
 #SBATCH --nodes=1
@@ -10,7 +10,7 @@
 #SBATCH --cpus-per-task=60
 #SBATCH --mem=96G
 #SBATCH --gpus=1
-#SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
+#SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 #SBATCH --container-writable
@@ -42,7 +42,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/reproduction_nc_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
+cat experiments/find_grokking/jobs/find_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control

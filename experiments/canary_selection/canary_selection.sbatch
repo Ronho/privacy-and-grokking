@@ -1,16 +1,16 @@
 #!/bin/bash
 #
-#SBATCH --job-name=find_grokking
-#SBATCH --output=logs/find_grokking_%j.log
-#SBATCH --error=logs/find_grokking_%j.err
+#SBATCH --job-name=canary_selection
+#SBATCH --output=logs/canary_selection_%j.log
+#SBATCH --error=logs/canary_selection_%j.err
 #SBATCH --partition=defq
-#SBATCH --nodelist=BCM-DGX-A100-2
+#SBATCH --nodelist=BCM-SM-A100-01
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=40
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=60
+#SBATCH --mem=96G
 #SBATCH --gpus=1
-#SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
+#SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 #SBATCH --container-writable
@@ -42,7 +42,7 @@ uv pip install --system --break-system-packages -e .
 
 echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/find_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
+cat experiments/canary_selection/jobs/canary_selection.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control

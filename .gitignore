@@ -12,3 +12,4 @@ media/
 *.npy
 *.pth
 *.db
+*.DS_Store

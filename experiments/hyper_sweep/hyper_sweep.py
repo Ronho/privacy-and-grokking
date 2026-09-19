@@ -1,16 +1,18 @@
+import sys
 import json
 import random
-import hashlib
 import itertools
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-configs = SCRIPT_DIR.parent / "configs"
-command_file = SCRIPT_DIR / "hyper_sweep.txt"
+REPO_ROOT = SCRIPT_DIR.parent.parent
+sys.path.append(str(REPO_ROOT))
+from experiments.utils import get_deterministic_seed, config_priority, get_steps, AVAILABLE_GPUS, LOAD_ALL_TO_GPU
+
+configs = REPO_ROOT / "configs"
+command_file = SCRIPT_DIR / "jobs" / "hyper_sweep.txt"
 command_file.parent.mkdir(parents=True, exist_ok=True)
 
-available_gpus = []
-load_all_to_gpu = True
 num_canaries = 100
 canary_type = "label_noise"
 initialization_scale = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
@@ -24,43 +26,10 @@ shuffle = False
 sweep_mode = "one_fixed"  # "one_fixed" (2D slices, 1 param fixed) or "two_fixed" (1D ablations, 2 params fixed)
 
 
-def get_deterministic_seed(*args, salt=seed):
-    """Generates a deterministic integer seed from arguments to ensure idempotency."""
-    s = str(salt) + "_" + "_".join(str(a) for a in args)
-    return int(hashlib.sha256(s.encode("utf-8")).hexdigest(), 16) % 1000000
-
-
 # Start of main script
 random.seed(seed)
 
 all_commands = []
-
-
-def config_priority(config_path):
-    name = config_path.name.lstrip("+_")
-    if "MNIST" in name and "MSE" in name and "MLP" in name:
-        p = 0
-    elif "MNIST" in name and "CE" in name and "MLP" in name:
-        p = 1
-    elif "VIT" in name:
-        p = 2
-    elif "MADD" in name and "CE" in name:
-        p = 3
-    elif "MADD" in name and "MSE" in name:
-        p = 4
-    else:
-        p = 99
-    sub = 0 if "NO_GROK" in name else 1
-    return (p, sub)
-
-
-def get_steps(config_path):
-    name = config_path.name
-    if "MADD" in name:
-        return 150_000
-    if "MNIST" in name:
-        return 150_000
-    return 150_000
 
 
 def get_config_defaults(config_path):
@@ -77,16 +46,16 @@ def get_config_defaults(config_path):
     decay = cfg.get("optimizer", {}).get("weight_decay", 0.0)
 
     # 3. train_size
-    train_size = cfg.get("data", {}).get("train_size")
-    if train_size is None:
+    train_size_cfg = cfg.get("data", {}).get("train_size")
+    if train_size_cfg is None:
         if "MADD" in config_path.name:
-            train_size = 113*90
+            train_size_cfg = 113*90
         elif "MNIST" in config_path.name:
-            train_size = 50_000
+            train_size_cfg = 50_000
         else:
             raise ValueError(f"No train_size could be determined for {config_path.name}")
 
-    return float(scale), float(decay), int(train_size)
+    return float(scale), float(decay), int(train_size_cfg)
 
 
 def match_value_in_list(val, lst, tol=1e-6):
@@ -171,7 +140,7 @@ def cmd(
         f"-o model.initialization_scale={scale} -o optimizer.weight_decay={decay} "
         f"-o data.train_size={size}"
     )
-    if load_all_to_gpu:
+    if LOAD_ALL_TO_GPU:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
         cmd_str += postfix
@@ -207,11 +176,11 @@ for i in range(num_repetitions):
     rep_commands = []
     for config, steps, param_combos in config_combos:
         for scale, decay, size in param_combos:
-            data_seed = get_deterministic_seed(config.name, scale, decay, size, "data_seed")
+            data_seed = get_deterministic_seed(config.name, scale, decay, size, "data_seed", salt=seed)
             c_num = 226 if "MADD" in config.name else num_canaries
             canary_dict = {"name": f"{canary_type}", "num": c_num}
             canary_json = json.dumps(canary_dict)
-            run_seed = get_deterministic_seed(config.name, scale, decay, size, i, "run_seed")
+            run_seed = get_deterministic_seed(config.name, scale, decay, size, i, "run_seed", salt=seed)
             rep_commands.append(
                 cmd(
                     config,
@@ -239,17 +208,17 @@ for i in range(num_repetitions):
 
 print(f"Total commands generated: {len(all_commands)}")
 
-# Clean up any existing hyper_sweep_*.txt files in SCRIPT_DIR
-for old_file in SCRIPT_DIR.glob("hyper_sweep_*.txt"):
+# Clean up any existing hyper_sweep_*.txt files in SCRIPT_DIR / "jobs"
+for old_file in (SCRIPT_DIR / "jobs").glob("hyper_sweep_*.txt"):
     old_file.unlink()
 
-N_gpus = len(available_gpus)
+N_gpus = len(AVAILABLE_GPUS)
 for f_idx in range(num_files):
     rep_lines = file_lines[f_idx]
     if N_gpus > 0:
         for idx, line in enumerate(rep_lines):
-            rep_lines[idx] = f"CUDA_VISIBLE_DEVICES={available_gpus[idx % N_gpus]} " + line
+            rep_lines[idx] = f"CUDA_VISIBLE_DEVICES={AVAILABLE_GPUS[idx % N_gpus]} " + line
 
-    cmd_file = SCRIPT_DIR / f"hyper_sweep_{f_idx}.txt"
+    cmd_file = SCRIPT_DIR / "jobs" / f"hyper_sweep_{f_idx}.txt"
     cmd_file.write_text("\n".join(rep_lines), encoding="utf-8")
     print(f"Wrote {len(rep_lines)} commands to {cmd_file.name}")

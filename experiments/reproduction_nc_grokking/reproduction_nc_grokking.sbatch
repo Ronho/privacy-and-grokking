@@ -1,24 +1,23 @@
 #!/bin/bash
 #
-#SBATCH --job-name=hyper_sweep
-#SBATCH --output=logs/hyper_sweep_%A_%a.log
-#SBATCH --error=logs/hyper_sweep_%A_%a.err
-#SBATCH --array=0-4
+#SBATCH --job-name=reproduction_nc_grokking
+#SBATCH --output=logs/reproduction_nc_grokking_%j.log
+#SBATCH --error=logs/reproduction_nc_grokking_%j.err
 #SBATCH --partition=defq
-#SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
+#SBATCH --nodelist=BCM-SM-A100-01
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=60
 #SBATCH --mem=96G
 #SBATCH --gpus=1
-#SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
+#SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 #SBATCH --container-writable
 
 mkdir -p logs
 
-echo "Starting job $SLURM_JOB_ID (Array Task $SLURM_ARRAY_TASK_ID) on $HOSTNAME"
+echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
 echo "Allocated GPUs: $CUDA_VISIBLE_DEVICES"
 nvidia-smi
 
@@ -41,9 +40,9 @@ export NUMEXPR_NUM_THREADS=2
 uv pip install --system --break-system-packages -e .
 
 
-echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs for task $SLURM_ARRAY_TASK_ID..."
+echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
 
-cat commands/hyper_sweep_${SLURM_ARRAY_TASK_ID}.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
+cat experiments/reproduction_nc_grokking/jobs/reproduction_nc_grokking.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control

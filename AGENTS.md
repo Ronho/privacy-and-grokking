@@ -10,7 +10,8 @@ Do not wait for the user to remind you.
 ## 2. Project Structure
 The repository is structured as follows:
 - `src/privacy_and_grokking/`: The core python package containing all source code (metrics, models, datasets, etc.).
-- `commands/`: Scripts and batch files for executing specific experiments.
+- `experiments/`: Experiment definitions, SLURM batch scripts, and generated job lists organized by experiment.
+- `commands/`: General utility scripts (e.g., for mlflow).
 - `docs/`: The centralized documentation hub.
 - `tests/`: Pytest test suite.
 

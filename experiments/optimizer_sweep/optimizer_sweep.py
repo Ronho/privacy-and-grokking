@@ -1,18 +1,19 @@
+import sys
 import json
 import random
-import hashlib
 import itertools
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-configs = SCRIPT_DIR.parent / "configs"
+REPO_ROOT = SCRIPT_DIR.parent.parent
+sys.path.append(str(REPO_ROOT))
+from experiments.utils import get_deterministic_seed, config_priority, AVAILABLE_GPUS, LOAD_ALL_TO_GPU
 
-available_gpus = []
-load_all_to_gpu = True
+configs = REPO_ROOT / "configs"
 
 # Optimizer sweep parameters
 optimizers = [
-    ### AdamW
+    # AdamW
     {"name": "AdamW", "betas": (0.9, 0.999), "eps": 1e-08}, # Default
     {"name": "AdamW", "betas": (0.0, 0.0), "eps": 1e-08},
     # Change beta1
@@ -24,12 +25,11 @@ optimizers = [
     {"name": "AdamW", "betas": (0.9, 0.99), "eps": 1e-08},
     {"name": "AdamW", "betas": (0.9, 0.9), "eps": 1e-08},
     {"name": "AdamW", "betas": (0.9, 0.8), "eps": 1e-08},
-    {"name": "AdamW", "betas": (0.9, 0), "eps": 1e-08},
     # Change eps
     {"name": "AdamW", "betas": (0.9, 0.999), "eps": 1e-07},
     {"name": "AdamW", "betas": (0.9, 0.999), "eps": 1e-06},
     {"name": "AdamW", "betas": (0.9, 0.999), "eps": 1e-05},
-    ### RMSProp
+    # RMSProp
     {"name": "RMSprop", "alpha": 0.99, "momentum": 0, "eps": 1e-08}, # Default
     # Change eps
     {"name": "RMSprop", "alpha": 0.99, "momentum": 0, "eps": 1e-07},
@@ -44,7 +44,7 @@ optimizers = [
     {"name": "RMSprop", "alpha": 0.99, "momentum": 0.99, "eps": 1e-08},
     {"name": "RMSprop", "alpha": 0.99, "momentum": 0.9, "eps": 1e-08},
     {"name": "RMSprop", "alpha": 0.99, "momentum": 0.8, "eps": 1e-08},
-    ### SGD
+    # SGD
     {"name": "SGD", "momentum": 0}, # Default
     # Change momentum
     {"name": "SGD", "momentum": 0.999},
@@ -59,24 +59,8 @@ num_files = 1
 seed = 4242
 shuffle = False
 
-def get_deterministic_seed(*args, salt=seed):
-    s = str(salt) + "_" + "_".join(str(a) for a in args)
-    return int(hashlib.sha256(s.encode("utf-8")).hexdigest(), 16) % 1000000
-
 random.seed(seed)
-
 all_commands = []
-
-def config_priority(config_path):
-    name = config_path.name.lstrip("+_")
-    # Priority: CE before MSE
-    if "CE" in name:
-        p = 0
-    elif "MSE" in name:
-        p = 1
-    else:
-        p = 99
-    return p
 
 configs_list = list(configs.glob("*.json"))
 configs_list = [
@@ -107,7 +91,7 @@ def cmd(
         f"-o data.mask.model_index={model_index} "
         f"-o optimizer='{opt_json}' -o metrics.optimizer_metrics_log_frequency=100"
     )
-    if load_all_to_gpu:
+    if LOAD_ALL_TO_GPU:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
         cmd_str += postfix
@@ -120,8 +104,8 @@ for i in range(num_repetitions):
     rep_commands = []
     for config in configs_list:
         for optim in optimizers:
-            data_seed = get_deterministic_seed(config.name, optim, "data_seed")
-            run_seed = get_deterministic_seed(config.name, optim, i, "run_seed")
+            data_seed = get_deterministic_seed(config.name, optim, "data_seed", salt=seed)
+            run_seed = get_deterministic_seed(config.name, optim, i, "run_seed", salt=seed)
         
             rep_commands.append(
                 cmd(
@@ -145,16 +129,18 @@ for i in range(num_repetitions):
 print(f"Total commands generated: {len(all_commands)}")
 
 # Clean up any existing optimizer_sweep_*.txt files
-for old_file in SCRIPT_DIR.glob("optimizer_sweep_*.txt"):
+jobs_dir = SCRIPT_DIR / "jobs"
+jobs_dir.mkdir(parents=True, exist_ok=True)
+for old_file in jobs_dir.glob("optimizer_sweep_*.txt"):
     old_file.unlink()
 
-N_gpus = len(available_gpus)
+N_gpus = len(AVAILABLE_GPUS)
 for f_idx in range(num_files):
     rep_lines = file_lines[f_idx]
     if N_gpus > 0:
         for idx, line in enumerate(rep_lines):
-            rep_lines[idx] = f"CUDA_VISIBLE_DEVICES={available_gpus[idx % N_gpus]} " + line
+            rep_lines[idx] = f"CUDA_VISIBLE_DEVICES={AVAILABLE_GPUS[idx % N_gpus]} " + line
 
-    cmd_file = SCRIPT_DIR / f"optimizer_sweep_{f_idx}.txt"
+    cmd_file = jobs_dir / f"optimizer_sweep_{f_idx}.txt"
     cmd_file.write_text("\n".join(rep_lines), encoding="utf-8")
     print(f"Wrote {len(rep_lines)} commands to {cmd_file.name}")

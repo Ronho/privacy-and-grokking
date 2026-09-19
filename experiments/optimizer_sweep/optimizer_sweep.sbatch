@@ -1,23 +1,24 @@
 #!/bin/bash
 #
-#SBATCH --job-name=canary_selection
-#SBATCH --output=logs/canary_selection_%j.log
-#SBATCH --error=logs/canary_selection_%j.err
+#SBATCH --job-name=optimizer_sweep
+#SBATCH --output=logs/optimizer_sweep_%A_%a.log
+#SBATCH --error=logs/optimizer_sweep_%A_%a.err
+#SBATCH --array=0
 #SBATCH --partition=defq
-#SBATCH --nodelist=BCM-SM-A100-01
+#SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=60
 #SBATCH --mem=96G
 #SBATCH --gpus=1
-#SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
+#SBATCH --container-image=nvcr.io#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
 #SBATCH --container-workdir=/workspace
 #SBATCH --container-writable
 
 mkdir -p logs
 
-echo "Starting job $SLURM_JOB_ID on $HOSTNAME"
+echo "Starting job $SLURM_JOB_ID (Array Task $SLURM_ARRAY_TASK_ID) on $HOSTNAME"
 echo "Allocated GPUs: $CUDA_VISIBLE_DEVICES"
 nvidia-smi
 
@@ -28,21 +29,21 @@ CONCURRENT_JOBS=20
 export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"
 export UV_CACHE_DIR="$HOME/storage/personal/.cache/uv"
-export PYTHONUNBUFFERED=1
+# export PYTHONUNBUFFERED=1
 
 # Limit threads per process to avoid CPU thrashing with concurrent PyTorch jobs
-export OMP_NUM_THREADS=2
-export MKL_NUM_THREADS=2
-export OPENBLAS_NUM_THREADS=2
-export VECLIB_MAXIMUM_THREADS=2
-export NUMEXPR_NUM_THREADS=2
+# export OMP_NUM_THREADS=2
+# export MKL_NUM_THREADS=2
+# export OPENBLAS_NUM_THREADS=2
+# export VECLIB_MAXIMUM_THREADS=2
+# export NUMEXPR_NUM_THREADS=2
 
 uv pip install --system --break-system-packages -e .
 
 
-echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs..."
+echo "Starting $CONCURRENT_JOBS concurrent jobs via xargs for task $SLURM_ARRAY_TASK_ID..."
 
-cat commands/canary_selection.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
+cat experiments/optimizer_sweep/jobs/optimizer_sweep_${SLURM_ARRAY_TASK_ID}.txt | xargs -d '\n' -P $CONCURRENT_JOBS -I {} bash -c "sleep \$((RANDOM % 60)); {}"
 
 echo "All jobs finished. Shutting down MPS."
 echo quit | nvidia-cuda-mps-control
