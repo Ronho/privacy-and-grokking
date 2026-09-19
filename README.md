@@ -1,8 +1,15 @@
 # Privacy and Grokking
 
-Commands:
-- `uv sync --extra cpu` or `uv sync --extra cu130`
-- `uv run pag --help`
-- `uv run pag train v1.0.0 --models`
-- `uv run pag attack mia_threshold_probs v2.3.0 MNIST_MLP_GROK_TRAIN_NOCAN 250000`
-- `uv run pag evaluate v2.3.0`
+This repository contains the codebase for the Privacy and Grokking project.
+
+## Documentation
+
+The full documentation for this project has been structured into three categories:
+
+1. **[User Documentation](docs/user/)**: Guides on how to use the CLI, create training runs, run jobs on a SLURM cluster, and extract/visualize metrics.
+2. **[Developer Documentation](docs/developer/)**: Standards and guidelines for testing, linting, and implementing new features.
+3. **[Technical Documentation](docs/technical/)**: In-depth explanations of the core architecture, including the RunTracker system and Artifact pathing.
+
+For a detailed index, please see the [Documentation Hub](docs/README.md).
+
+If you are an AI agent, please read [AGENTS.md](AGENTS.md) first.
