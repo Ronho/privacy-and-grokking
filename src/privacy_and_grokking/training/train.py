@@ -426,7 +426,7 @@ def train_handle(
                     )
                     mlflow.log_metrics(optim_metrics, step=step)
 
-                if step % 1 == 0:
+                if step % log_frequency == 0:
                     mlflow.log_metrics(
                         {
                             "train/task_loss": task_loss.item(),
