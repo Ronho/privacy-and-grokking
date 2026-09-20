@@ -1,19 +1,33 @@
 # Canary Selection Experiment
 
-## Übersicht
-In diesem Experiment wird die Selektion und Injektion von "Canaries" (markante, atypische oder verrauschte Trainingsbeispiele) in die Trainingsdatenbank untersucht. Ziel ist es herauszufinden, wie verschiedene Arten von Canaries (Uniform Noise, Square Watermark, Gaussian Noise, Label Noise, OOD Natural) im Laufe des Trainings – insbesondere im Hinblick auf den Grokking-Effekt – memoriert werden.
+**Status:** [Planned | Running | Completed | Abandoned]
+**Date:** [YYYY-MM-DD]
+**Author:** [Name]
+**MLflow Experiment:** `[mlflow-experiment-name]`
 
-## Wichtige Metriken
-- **Train/Test Loss & Accuracy:** Um das generelle Modellverhalten und den Grokking-Zeitpunkt (Verzögerung zwischen Train- und Test-Accuracy) festzustellen.
-- **Canary Loss / Memorization Metric:** Zu evaluieren, wie stark und zu welchem Zeitpunkt die Canaries im Vergleich zu den regulären Daten gelernt werden.
-- **Log Frequency:** Empfohlen ist ein häufiges Logging (z.B. alle 100-500 Steps), um den genauen Zeitpunkt der Canary-Memorisation aufzulösen.
+## 1. Goal & Hypothesis
+This experiment investigates the selection and injection of "canaries" (distinctive, atypical, or noisy training examples) into the training dataset. 
+**Hypothesis:** [TODO: Formulate exact hypothesis. e.g. Different types of canaries will be memorized at different stages of training relative to the grokking phase.]
 
-## Ausführung
-Zunächst die Konfigurationen generieren (dies legt eine `.txt` Datei im `jobs/` Verzeichnis ab):
+## 2. Methodology
+Different types of canaries (Uniform Noise, Square Watermark, Gaussian Noise, Label Noise, OOD Natural) are injected into the standard training dataset. The model's ability to memorize these specific examples is tracked throughout the training process, specifically observing the timeline relative to grokking.
+
+## 3. Important Metrics
+- **Train/Test Loss & Accuracy:** Used to identify general model behavior and the grokking point (delay between train and test accuracy).
+- **Canary Loss / Memorization Metric:** Evaluates how strongly and at what exact step the canaries are memorized compared to regular data.
+- **Log Frequency:** High frequency logging (e.g., every 100-500 steps) is recommended to precisely capture the canary memorization point.
+
+## 4. Reproduction Steps
+Exact commands required to generate jobs and run the experiment.
 ```bash
+# Generation
 uv run python experiments/canary_selection/canary_selection.py
-```
-Anschließend den Slurm-Job starten (aus dem Root-Verzeichnis des Repos):
-```bash
+# Execution
 sbatch experiments/canary_selection/canary_selection.sbatch
 ```
+
+## 5. Tracking & Results Location
+[TODO: Where can the results be found? Provide the MLflow experiment name and relevant tags used to filter these runs in the MLflow UI.]
+
+## 6. Conclusions & Next Steps
+[TODO: Brief summary of the outcome: Did the results support the hypothesis? What are the actionable takeaways?]

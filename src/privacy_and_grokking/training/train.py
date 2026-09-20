@@ -1,5 +1,7 @@
 import os
 import random
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -121,6 +123,14 @@ def train_handle(
         restart = False
     mlflow.set_tag("restart_count", str(restart_index))
     mlflow.log_dict(get_git_changes(), f"git/restart_{restart_index}.json")
+    
+    # Log execution command and environment for reproducibility
+    mlflow.log_text(" ".join(sys.argv), f"env/command_{restart_index}.txt")
+    try:
+        pip_freeze = subprocess.check_output(["uv", "pip", "freeze"], stderr=subprocess.DEVNULL).decode("utf-8")
+        mlflow.log_text(pip_freeze, f"env/pip_freeze_{restart_index}.txt")
+    except Exception as e:
+        mlflow.log_text(f"Failed to get pip freeze: {e}", f"env/pip_freeze_{restart_index}.txt")
 
     metrics_config: MetricsConfig = config.metrics
     log_frequency = metrics_config.log_frequency
