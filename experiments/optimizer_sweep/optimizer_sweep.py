@@ -52,7 +52,6 @@ optimizers = [
     {"name": "SGD", "momentum": 0.9},
     {"name": "SGD", "momentum": 0.8},
 ]
-# TODO: lr and weight_decay should be taken from the base config
 
 num_repetitions = 1
 num_files = 1
@@ -65,10 +64,8 @@ all_commands = []
 configs_list = list(configs.glob("*.json"))
 configs_list = [
     c for c in configs_list 
-    if "MLP" in c.name 
-    and "GROK" in c.name 
-    and "NO_GROK" not in c.name
-    and ("CE" in c.name or "MSE" in c.name)
+    if "VIT" in c.name or "MLP" in c.name and not ("NO_GROK" in c.name and "MSE" in c.name)
+
 ]
 configs_list.sort(key=config_priority)
 

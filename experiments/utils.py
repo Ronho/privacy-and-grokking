@@ -18,29 +18,13 @@ def config_priority(config_path: Path):
     Ensures a consistent and deterministic order of configs.
     """
     name = config_path.name.lstrip("+_")
+
+    a = 1 if "NO_GROK" in name else 0
+    b = 0 if "MNIST" in name else 1
+    c = 0 if "MLP" in name else 1
+    d = 0 if "CE" in name else 1
     
-    # Primary priority
-    if "MNIST" in name and "MSE" in name and "MLP" in name:
-        p = 0
-    elif "MNIST" in name and "CE" in name and "MLP" in name:
-        p = 1
-    elif "VIT" in name:
-        p = 2
-    elif "MADD" in name and "CE" in name:
-        p = 3
-    elif "MADD" in name and "MSE" in name:
-        p = 4
-    elif "CE" in name:
-        p = 5
-    elif "MSE" in name:
-        p = 6
-    else:
-        p = 99
-        
-    # Secondary priority
-    sub = 0 if "NO_GROK" in name else 1
-    
-    return (p, sub)
+    return (a, b, c, d)
 
 def get_steps(config_path: Path):
     """Returns the default number of training steps based on the config name."""
