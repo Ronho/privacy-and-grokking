@@ -9,3 +9,6 @@ To keep the codebase maintainable, readable, and consistent, all developers and 
 ## Code Comments & Docstrings
 - **Explain WHY, not just WHAT:** Code comments should explain the reasoning behind a decision or logic, rather than simply stating what the code is doing (which should be obvious from the code itself).
 - **Docstrings:** Use docstrings for all public modules, functions, and classes to explain their purpose, arguments, and return types.
+
+## Visualization Scripts
+All visualization and plotting scripts must follow the [Visualization Guidelines](visualization_guidelines.md), including standardized CLI options with `typer`, explicit module docstrings describing required inputs and outputs, and centralized artifact caching.

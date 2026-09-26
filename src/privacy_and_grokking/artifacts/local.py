@@ -33,7 +33,9 @@ Local artifact tree
     ├── hyper_sweep_heatmaps/                       → plots_hyper_sweep_heatmaps_dir
     ├── hyper_sweep_dynamics/                       → plots_hyper_sweep_dynamics_dir
     ├── canary_accuracy/                            → plots_canary_accuracy_dir
-    ├── reproduction_nc_grokking-{version}/         → plots_reproduction_dir
+    ├── reproduction_nc_grokking-{version}/         ─┐
+    │   ├── general_metrics.pdf                     │ plots_reproduction_general_metrics_path
+    │   └── nc_metrics.pdf                          ─┘ plots_reproduction_nc_metrics_path
     ├── mnist_examples/                             → plots_mnist_examples_dir
     ├── info_rmia/                                  → plots_info_rmia_dir
     ├── informia_vs_loss_overlap/                   → plots_informia_overlap_dir
@@ -48,7 +50,6 @@ Local artifact tree
 from __future__ import annotations
 
 from pathlib import Path
-
 
 # -------------------------------------------------------------------
 #  Project root directories
@@ -66,7 +67,7 @@ def get_cache_dir() -> Path:
 
 def get_plots_dir() -> Path:
     """Root directory for generated plot outputs."""
-    return get_project_root() / "plots"
+    return get_cache_dir() / "plots"
 
 
 def get_results_dir() -> Path:
@@ -127,6 +128,12 @@ def trajectory_projection_path(run_id: str) -> Path:
     return local_run_dir(run_id) / "trajectories" / "projection.json"
 
 
+def checkpoint_distance_cache_path(run_id_1: str, run_id_2: str) -> Path:
+    """Euclidean distance matrix JSON between checkpoints of two runs."""
+    return local_run_dir(run_id_1) / "distances" / f"{run_id_2}_distance.json"
+
+
+
 # ===================================================================
 #  Cache — per-experiment files
 # ===================================================================
@@ -158,6 +165,11 @@ def informia_cache_dir(experiment_name: str) -> Path:
 def plots_hyper_sweep_dir() -> Path:
     """Output directory for hyper sweep plots."""
     return get_plots_dir() / "hyper_sweep"
+
+
+def plots_optimizer_sweep_overview_path() -> Path:
+    """PDF plot path for the optimizer sweep overview."""
+    return get_plots_dir() / "optimizer_sweep_overview.pdf"
 
 
 def plots_hyper_sweep_heatmaps_dir() -> Path:
@@ -195,6 +207,16 @@ def plots_reproduction_dir(version: str = "v1") -> Path:
     return get_plots_dir() / f"reproduction_nc_grokking-{version}"
 
 
+def plots_reproduction_general_metrics_path(version: str = "v1") -> Path:
+    """PDF plot path for general metrics reproduction overview."""
+    return plots_reproduction_dir(version) / "general_metrics.pdf"
+
+
+def plots_reproduction_nc_metrics_path(version: str = "v1") -> Path:
+    """PDF plot path for neural collapse metrics reproduction overview."""
+    return plots_reproduction_dir(version) / "nc_metrics.pdf"
+
+
 def plot_3d_landscape_path(run_id: str) -> Path:
     """3D loss landscape PNG for a specific run."""
     return get_plots_dir() / f"3d_loss_landscape_{run_id}.png"
@@ -208,6 +230,17 @@ def plot_logits_path(run_id: str) -> Path:
 def plot_run_metrics_path(run_id: str) -> Path:
     """Per-run metrics summary PNG."""
     return get_plots_dir() / f"run_{run_id}_metrics.png"
+
+
+def plots_checkpoint_distance_dir() -> Path:
+    """Output directory for checkpoint distance heatmap plots."""
+    return get_plots_dir() / "checkpoint_distances"
+
+
+def plots_checkpoint_distance_path(run_id_1: str, run_id_2: str) -> Path:
+    """PDF plot path for checkpoint distance heatmap between two runs."""
+    return plots_checkpoint_distance_dir() / f"distance_{run_id_1[:8]}_{run_id_2[:8]}.pdf"
+
 
 
 # ===================================================================

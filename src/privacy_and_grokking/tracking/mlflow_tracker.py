@@ -178,38 +178,11 @@ class MLflowTracker(RunTracker):
                     "Falling back to MLflow API. Providing 'experiment_id' avoids globbing."
                 )
 
-        # 2. Fallback: MLflow download API
-        # We try to download the .zip first if it exists? No, we don't know if it's zipped.
-        # But we can try to list artifacts or just let download_artifacts handle it.
-        # If the user logged it as archive, the remote path is artifact_path + ".zip"
-        # We can try to download the dir, if it fails, try the zip.
-        cache_dir = get_cache_dir() / "downloaded_artifacts" / run_id
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            downloaded = mlflow.artifacts.download_artifacts(
-                artifact_uri=f"runs:/{run_id}/{artifact_path}",
-                dst_path=str(cache_dir)
-            )
-            return Path(downloaded)
-        except Exception:
-            # Maybe it's zipped?
-            try:
-                zip_uri = f"runs:/{run_id}/{artifact_path}.zip"
-                downloaded_zip = mlflow.artifacts.download_artifacts(
-                    artifact_uri=zip_uri,
-                    dst_path=str(cache_dir)
-                )
-                
-                # Unzip it
-                extracted_dir = cache_dir / artifact_path
-                if not extracted_dir.exists():
-                    extracted_dir.mkdir(parents=True, exist_ok=True)
-                    with zipfile.ZipFile(downloaded_zip, 'r') as zf:
-                        zf.extractall(extracted_dir)
-                return extracted_dir
-            except Exception as e2:
-                raise FileNotFoundError(f"Failed to download {artifact_path} or {artifact_path}.zip from MLflow. {e2}")
+        # 2. Fallback: Centralized artifact cache (supports HTTP proxy endpoint and local caching)
+        from privacy_and_grokking.artifacts.cache import get_artifact_path
+
+        tracking_uri = getattr(self.client, "_tracking_uri", None)
+        return get_artifact_path(run_id, artifact_path, tracking_uri=tracking_uri)
 
     def load_dict(self, run_id: str, artifact_path: str) -> dict[str, Any]:
         local_path = self.get_local_artifact_path(run_id, artifact_path)
