@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import LogNorm, Normalize
-from matplotlib.ticker import FuncFormatter, LogFormatterMathtext, LogLocator
+from matplotlib.ticker import FuncFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -87,16 +87,16 @@ MODELS = [
 ]
 
 # Styling tokens matching publication standards
-COLOR_TRAIN_LOSS = "#ff7f0e"       # tab:orange
-COLOR_TEST_LOSS = "#1f77b4"        # tab:blue
-COLOR_GRAD_NORM = "#dc2626"        # crimson red
-COLOR_SHARPNESS = "#d97706"        # amber / gold
-COLOR_WEIGHT_NORM = "#4338ca"      # deep indigo
-COLOR_DIST_START = "#9333ea"       # purple
-COLOR_STEP_DIST = "#059669"        # emerald green
-COLOR_EOS_LINE = "#64748b"         # slate gray
-COLOR_TOP5_SHARE = "#e11d48"       # vivid rose / crimson
-COLOR_LOGIT_MAG = "#0891b2"        # deep cyan / teal
+COLOR_TRAIN_LOSS = "#ff7f0e"  # tab:orange
+COLOR_TEST_LOSS = "#1f77b4"  # tab:blue
+COLOR_GRAD_NORM = "#dc2626"  # crimson red
+COLOR_SHARPNESS = "#d97706"  # amber / gold
+COLOR_WEIGHT_NORM = "#4338ca"  # deep indigo
+COLOR_DIST_START = "#9333ea"  # purple
+COLOR_STEP_DIST = "#059669"  # emerald green
+COLOR_EOS_LINE = "#64748b"  # slate gray
+COLOR_TOP5_SHARE = "#e11d48"  # vivid rose / crimson
+COLOR_LOGIT_MAG = "#0891b2"  # deep cyan / teal
 COLOR_TEXT = "#000000"
 
 
@@ -135,7 +135,11 @@ def get_loss_dataframe(
     if cached_path.is_file():
         try:
             df_cached = pd.read_parquet(cached_path)
-            if "grad_norm" in df_cached.columns and "weight_norm" in df_cached.columns and "optim_mt" in df_cached.columns:
+            if (
+                "grad_norm" in df_cached.columns
+                and "weight_norm" in df_cached.columns
+                and "optim_mt" in df_cached.columns
+            ):
                 return df_cached
         except Exception:
             pass
@@ -187,35 +191,55 @@ def get_loss_dataframe(
 
         try:
             hist_tr_acc = client.get_metric_history(run_id, "eval/train/accuracy")
-            df_tr_acc = pd.DataFrame([{"step": m.step, "train_acc": m.value} for m in hist_tr_acc]).groupby("step", as_index=False)["train_acc"].mean()
+            df_tr_acc = (
+                pd.DataFrame([{"step": m.step, "train_acc": m.value} for m in hist_tr_acc])
+                .groupby("step", as_index=False)["train_acc"]
+                .mean()
+            )
             df_train = pd.merge(df_train, df_tr_acc, on="step", how="outer")
         except Exception:
             pass
 
         try:
             hist_te_acc = client.get_metric_history(run_id, "eval/test/accuracy")
-            df_te_acc = pd.DataFrame([{"step": m.step, "test_acc": m.value} for m in hist_te_acc]).groupby("step", as_index=False)["test_acc"].mean()
+            df_te_acc = (
+                pd.DataFrame([{"step": m.step, "test_acc": m.value} for m in hist_te_acc])
+                .groupby("step", as_index=False)["test_acc"]
+                .mean()
+            )
             df_train = pd.merge(df_train, df_te_acc, on="step", how="outer")
         except Exception:
             pass
 
         try:
             hist_mt = client.get_metric_history(run_id, "optim/global_mt_norm")
-            df_mt = pd.DataFrame([{"step": m.step, "optim_mt": m.value} for m in hist_mt]).groupby("step", as_index=False)["optim_mt"].mean()
+            df_mt = (
+                pd.DataFrame([{"step": m.step, "optim_mt": m.value} for m in hist_mt])
+                .groupby("step", as_index=False)["optim_mt"]
+                .mean()
+            )
             df_train = pd.merge(df_train, df_mt, on="step", how="outer")
         except Exception:
             pass
 
         try:
             hist_mt_vt = client.get_metric_history(run_id, "optim/global_mt_over_sqrt_vt_norm")
-            df_mt_vt = pd.DataFrame([{"step": m.step, "optim_mt_vt": m.value} for m in hist_mt_vt]).groupby("step", as_index=False)["optim_mt_vt"].mean()
+            df_mt_vt = (
+                pd.DataFrame([{"step": m.step, "optim_mt_vt": m.value} for m in hist_mt_vt])
+                .groupby("step", as_index=False)["optim_mt_vt"]
+                .mean()
+            )
             df_train = pd.merge(df_train, df_mt_vt, on="step", how="outer")
         except Exception:
             pass
 
         try:
             hist_vt = client.get_metric_history(run_id, "optim/global_sqrt_vt_norm")
-            df_vt = pd.DataFrame([{"step": m.step, "optim_vt": m.value} for m in hist_vt]).groupby("step", as_index=False)["optim_vt"].mean()
+            df_vt = (
+                pd.DataFrame([{"step": m.step, "optim_vt": m.value} for m in hist_vt])
+                .groupby("step", as_index=False)["optim_vt"]
+                .mean()
+            )
             df_train = pd.merge(df_train, df_vt, on="step", how="outer")
         except Exception:
             pass
@@ -263,25 +287,38 @@ def render_pca_landscape_panel(
 
     if metric_type in ("loss", "sharpness"):
         pos = valid[valid > 0]
-        p_min = float(np.min(pos)) if len(pos) > 0 else 1e-4
-        if v_max <= p_min:
-            v_max = p_min * 10.0
+        # Allow logarithmic scale from 10^1 down to 10^-8 depending on model values
+        p_min = min(1e-8, float(np.min(pos))) if len(pos) > 0 else 1e-8
+        v_max = max(10.0, float(np.max(valid)))
+        clamped_vals = np.clip(landscape_vals, p_min, v_max)
         norm = LogNorm(vmin=p_min, vmax=v_max)
-        levels = np.logspace(np.log10(p_min), np.log10(v_max), 30)
+        min_exp = int(np.floor(np.log10(p_min)))
+        max_exp = int(np.ceil(np.log10(v_max)))
+        levels = 10.0 ** np.arange(min_exp, max_exp + 1)
         cmap = "Blues_r"
         cf = ax.contourf(
-            grid_x, grid_y, landscape_vals,
-            levels=levels, cmap=cmap, norm=norm,
-            extend="both", zorder=1,
+            grid_x,
+            grid_y,
+            clamped_vals,
+            levels=levels,
+            cmap=cmap,
+            norm=norm,
+            extend="both",
+            zorder=1,
         )
     else:  # weight_norm
         norm = Normalize(vmin=v_min, vmax=v_max)
         levels = np.linspace(v_min, v_max, 30)
-        cmap = "PuBu"
+        cmap = "PuBu_r"
         cf = ax.contourf(
-            grid_x, grid_y, landscape_vals,
-            levels=levels, cmap=cmap, norm=norm,
-            extend="neither", zorder=1,
+            grid_x,
+            grid_y,
+            landscape_vals,
+            levels=levels,
+            cmap=cmap,
+            norm=norm,
+            extend="neither",
+            zorder=1,
         )
 
     # 2. Evaluated 40x40 sampling grid and vertex dot markings
@@ -289,7 +326,9 @@ def render_pca_landscape_panel(
         ax.plot(grid_x[i, :], grid_y[i, :], color="#64748b", alpha=0.15, linewidth=0.3, zorder=1.5)
     for j in range(grid_x.shape[1]):
         ax.plot(grid_x[:, j], grid_y[:, j], color="#64748b", alpha=0.15, linewidth=0.3, zorder=1.5)
-    ax.scatter(grid_x.ravel(), grid_y.ravel(), s=2.0, color="#334155", alpha=0.3, linewidths=0, zorder=1.6)
+    ax.scatter(
+        grid_x.ravel(), grid_y.ravel(), s=2.0, color="#334155", alpha=0.3, linewidths=0, zorder=1.6
+    )
 
     # 3. Trajectory connecting lines (high-contrast outline)
     ax.plot(pc1, pc2, color="#0f172a", linestyle="-", linewidth=2.0, alpha=0.7, zorder=2)
@@ -297,7 +336,8 @@ def render_pca_landscape_panel(
 
     # 4. Checkpoint markers colored by training step
     sc = ax.scatter(
-        pc1, pc2,
+        pc1,
+        pc2,
         c=steps_pca,
         cmap=step_colormap,
         s=26,
@@ -335,23 +375,107 @@ def render_pca_landscape_panel(
         zorder=4.6,
     )
 
-    # 6. Milestone step tags directed cleanly inward
+    # 6. Milestone step tags with smart collision avoidance
     x_min, x_max = float(np.min(grid_x)), float(np.max(grid_x))
     y_min, y_max = float(np.min(grid_y)), float(np.max(grid_y))
-    x_mid = 0.5 * (x_min + x_max)
-    y_mid = 0.5 * (y_min + y_max)
+    x_span = max(1e-6, x_max - x_min)
+    y_span = max(1e-6, y_max - y_min)
 
+    # Group milestones that are coincident in normalized space (< 2.5% of axis span)
+    grouped_milestones: list[dict] = []
     for idx in tagged_indices:
-        p1 = pc1[idx]
-        p2 = pc2[idx]
-        step_val = steps_pca[idx]
-        dx = -16 if p1 > x_mid else 14
-        dy = -12 if p2 > y_mid else 12
+        p1 = float(pc1[idx])
+        p2 = float(pc2[idx])
+        step_val = int(steps_pca[idx])
+        u = (p1 - x_min) / x_span
+        v = (p2 - y_min) / y_span
+
+        matched = False
+        for g in grouped_milestones:
+            dist = np.sqrt((u - g["u"]) ** 2 + (v - g["v"]) ** 2)
+            if dist < 0.025:
+                g["steps"].append(step_val)
+                g["p1"] = p1
+                g["p2"] = p2
+                g["u"] = u
+                g["v"] = v
+                matched = True
+                break
+        if not matched:
+            grouped_milestones.append(
+                {
+                    "steps": [step_val],
+                    "p1": p1,
+                    "p2": p2,
+                    "u": u,
+                    "v": v,
+                }
+            )
+
+    candidates = [
+        (-26, 14),   # upper-left
+        (-26, -16),  # lower-left
+        (22, 14),    # upper-right
+        (22, -16),   # lower-right
+        (0, 24),     # top
+        (0, -26),    # bottom
+        (-30, 0),    # left
+        (30, 0),     # right
+    ]
+    norm_scale = 300.0
+    placed_boxes: list[tuple[float, float, float, float]] = []
+
+    for g in grouped_milestones:
+        tag_str = ", ".join(step_tag_label(s) for s in g["steps"])
+        u_pt = g["u"]
+        v_pt = g["v"]
+        p1 = g["p1"]
+        p2 = g["p2"]
+
+        best_cand = candidates[0]
+        best_penalty = float("inf")
+        box_w = max(0.09, 0.04 + 0.018 * len(tag_str))
+        box_h = 0.055
+
+        for dx, dy in candidates:
+            uc = u_pt + dx / norm_scale
+            vc = v_pt + dy / norm_scale
+            penalty = 0.0
+
+            if uc < 0.04 or uc > 0.96 or vc < 0.04 or vc > 0.96:
+                penalty += 3000.0
+
+            for pu, pv, pw, ph in placed_boxes:
+                du = abs(uc - pu)
+                dv = abs(vc - pv)
+                req_u = 0.5 * (box_w + pw) + 0.015
+                req_v = 0.5 * (box_h + ph) + 0.015
+                if du < req_u and dv < req_v:
+                    penalty += 2000.0 + (req_u - du) * 8000.0 + (req_v - dv) * 8000.0
+
+            for og in grouped_milestones:
+                if og is g:
+                    continue
+                du_m = abs(uc - og["u"])
+                dv_m = abs(vc - og["v"])
+                if du_m < 0.06 and dv_m < 0.04:
+                    penalty += 500.0
+
+            penalty += (dx**2 + dy**2) * 0.01
+
+            if penalty < best_penalty:
+                best_penalty = penalty
+                best_cand = (dx, dy)
+
+        dx_chosen, dy_chosen = best_cand
+        chosen_uc = u_pt + dx_chosen / norm_scale
+        chosen_vc = v_pt + dy_chosen / norm_scale
+        placed_boxes.append((chosen_uc, chosen_vc, box_w, box_h))
 
         ax.annotate(
-            step_tag_label(step_val),
+            tag_str,
             xy=(p1, p2),
-            xytext=(dx, dy),
+            xytext=(dx_chosen, dy_chosen),
             textcoords="offset points",
             fontsize=7.5,
             fontweight="bold",
@@ -369,8 +493,26 @@ def render_pca_landscape_panel(
         )
 
     # 7. Start & End Markers
-    ax.scatter([pc1[0]], [pc2[0]], color="#22c55e", edgecolors="#0f172a", s=85, marker="o", linewidths=0.9, zorder=5)
-    ax.scatter([pc1[-1]], [pc2[-1]], color="#ef4444", edgecolors="#0f172a", s=95, marker="*", linewidths=0.9, zorder=5)
+    ax.scatter(
+        [pc1[0]],
+        [pc2[0]],
+        color="#22c55e",
+        edgecolors="#0f172a",
+        s=85,
+        marker="o",
+        linewidths=0.9,
+        zorder=5,
+    )
+    ax.scatter(
+        [pc1[-1]],
+        [pc2[-1]],
+        color="#ef4444",
+        edgecolors="#0f172a",
+        s=95,
+        marker="*",
+        linewidths=0.9,
+        zorder=5,
+    )
 
     # 8. Dual Colorbars to the right of the square plot
     # (a) Landscape Colorbar (Blue tone mapping)
@@ -400,24 +542,32 @@ def render_pca_landscape_panel(
     cbar_land.ax.tick_params(labelsize=6.5, colors=COLOR_TEXT)
 
     if metric_type in ("loss", "sharpness") and v_max > 0:
-        min_exp = np.floor(np.log10(p_min))
-        max_exp = np.ceil(np.log10(v_max))
-        if max_exp - min_exp <= 4:
+        min_exp = int(np.floor(np.log10(p_min)))
+        max_exp = int(np.ceil(np.log10(v_max)))
+        span = max_exp - min_exp
+        if span <= 5:
             cand_ticks = 10.0 ** np.arange(min_exp, max_exp + 1)
         else:
-            cand_ticks = 10.0 ** np.linspace(min_exp, max_exp, 4)
+            step_exp = int(np.ceil(span / 4))
+            exps = np.arange(min_exp, max_exp + 1, step_exp)
+            if exps[-1] != max_exp:
+                exps = np.append(exps, max_exp)
+            cand_ticks = 10.0**exps
         lticks = [t for t in cand_ticks if p_min * 0.95 <= t <= v_max * 1.05]
         if len(lticks) < 3:
             lticks = np.logspace(np.log10(p_min), np.log10(v_max), 4)
         cbar_land.set_ticks(lticks)
 
         def fmt_log_val(x, _):
+            if x <= 0:
+                return "0"
+            exp = np.log10(x)
+            if np.isclose(exp, np.round(exp), atol=1e-3):
+                return rf"$10^{{{int(np.round(exp))}}}$"
             if x >= 100:
                 return f"{x:.0f}"
             elif x >= 1:
                 return f"{x:.1f}".rstrip("0").rstrip(".")
-            elif x >= 0.01:
-                return f"{x:.2f}"
             else:
                 return f"{x:.1e}"
 
@@ -486,7 +636,7 @@ def plot_comparison_grid(
     for row_idx, model in enumerate(MODELS):
         run_id = model["run_id"]
         row_label = model["label"]
-        
+
         traj_dir = cache_dir / "runs" / run_id / "trajectories"
         grid_file = traj_dir / "grid.json"
         proj_file = traj_dir / "projection.json"
@@ -498,16 +648,16 @@ def plot_comparison_grid(
                 "Please run visualizations/preprocessing/extract_trajectories.py first."
             )
 
-        with open(grid_file, 'r', encoding="utf-8") as f:
+        with open(grid_file, "r", encoding="utf-8") as f:
             grid_data = json.load(f)
-            
-        with open(proj_file, 'r', encoding="utf-8") as f:
+
+        with open(proj_file, "r", encoding="utf-8") as f:
             proj_data = json.load(f)
-            
+
         weight_decay = 0.0
         if config_file.is_file():
             try:
-                with open(config_file, 'r', encoding="utf-8") as f:
+                with open(config_file, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                     weight_decay = float(cfg.get("optimizer", {}).get("weight_decay", 0.0))
             except Exception:
@@ -524,26 +674,26 @@ def plot_comparison_grid(
             raw_loss = np.array(grid_data["train_losses"], dtype=float)
         else:
             raw_loss = np.zeros(len(x_coords) * len(y_coords))
-            
+
         train_loss_grid = raw_loss.reshape(len(y_coords), len(x_coords))
-        weight_norm_grid = np.array(grid_data["weight_norms"], dtype=float).reshape(len(y_coords), len(x_coords))
-        
+        weight_norm_grid = np.array(grid_data["weight_norms"], dtype=float).reshape(
+            len(y_coords), len(x_coords)
+        )
+
         if "sharpness" in grid_data:
-            sharpness_grid = np.array(grid_data["sharpness"], dtype=float).reshape(len(y_coords), len(x_coords))
+            sharpness_grid = np.array(grid_data["sharpness"], dtype=float).reshape(
+                len(y_coords), len(x_coords)
+            )
         else:
             sharpness_grid = np.zeros_like(train_loss_grid)
-            
+
         reg_loss_grid = train_loss_grid + weight_decay * weight_norm_grid
 
         steps = proj_data.get("trajectories", {}).get("steps", [])
         pca_coords = np.array(proj_data.get("trajectories", {}).get("pca_coords", []))
-        
+
         if len(pca_coords) > 0:
-            df_pca = pd.DataFrame({
-                "step": steps,
-                "pc1": pca_coords[:, 0],
-                "pc2": pca_coords[:, 1]
-            })
+            df_pca = pd.DataFrame({"step": steps, "pc1": pca_coords[:, 0], "pc2": pca_coords[:, 1]})
         else:
             df_pca = pd.DataFrame(columns=["step", "pc1", "pc2"])
 
@@ -647,7 +797,9 @@ def plot_comparison_grid(
             pc2_label=pc2_label,
             row_idx=row_idx,
             step_colormap="plasma",
-            custom_title=f"Loss + {weight_decay:.3g}" + r"$\|\theta\|_2$" if weight_decay > 0 else "Loss",
+            custom_title=f"Loss + {weight_decay:.3g}" + r"$\|\theta\|_2$"
+            if weight_decay > 0
+            else "Loss",
         )
 
         # -------------------------------------------------------------
@@ -863,7 +1015,11 @@ def plot_comparison_grid(
             r"Weight Norm & Top-5 Share (%)", fontsize=9.5, fontweight="normal", color=COLOR_TEXT
         )
         ax_dist.tick_params(axis="y", colors=COLOR_TEXT, labelsize=9)
-        top_w = float(df_loss["weight_norm"].max()) if "weight_norm" in df_loss.columns and df_loss["weight_norm"].notna().any() else 0.0
+        top_w = (
+            float(df_loss["weight_norm"].max())
+            if "weight_norm" in df_loss.columns and df_loss["weight_norm"].notna().any()
+            else 0.0
+        )
         max_dist = max(top_w, max(d_start), max(step_diffs[1:]) if len(step_diffs) > 1 else 1.0)
         ax_dist.set_ylim(bottom=0.0, top=max(105.0, max_dist * 1.15))
 
@@ -901,7 +1057,7 @@ def plot_comparison_grid(
             valid_tr_acc = np.isfinite(y_train_acc)
             if y_train_acc[valid_tr_acc].max() <= 1.01:
                 y_train_acc = y_train_acc * 100.0
-                
+
             l_tr_acc = ax_acc.plot(
                 x_acc[valid_tr_acc],
                 y_train_acc[valid_tr_acc],
@@ -912,7 +1068,7 @@ def plot_comparison_grid(
                 label="Train Acc",
                 zorder=4,
             )
-            
+
             if "test_acc" in df_loss.columns and df_loss["test_acc"].notna().any():
                 y_test_acc = df_loss["test_acc"].values
                 valid_te_acc = np.isfinite(y_test_acc)
@@ -928,7 +1084,7 @@ def plot_comparison_grid(
                     label="Test Acc",
                     zorder=4,
                 )
-            
+
             # Reference 100% line
             ax_acc.axhline(
                 100.0,
@@ -968,7 +1124,7 @@ def plot_comparison_grid(
         # -------------------------------------------------------------
         if "optim_mt" in df_loss.columns:
             x_opt = df_loss["step"].values
-            
+
             if "optim_mt" in df_loss.columns and df_loss["optim_mt"].notna().any():
                 y_mt = df_loss["optim_mt"].values
                 valid_mt = (y_mt > 0) & np.isfinite(y_mt)
@@ -976,13 +1132,13 @@ def plot_comparison_grid(
                     ax_optim.plot(
                         x_opt[valid_mt],
                         y_mt[valid_mt],
-                        color="#10b981", # emerald-500
+                        color="#10b981",  # emerald-500
                         linestyle="-",
                         linewidth=1.8,
                         alpha=0.9,
                         label=r"$||m_t||$",
                     )
-                    
+
             if "optim_mt_vt" in df_loss.columns and df_loss["optim_mt_vt"].notna().any():
                 y_mt_vt = df_loss["optim_mt_vt"].values
                 valid_mt_vt = (y_mt_vt > 0) & np.isfinite(y_mt_vt)
@@ -990,13 +1146,13 @@ def plot_comparison_grid(
                     ax_optim.plot(
                         x_opt[valid_mt_vt],
                         y_mt_vt[valid_mt_vt],
-                        color="#8b5cf6", # violet-500
+                        color="#8b5cf6",  # violet-500
                         linestyle="-",
                         linewidth=1.8,
                         alpha=0.9,
                         label=r"$||m_t / \sqrt{v_t}||$",
                     )
-                    
+
             if "optim_vt" in df_loss.columns and df_loss["optim_vt"].notna().any():
                 y_vt = df_loss["optim_vt"].values
                 valid_vt = (y_vt > 0) & np.isfinite(y_vt)
@@ -1004,24 +1160,24 @@ def plot_comparison_grid(
                     ax_optim.plot(
                         x_opt[valid_vt],
                         y_vt[valid_vt],
-                        color="#f59e0b", # amber-500
+                        color="#f59e0b",  # amber-500
                         linestyle="-",
                         linewidth=1.8,
                         alpha=0.9,
                         label=r"$||\sqrt{v_t}||$",
                     )
-                    
+
             ax_optim.set_yscale("log")
             ax_optim.set_ylabel("Norm", fontsize=10, color=COLOR_TEXT)
-            
+
             ax_optim.set_xlim(left=0.0)
             ax_optim.grid(True, which="major", linestyle="-", alpha=0.3)
-            
+
             if row_idx == 2:
                 ax_optim.set_xlabel("Step", fontsize=10, fontweight="normal", color=COLOR_TEXT)
             else:
                 ax_optim.set_xlabel("")
-                
+
             leg_opt = ax_optim.legend(
                 loc="lower left",
                 framealpha=0.95,
@@ -1148,7 +1304,9 @@ def plot_comparison_grid(
     plt.savefig(png_path, dpi=300)
     plt.close()
 
-    print(f"Successfully generated {num_models}x8 comparison grid PDF and PNG:\n  - {output_path}\n  - {png_path}")
+    print(
+        f"Successfully generated {num_models}x8 comparison grid PDF and PNG:\n  - {output_path}\n  - {png_path}"
+    )
     return output_path
 
 

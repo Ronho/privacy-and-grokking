@@ -30,6 +30,7 @@ To track experiments on the cluster directly to your local MLflow instance, you 
    scp -r cache ronholzapfel@login.ai-lab.uni-luebeck.de:~/privacy-and-grokking/
    # Or for specific files:
    scp ronholzapfel@login.ai-lab.uni-luebeck.de:~/privacy-and-grokking/cache/reproduction-nc-grokking-v1_mlflow_export.parquet cache/reproduction-nc-grokking-v1_mlflow_export.parquet
+   scp ronholzapfel@login.ai-lab.uni-luebeck.de:~/privacy-and-grokking/cache/hyper-sweep-v2_runs.parquet cache/hyper-sweep-v2_runs.parquet
    ```
 7. Run the training:
    ```bash

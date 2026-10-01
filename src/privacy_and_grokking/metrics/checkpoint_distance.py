@@ -41,6 +41,37 @@ def fetch_run_name(run_id: str, tracking_uri: str = DEFAULT_TRACKING_URI) -> str
         return run_id
 
 
+def fetch_run_init_scale(
+    run_id: str,
+    tracking_uri: str = DEFAULT_TRACKING_URI,
+) -> float:
+    """Extract initialization scale parameter for a run.
+
+    Checks training_config.json first, falls back to MLflow run parameters,
+    and returns 1.0 if not explicitly defined.
+    """
+    try:
+        cfg = get_artifact_json(run_id, "training_config.json", tracking_uri=tracking_uri)
+        model_cfg = cfg.get("model", {})
+        if "initialization_scale" in model_cfg and model_cfg["initialization_scale"] is not None:
+            return float(model_cfg["initialization_scale"])
+    except Exception:
+        pass
+
+    try:
+        client = MlflowClient(tracking_uri)
+        run = client.get_run(run_id)
+        scale_str = run.data.params.get(
+            "initialization_scale", run.data.params.get("params.initialization_scale")
+        )
+        if scale_str and scale_str != "None":
+            return float(scale_str)
+    except Exception:
+        pass
+
+    return 1.0
+
+
 def get_available_checkpoints(
     run_id: str,
     tracking_uri: str = DEFAULT_TRACKING_URI,
@@ -117,7 +148,6 @@ def load_checkpoint_vector(
         req = urllib.request.Request(url, headers={"User-Agent": "privacy-and-grokking"})
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = resp.read()
-
 
         # Atomically cache locally to prevent incomplete file writes during interrupted runs
         temp_file = model_file.with_name(f".{model_file.name}.tmp")
@@ -223,3 +253,72 @@ def compute_run_pair_distance(
     out_path.write_text(json.dumps(result, indent=2))
     print(f"Saved distance matrix to {out_path}")
     return result
+
+
+def compute_multiple_runs_distances(
+    run_ids: list[str],
+    tracking_uri: str = DEFAULT_TRACKING_URI,
+    max_workers: int = 8,
+    force_recompute: bool = False,
+) -> dict[tuple[str, str], dict]:
+    """Compute pairwise distance matrices for all pairs across a list of runs.
+
+    Reuses loaded checkpoint weight matrices in memory to avoid redundant disk I/O,
+    while persisting each pairwise matrix as an independent JSON artifact.
+    """
+    unique_run_ids = list(dict.fromkeys(run_ids))
+    print(f"Batch processing distance matrices for {len(unique_run_ids)} unique runs...")
+
+    # 1. Check if all pairs are already cached when force_recompute is False
+    results: dict[tuple[str, str], dict] = {}
+    missing_runs: set[str] = set()
+
+    for r1 in unique_run_ids:
+        for r2 in unique_run_ids:
+            path = checkpoint_distance_cache_path(r1, r2)
+            if path.exists() and not force_recompute:
+                results[(r1, r2)] = json.loads(path.read_text())
+            else:
+                missing_runs.add(r1)
+                missing_runs.add(r2)
+
+    if not missing_runs:
+        print("All pairwise distance matrices found in local cache.")
+        return results
+
+    # 2. Load trajectory matrices for missing runs in memory
+    matrices: dict[str, tuple[list[int], torch.Tensor]] = {}
+    for r in missing_runs:
+        matrices[r] = load_run_trajectory_matrix(
+            r, tracking_uri=tracking_uri, max_workers=max_workers
+        )
+
+    # 3. Compute and cache missing pairwise distance matrices
+    run_names = {r: fetch_run_name(r, tracking_uri=tracking_uri) for r in unique_run_ids}
+
+    for r1 in unique_run_ids:
+        for r2 in unique_run_ids:
+            if (r1, r2) in results:
+                continue
+
+            steps_1, mat_1 = matrices[r1]
+            steps_2, mat_2 = matrices[r2]
+
+            dist_matrix = torch.cdist(mat_1, mat_2, p=2.0).numpy()
+            res = {
+                "run_id_1": r1,
+                "run_id_2": r2,
+                "run_name_1": run_names[r1],
+                "run_name_2": run_names[r2],
+                "steps_1": steps_1,
+                "steps_2": steps_2,
+                "matrix": dist_matrix.tolist(),
+                "metric": "euclidean",
+            }
+            out_path = checkpoint_distance_cache_path(r1, r2)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(res, indent=2))
+            results[(r1, r2)] = res
+
+    print(f"Successfully computed and cached {len(results)} pairwise distance matrices.")
+    return results

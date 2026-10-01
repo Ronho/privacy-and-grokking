@@ -3,7 +3,8 @@
 
 Generates publication-quality 2D heatmaps visualizing pairwise Euclidean distance
 matrices between model checkpoints across optimization trajectories.
-Supports single pair visualizations or a multi-run grid sorted by initialization scale.
+Supports single pair visualizations or a multi-run grid sorted by model_index and
+initialization scale, with logarithmic colormap normalization.
 
 Required Inputs:
   - cache/runs/{run_id_1}/distances/{run_id_2}_distance.json: Precomputed distance matrix
@@ -25,6 +26,7 @@ from typing import Annotated
 import matplotlib.pyplot as plt
 import numpy as np
 import typer
+from matplotlib.colors import LogNorm, Normalize
 
 from privacy_and_grokking.artifacts.cache import DEFAULT_TRACKING_URI
 from privacy_and_grokking.artifacts.local import (
@@ -36,6 +38,7 @@ from privacy_and_grokking.metrics.checkpoint_distance import (
     compute_multiple_runs_distances,
     compute_run_pair_distance,
     fetch_run_init_scale,
+    fetch_run_model_index,
 )
 
 app = typer.Typer(pretty_exceptions_enable=False)
@@ -56,6 +59,7 @@ def plot_single_distance_matrix(
     data: dict,
     output_path: Path,
     colormap: str = "viridis",
+    log_scale: bool = True,
     dpi: int = 300,
 ) -> None:
     """Render and save a publication-grade 2D heatmap for a single run pair."""
@@ -67,11 +71,19 @@ def plot_single_distance_matrix(
 
     fig, ax = plt.subplots(figsize=(7.5, 6.2), dpi=dpi)
 
+    if log_scale:
+        positive_vals = matrix[matrix > 0]
+        log_vmin = float(positive_vals.min()) if len(positive_vals) > 0 else 1e-3
+        norm = LogNorm(vmin=log_vmin, vmax=float(matrix.max()), clip=True)
+    else:
+        norm = Normalize(vmin=float(matrix.min()), vmax=float(matrix.max()))
+
     im = ax.imshow(
         matrix,
         origin="lower",
         aspect="auto",
         cmap=colormap,
+        norm=norm,
         interpolation="nearest",
     )
 
@@ -105,7 +117,7 @@ def plot_single_distance_matrix(
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(
-        "Euclidean Distance",
+        "Euclidean Distance (log scale)" if log_scale else "Euclidean Distance",
         fontsize=9,
         labelpad=10,
     )
@@ -141,26 +153,37 @@ def plot_distance_matrix_grid(
     output_path: Path,
     tracking_uri: str = DEFAULT_TRACKING_URI,
     colormap: str = "viridis",
+    log_scale: bool = True,
     dpi: int = 300,
 ) -> None:
-    """Render a K x K grid of heatmaps sorted ascending by initialization scale.
+    """Render a K x K grid of heatmaps sorted by model_index and then initialization scale.
 
-    Columns increase in initialization scale from left to right.
-    Rows increase in initialization scale from bottom to top.
+    Runs are arranged ascending first by model_index, then by initialization scale.
+    Columns increase from left to right.
+    Rows increase from bottom to top.
     A unified colormap scaling is applied across all subplots for visual comparability.
     """
-    # 1. Sort runs ascending by initialization scale
+    # 1. Fetch metadata and sort runs ascending by model_index, then initialization scale
     run_scales = {r: fetch_run_init_scale(r, tracking_uri=tracking_uri) for r in run_ids}
-    sorted_runs = sorted(run_ids, key=lambda r: (run_scales[r], r))
+    run_model_indices = {r: fetch_run_model_index(r, tracking_uri=tracking_uri) for r in run_ids}
+    sorted_runs = sorted(run_ids, key=lambda r: (run_model_indices[r], run_scales[r], r))
     k = len(sorted_runs)
 
     # 2. Determine global min and max distance across all matrices for consistent color scale
-
     all_matrices = [
         np.array(pairwise_data[(r1, r2)]["matrix"]) for r1 in sorted_runs for r2 in sorted_runs
     ]
-    global_vmin = min(m.min() for m in all_matrices)
-    global_vmax = max(m.max() for m in all_matrices)
+    global_vmin = min(float(m.min()) for m in all_matrices)
+    global_vmax = max(float(m.max()) for m in all_matrices)
+
+    if log_scale:
+        positive_vals = [m[m > 0] for m in all_matrices if np.any(m > 0)]
+        log_vmin = min(float(pv.min()) for pv in positive_vals) if positive_vals else 1e-3
+        norm = LogNorm(vmin=log_vmin, vmax=global_vmax, clip=True)
+    else:
+        norm = Normalize(vmin=global_vmin, vmax=global_vmax)
+
+    has_multiple_models = len(set(run_model_indices.values())) > 1
 
     # 3. Create subplot grid
     fig, axes = plt.subplots(
@@ -173,9 +196,9 @@ def plot_distance_matrix_grid(
 
     im = None
     for row_idx, r_row in enumerate(reversed(sorted_runs)):
-        # row_idx=0 is top of figure (largest scale), row_idx=k-1 is bottom (smallest scale)
+        # row_idx=0 is top of figure (largest), row_idx=k-1 is bottom (smallest)
         for col_idx, r_col in enumerate(sorted_runs):
-            # col_idx=0 is left of figure (smallest scale), col_idx=k-1 is right (largest scale)
+            # col_idx=0 is left of figure (smallest), col_idx=k-1 is right (largest)
             ax = axes[row_idx, col_idx]
             data = pairwise_data[(r_row, r_col)]
             mat = np.array(data["matrix"])
@@ -187,8 +210,7 @@ def plot_distance_matrix_grid(
                 origin="lower",
                 aspect="auto",
                 cmap=colormap,
-                vmin=global_vmin,
-                vmax=global_vmax,
+                norm=norm,
                 interpolation="nearest",
             )
 
@@ -233,8 +255,16 @@ def plot_distance_matrix_grid(
 
             # Bottom column labels
             if is_bottom_row:
+                if has_multiple_models:
+                    xlabel_text = (
+                        f"Steps for Model {run_model_indices[r_col]}\n(Init {run_scales[r_col]:g})"
+                    )
+                else:
+                    xlabel_text = (
+                        f"Optimization Steps for\nInitialization Scale {run_scales[r_col]:g}"
+                    )
                 ax.set_xlabel(
-                    f"Optimization Steps for\nInitialization Scale {run_scales[r_col]:g}",
+                    xlabel_text,
                     fontsize=8.5,
                     fontweight="bold",
                     labelpad=6,
@@ -242,8 +272,16 @@ def plot_distance_matrix_grid(
 
             # Left row labels
             if is_left_col:
+                if has_multiple_models:
+                    ylabel_text = (
+                        f"Steps for Model {run_model_indices[r_row]}\n(Init {run_scales[r_row]:g})"
+                    )
+                else:
+                    ylabel_text = (
+                        f"Optimization Steps for\nInitialization Scale {run_scales[r_row]:g}"
+                    )
                 ax.set_ylabel(
-                    f"Optimization Steps for\nInitialization Scale {run_scales[r_row]:g}",
+                    ylabel_text,
                     fontsize=8.5,
                     fontweight="bold",
                     labelpad=6,
@@ -254,12 +292,11 @@ def plot_distance_matrix_grid(
     cbar_ax = fig.add_axes([0.91, 0.15, 0.02, 0.7])
     cbar = fig.colorbar(im, cax=cbar_ax)
     cbar.set_label(
-        "Euclidean Distance",
+        "Euclidean Distance (log scale)" if log_scale else "Euclidean Distance",
         fontsize=10,
         labelpad=12,
     )
     cbar.ax.tick_params(labelsize=8)
-
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -310,6 +347,13 @@ def main(
             "--colormap", "-c", help="Matplotlib colormap name (e.g. viridis, magma, plasma)."
         ),
     ] = "viridis",
+    log_scale: Annotated[
+        bool,
+        typer.Option(
+            "--log-scale/--linear-scale",
+            help="Use logarithmic colormap scale to emphasize smaller differences.",
+        ),
+    ] = True,
     dpi: Annotated[
         int,
         typer.Option("--dpi", help="Raster resolution for PNG output."),
@@ -335,6 +379,7 @@ def main(
             output_path=target_output,
             tracking_uri=tracking_uri,
             colormap=colormap,
+            log_scale=log_scale,
             dpi=dpi,
         )
     elif len(target_run_ids) == 1 or run_id_1:
@@ -357,6 +402,7 @@ def main(
             data=data,
             output_path=target_output,
             colormap=colormap,
+            log_scale=log_scale,
             dpi=dpi,
         )
     else:

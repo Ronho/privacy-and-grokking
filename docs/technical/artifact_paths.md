@@ -22,9 +22,15 @@ cache/
 │   ├── training_config.json                     │ local_run_dir,
 │   ├── checkpoints/{step}/...                   │ local_run_training_config
 │   ├── distances/{target_run_id}_distance.json  │ checkpoint_distance_cache_path
-│   └── trajectories/                            │
-│       ├── grid.json                            │ trajectory_grid_path,
-│       └── projection.json                     ─┘ trajectory_projection_path
+│   ├── trajectories/                            │
+│   │   ├── grid.json                            │ trajectory_grid_path,
+│   │   └── projection.json                      │ trajectory_projection_path
+│   ├── filter_normalized/                       │
+│   │   └── grid_{step}.json                     │ filter_normalized_grid_path
+│   ├── interpolation/                           │
+│   │   └── trajectory_interpolation.json        │ interpolation_1d_path
+│   └── jump_planes/                             │
+│       └── jumps_2d_planes.json                ─┘ jump_planes_grid_path
 └── {experiment_name}/                           → informia_cache_dir
     └── informia_results.parquet
 
@@ -35,6 +41,15 @@ plots/
 ├── checkpoint_distances/                       → plots_checkpoint_distance_dir,
 │   ├── distance_{r1}_{r2}.pdf                  │ plots_checkpoint_distance_path,
 │   └── distance_matrix_grid.pdf                │ plots_checkpoint_distance_grid_path
+├── pca_loss_landscape/                         → plots_pca_loss_landscape_dir,
+│   └── pca_loss_landscape_{run_id}.pdf         │ plots_pca_loss_landscape_path
+├── filter_normalized_landscape/                → plots_filter_normalized_landscape_dir,
+│   └── filter_normalized_landscape_{run_id}_{step}.pdf │ plots_filter_normalized_landscape_path
+├── interpolation_1d/                           → plots_1d_interpolation_dir,
+│   └── interpolation_1d_{run_id}.pdf           │ plots_1d_interpolation_path
+├── jump_planes/                                → plots_jump_planes_dir,
+│   └── jump_planes_2d_{run_id}.pdf             │ plots_jump_planes_path
+
 
 ├── canary_accuracy/                            → plots_canary_accuracy_dir
 

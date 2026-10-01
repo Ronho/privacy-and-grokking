@@ -55,6 +55,7 @@ from pathlib import Path
 #  Project root directories
 # -------------------------------------------------------------------
 
+
 def get_project_root() -> Path:
     """Get the root directory of the project."""
     return Path(__file__).resolve().parent.parent.parent.parent
@@ -79,6 +80,7 @@ def get_results_dir() -> Path:
 #  Cache — per-run files
 # ===================================================================
 
+
 def loss_full_cache_path(run_id: str) -> Path:
     """Per-sample loss parquet for a run."""
     return get_cache_dir() / f"{run_id}_loss_full.parquet"
@@ -97,16 +99,12 @@ def hard_samples_cache_path(run_id: str) -> Path:
 def downloaded_checkpoint_path(run_id: str, step: int) -> Path:
     """Locally cached checkpoint model file (downloaded from MLflow)."""
     return (
-        get_cache_dir()
-        / "downloaded_artifacts"
-        / run_id
-        / "checkpoints"
-        / str(step)
-        / "model.pth"
+        get_cache_dir() / "downloaded_artifacts" / run_id / "checkpoints" / str(step) / "model.pth"
     )
 
 
 # --- local run mirrors (cache/runs/{run_id}/...) ---
+
 
 def local_run_dir(run_id: str) -> Path:
     """Root of the locally cached run directory."""
@@ -128,15 +126,57 @@ def trajectory_projection_path(run_id: str) -> Path:
     return local_run_dir(run_id) / "trajectories" / "projection.json"
 
 
+def filter_normalized_grid_path(run_id: str, step: int | str = "final") -> Path:
+    """Filter-normalized loss landscape grid JSON for a run and checkpoint step."""
+    step_str = f"step_{step}" if isinstance(step, int) else str(step)
+    return local_run_dir(run_id) / "filter_normalized" / f"grid_{step_str}.json"
+
+
+def interpolation_1d_path(run_id: str) -> Path:
+    """1D linear parameter interpolation JSON for a run's trajectory."""
+    return local_run_dir(run_id) / "interpolation" / "trajectory_interpolation.json"
+
+
+def interpolation_1d_pair_path(
+    run_id: str, start_step: int | str = 0, end_step: int | str = "final"
+) -> Path:
+    """1D linear parameter interpolation JSON between two checkpoints."""
+    return (
+        local_run_dir(run_id)
+        / "interpolation"
+        / f"interpolation_{start_step}_{end_step}.json"
+    )
+
+
+def jump_planes_grid_path(run_id: str) -> Path:
+    """2D local subspace trajectory and loss landscape grid JSON for all jumps."""
+    return local_run_dir(run_id) / "jump_planes" / "jumps_2d_planes.json"
+
+
 def checkpoint_distance_cache_path(run_id_1: str, run_id_2: str) -> Path:
     """Euclidean distance matrix JSON between checkpoints of two runs."""
     return local_run_dir(run_id_1) / "distances" / f"{run_id_2}_distance.json"
 
 
+def joint_trajectories_dir(group_id: str) -> Path:
+    """Directory for joint multi-run trajectory artifacts."""
+    return get_cache_dir() / "joint_trajectories" / group_id
+
+
+def joint_trajectory_projection_path(group_id: str) -> Path:
+    """Joint PCA projection JSON across multiple runs."""
+    return joint_trajectories_dir(group_id) / "projection.json"
+
+
+def joint_trajectory_grid_path(group_id: str) -> Path:
+    """Joint 2D loss landscape grid JSON across multiple runs."""
+    return joint_trajectories_dir(group_id) / "grid.json"
+
 
 # ===================================================================
 #  Cache — per-experiment files
 # ===================================================================
+
 
 def mlflow_export_cache_path(experiment_name: str) -> Path:
     """Exported MLflow metrics parquet for an experiment."""
@@ -161,6 +201,7 @@ def informia_cache_dir(experiment_name: str) -> Path:
 # ===================================================================
 #  Plots — output directories
 # ===================================================================
+
 
 def plots_hyper_sweep_dir() -> Path:
     """Output directory for hyper sweep plots."""
@@ -242,10 +283,89 @@ def plots_checkpoint_distance_path(run_id_1: str, run_id_2: str) -> Path:
     return plots_checkpoint_distance_dir() / f"distance_{run_id_1[:8]}_{run_id_2[:8]}.pdf"
 
 
+def plots_checkpoint_distance_grid_path(name: str = "distance_matrix_grid") -> Path:
+    """PDF plot path for multi-run checkpoint distance grid heatmap."""
+    return plots_checkpoint_distance_dir() / f"{name}.pdf"
+
+
+def plots_pca_loss_landscape_dir() -> Path:
+    """Output directory for PCA loss landscape visualizations."""
+    return get_plots_dir() / "pca_loss_landscape"
+
+
+def plots_pca_loss_landscape_path(run_id: str, fmt: str = "pdf") -> Path:
+    """Canonical plot path for a run's PCA loss landscape visualization."""
+    return plots_pca_loss_landscape_dir() / f"pca_loss_landscape_{run_id}.{fmt}"
+
+
+def plots_filter_normalized_landscape_dir() -> Path:
+    """Output directory for filter-normalized random direction loss landscapes."""
+    return get_plots_dir() / "filter_normalized_landscape"
+
+
+def plots_filter_normalized_landscape_path(
+    run_id: str, step: int | str = "final", fmt: str = "pdf"
+) -> Path:
+    """Canonical plot path for a run's filter-normalized loss landscape visualization."""
+    step_str = f"step_{step}" if isinstance(step, int) else str(step)
+    return (
+        plots_filter_normalized_landscape_dir()
+        / f"filter_normalized_landscape_{run_id}_{step_str}.{fmt}"
+    )
+
+
+def plots_1d_interpolation_dir() -> Path:
+    """Output directory for 1D checkpoint interpolation plots."""
+    return get_plots_dir() / "interpolation_1d"
+
+
+def plots_1d_interpolation_path(run_id: str, fmt: str = "pdf") -> Path:
+    """Canonical plot path for a run's 1D linear interpolation visualization."""
+    return plots_1d_interpolation_dir() / f"interpolation_1d_{run_id}.{fmt}"
+
+
+def plots_1d_pair_path(
+    run_id: str,
+    start_step: int | str = 0,
+    end_step: int | str = "final",
+    fmt: str = "pdf",
+) -> Path:
+    """Canonical plot path for a 1D linear interpolation between two checkpoints."""
+    return (
+        plots_1d_interpolation_dir()
+        / f"interpolation_1d_{run_id}_{start_step}_{end_step}.{fmt}"
+    )
+
+
+def plots_1d_jumps_grid_path(run_id: str, fmt: str = "pdf") -> Path:
+    """Canonical plot path for 1D linear interpolations across all trajectory jumps."""
+    return plots_1d_interpolation_dir() / f"interpolation_1d_{run_id}_jumps_grid.{fmt}"
+
+
+def plots_jump_planes_dir() -> Path:
+    """Output directory for 2D local jump plane loss landscape visualizations."""
+    return get_plots_dir() / "jump_planes"
+
+
+def plots_jump_planes_path(run_id: str, fmt: str = "pdf") -> Path:
+    """Canonical plot path for 2D local jump plane loss landscapes."""
+    return plots_jump_planes_dir() / f"jump_planes_2d_{run_id}.{fmt}"
+
+
+def plots_joint_trajectories_dir() -> Path:
+    """Output directory for joint multi-trajectory loss landscape visualizations."""
+    return get_plots_dir() / "joint_trajectories"
+
+
+def plots_joint_trajectories_path(group_id: str, fmt: str = "pdf") -> Path:
+    """Canonical plot path for a joint multi-trajectory loss landscape visualization."""
+    return plots_joint_trajectories_dir() / f"joint_loss_landscape_{group_id}.{fmt}"
+
 
 # ===================================================================
 #  Results — final paper-ready outputs
 # ===================================================================
+
 
 def result_pdf_path(name: str, date: str, index: int = 0) -> Path:
     """Paper-ready PDF in results/."""

@@ -65,7 +65,7 @@ MODEL_CONFIGS = [
     {"run_name": "GROK_MNIST_CE_VIT", "title": "(V) ViT (CE)\nGrokking"},
     {"run_name": "NO_GROK_MNIST_CE_VIT", "title": "(VI) ViT (CE)\nNo Grokking"},
     {"run_name": "GROK_MADD_CE_TRANSFORMER", "title": "(VII) MADD (CE)\nGrokking"},
-    {"run_name": "GROK_MADD_MSE_TRANSFORMER", "title": "(VIII) MADD (MSE)\nGrokking"},
+    # {"run_name": "GROK_MADD_MSE_TRANSFORMER", "title": "(VIII) MADD (MSE)\nGrokking"},
 ]
 
 
