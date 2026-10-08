@@ -141,11 +141,7 @@ def interpolation_1d_pair_path(
     run_id: str, start_step: int | str = 0, end_step: int | str = "final"
 ) -> Path:
     """1D linear parameter interpolation JSON between two checkpoints."""
-    return (
-        local_run_dir(run_id)
-        / "interpolation"
-        / f"interpolation_{start_step}_{end_step}.json"
-    )
+    return local_run_dir(run_id) / "interpolation" / f"interpolation_{start_step}_{end_step}.json"
 
 
 def jump_planes_grid_path(run_id: str) -> Path:
@@ -273,6 +269,18 @@ def plot_run_metrics_path(run_id: str) -> Path:
     return get_plots_dir() / f"run_{run_id}_metrics.png"
 
 
+def plots_optimizer_sweep_dynamics_dir() -> Path:
+    """Output directory for optimizer sweep dynamics plots."""
+    return get_plots_dir() / "optimizer_sweep_dynamics"
+
+
+def plots_optimizer_sweep_dynamics_path(
+    model_tag: str = "GROK_MNIST_CE_MLP", fmt: str = "pdf"
+) -> Path:
+    """Canonical plot path for optimizer sweep dynamics multi-column visualization."""
+    return plots_optimizer_sweep_dynamics_dir() / f"os_dynamics_{model_tag}.{fmt}"
+
+
 def plots_checkpoint_distance_dir() -> Path:
     """Output directory for checkpoint distance heatmap plots."""
     return get_plots_dir() / "checkpoint_distances"
@@ -331,10 +339,7 @@ def plots_1d_pair_path(
     fmt: str = "pdf",
 ) -> Path:
     """Canonical plot path for a 1D linear interpolation between two checkpoints."""
-    return (
-        plots_1d_interpolation_dir()
-        / f"interpolation_1d_{run_id}_{start_step}_{end_step}.{fmt}"
-    )
+    return plots_1d_interpolation_dir() / f"interpolation_1d_{run_id}_{start_step}_{end_step}.{fmt}"
 
 
 def plots_1d_jumps_grid_path(run_id: str, fmt: str = "pdf") -> Path:
@@ -347,9 +352,18 @@ def plots_jump_planes_dir() -> Path:
     return get_plots_dir() / "jump_planes"
 
 
-def plots_jump_planes_path(run_id: str, fmt: str = "pdf") -> Path:
+def plots_jump_planes_path(run_id: str, fmt: str = "pdf", short_descriptor: str | None = None) -> Path:
     """Canonical plot path for 2D local jump plane loss landscapes."""
+    if short_descriptor:
+        return plots_jump_planes_dir() / f"jump_planes_2d_{short_descriptor}_{run_id}.{fmt}"
     return plots_jump_planes_dir() / f"jump_planes_2d_{run_id}.{fmt}"
+
+
+def plots_jump_planes_legend_path(run_id: str, short_descriptor: str | None = None) -> Path:
+    """Canonical path for the exported legend text for jump planes."""
+    if short_descriptor:
+        return plots_jump_planes_dir() / f"jump_planes_legend_{short_descriptor}_{run_id}.txt"
+    return plots_jump_planes_dir() / f"jump_planes_legend_{run_id}.txt"
 
 
 def plots_joint_trajectories_dir() -> Path:

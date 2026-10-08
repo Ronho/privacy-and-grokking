@@ -192,8 +192,59 @@ uv run python visualizations/images/plot_jump_planes.py \
 Key features:
 - **Visual Proof of $\approx 90^\circ$ Turns**: Proves that the model enters the minimum along $u_1$ and is ejected orthogonally along $u_2$ during Edge-of-Stability events.
 - **Logarithmic 2D Landscape**: Evaluates $L(\theta_{\mathrm{pre}} + x u_1 + y u_2)$ on a power-of-10 grid ($10^{-8} \dots 10^2$).
-- **Output files**:
-  - `plots/jump_planes/jump_planes_2d_<run_id>.pdf`
-  - `plots/jump_planes/jump_planes_2d_<run_id>.png` (300 DPI)
+### 2.6 Optimizer Sweep Dynamics Overview
 
+Visualizes optimization and training dynamics across optimizers (AdamW, RMSprop, SGD) for the models from the optimizer sweep in a publication-quality multi-row x 4-column layout:
+- **Column (a)**: Optimization trajectory in the top 2 PC subspace with explained variance ratio and training step colorbar.
+- **Column (b)**: Train & Test Accuracy (left axis) with Train & Test Loss (right axis, logarithmic).
+- **Column (c)**: Total Weight Norm (left axis) with Distance from Start and Step Size (right axis, logarithmic).
+- **Column (d)**: Optimizer Metrics (First Momentum $m_t$, Second Momentum $\sqrt{v_t}$, Gradient $\|\nabla L\|_2$, Update Size $\|\Delta \theta\|_2$).
+
+```bash
+# Generate all publication-ready optimizer dynamics figures
+uv run python visualizations/images/plot_os_dynamics.py
+```
+
+- **Output files**:
+  - `cache/plots/optimizer_sweep_dynamics/os_dynamics_GROK_MNIST_CE_MLP.pdf` (vector) & `.png`
+  - `cache/plots/optimizer_sweep_dynamics/os_dynamics_other_models.pdf` (vector) & `.png`
+
+### 2.7 Optimizer Sweep Jump Planes Overview
+
+Generates the 2D local subspace jump planes for the exact same canonical default runs from the optimizer sweep as used in the dynamics plots. For each run, it extracts all slingshot jumps and plots the incoming drift, orthogonal jump, and outgoing drift over the local 2D loss landscape.
+
+```bash
+# Generate jump plane plots for all canonical optimizer sweep runs
+uv run python visualizations/images/plot_os_jump.py
+```
+
+- **Output files**:
+  - `cache/plots/jump_planes/jump_planes_2d_{run_id}.pdf` (vector) & `.png` for each canonical run ID
+
+
+### 2.8 Canary Selection Overview
+
+Generates a publication-quality multi-panel overview figure for canary selection across the 8 canonical model configurations. Rows correspond to the model configurations, and columns correspond to the canary types (e.g., Gaussian Noise, Uniform Noise, Watermark).
+
+```bash
+uv run python visualizations/images/plot_canary_selection.py
+```
+
+- **Output files**:
+  - `cache/plots/canary_accuracy/canary_selection_overview.pdf`
+  - `cache/plots/canary_accuracy/canary_selection_overview.png` (300 DPI)
+
+### 2.9 Optimizer Sweep Ablation Overview
+
+Generates one image per canonical model configuration showing optimizer ablations (AdamW Base, AdamW without weight decay, SGD, AdamW b1=b2=0). The visualization has two columns:
+- **Column (a)**: Train and Test Accuracy (left axis) with Train and Test Loss (right axis).
+- **Column (b)**: Optimizer dynamics (Momentum, Update Step, Weight Decay Term).
+
+```bash
+# Generate all optimizer ablation figures
+uv run python visualizations/images/plot_os_ablation.py
+```
+
+- **Output files**:
+  - `cache/plots/os_ablation/{run_name}.pdf`
 

@@ -52,6 +52,8 @@ plots/
 
 
 ├── canary_accuracy/                            → plots_canary_accuracy_dir
+├── optimizer_sweep_dynamics/                   → plots_optimizer_sweep_dynamics_dir,
+│   └── os_dynamics_{model_tag}.pdf             │ plots_optimizer_sweep_dynamics_path
 
 ├── reproduction_nc_grokking-{version}/         ─┐
 │   ├── general_metrics.pdf                     │ plots_reproduction_general_metrics_path

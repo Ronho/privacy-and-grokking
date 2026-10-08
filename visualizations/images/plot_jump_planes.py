@@ -34,6 +34,7 @@ from privacy_and_grokking.artifacts.local import (
     jump_planes_grid_path,
     plots_jump_planes_dir,
     plots_jump_planes_path,
+    plots_jump_planes_legend_path,
 )
 from privacy_and_grokking.utils import Logger
 from visualizations.preprocessing.extract_jump_planes import extract_jump_planes
@@ -46,8 +47,10 @@ def plot_jump_planes(
     output_dir: Path | None = None,
     tracking_uri: str = DEFAULT_TRACKING_URI,
     force_extract: bool = False,
+    short_descriptor: str | None = None,
 ) -> tuple[Path, Path]:
     """Plots a publication-grade 2x4 grid of 2D local subspace loss landscapes and jump trajectories."""
+    legend_texts = []
     data_file = jump_planes_grid_path(run_id)
 
     if not data_file.exists() or force_extract:
@@ -81,6 +84,7 @@ def plot_jump_planes(
     norm = LogNorm(vmin=min_loss, vmax=max_loss)
     levels = np.logspace(-8, 2, 21)
     power_10_levels = np.logspace(-8, 2, 11)
+    roman_numerals = ["(I)", "(II)", "(III)", "(IV)", "(V)", "(VI)", "(VII)", "(VIII)", "(IX)", "(X)"]
 
     cf = None
 
@@ -103,6 +107,10 @@ def plot_jump_planes(
         # 1. Background Loss Contours
         cf = ax.contourf(X, Y, loss_grid, levels=levels, norm=norm, cmap="PuBu_r", alpha=0.9, extend="both")
         cs = ax.contour(X, Y, loss_grid, levels=power_10_levels, colors="white", linewidths=0.6, alpha=0.5)
+        try:
+            ax.clabel(cs, inline=True, fontsize=6, fmt=LogFormatterMathtext(), colors='white')
+        except Exception:
+            pass
 
         # 2. Draw Trajectory Segments
         traj = jump["traj_points"]
@@ -147,20 +155,20 @@ def plot_jump_planes(
         ax.plot(
             xs[mask_out],
             ys[mask_out],
-            color="#ff7f00",
+            color="#33a02c",
             linewidth=2.0,
             linestyle="--",
             label="Outgoing drift ($v_{\\mathrm{out}}$)",
             zorder=6,
         )
-        ax.scatter(xs[mask_out], ys[mask_out], color="#ff7f00", edgecolors="black", s=12, zorder=7)
+        ax.scatter(xs[mask_out], ys[mask_out], color="#33a02c", edgecolors="black", s=12, zorder=7)
 
         # Key state markers
         ax.scatter(
             [0.0],
             [0.0],
-            marker="*",
-            s=120,
+            marker="o",
+            s=60,
             color="#e31a1c",
             edgecolors="black",
             zorder=10,
@@ -169,8 +177,8 @@ def plot_jump_planes(
         ax.scatter(
             [x_post],
             [y_post],
-            marker="o",
-            s=60,
+            marker="*",
+            s=120,
             color="#fdbf6f",
             edgecolors="black",
             zorder=10,
@@ -181,22 +189,17 @@ def plot_jump_planes(
         ax.axhline(0.0, color="gray", linestyle=":", linewidth=0.8, alpha=0.5)
         ax.axvline(0.0, color="gray", linestyle=":", linewidth=0.8, alpha=0.5)
 
-        # Text Box with Turn Angle & Rotation
-        ax.text(
-            0.05,
-            0.95,
-            f"$\\mathbf{{\\angle (v_{{\\mathrm{{in}}}}, v_{{\\mathrm{{jump}}}}): {turn_angle:.1f}^\\circ}}$\n"
-            f"$\\|v_{{\\mathrm{{jump}}}}\\|: {jump_dist:.1f}$\n"
-            f"$\\Delta\\theta: {theta_rot:.1f}^\\circ$",
-            transform=ax.transAxes,
-            fontsize=8.5,
-            verticalalignment="top",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.88, edgecolor="gray"),
-            zorder=11,
+        # Collect legend text instead of plotting it
+        roman_num = roman_numerals[idx] if idx < len(roman_numerals) else f"({idx+1})"
+        legend_texts.append(
+            f"{roman_num} Step {s_pre:,} to {s_post:,}\n"
+            f"Angle (v_in, v_jump): {turn_angle:.1f} degrees\n"
+            f"Jump Distance ||v_jump||: {jump_dist:.1f}\n"
+            f"Delta Theta: {theta_rot:.1f} degrees\n"
         )
 
         ax.set_title(
-            f"Jump {idx+1}: Step {s_pre:,} $\\to$ {s_post:,}",
+            f"{roman_num} Step {s_pre:,} to {s_post:,}",
             fontweight="bold",
             pad=6,
         )
@@ -207,26 +210,12 @@ def plot_jump_planes(
         if c == 0:
             ax.set_ylabel(r"Orthogonal Jump $u_2$", fontweight="bold")
 
-        if idx == 0:
-            ax.legend(loc="lower left", framealpha=0.9, fontsize=7.5)
-
     # Hide unused subplots
     for idx in range(n_jumps, rows * cols):
         r, c = divmod(idx, cols)
         fig.delaxes(axes[r][c])
 
-    # Shared colorbar on the right
-    fig.subplots_adjust(right=0.91, top=0.90, hspace=0.32, wspace=0.25)
-    cbar_ax = fig.add_axes([0.93, 0.15, 0.018, 0.70])
-    cbar = fig.colorbar(cf, cax=cbar_ax, format=LogFormatterMathtext())
-    cbar.set_label(r"Train Loss $\mathcal{L}(\theta)$ (log scale)", fontweight="bold")
-
-    fig.suptitle(
-        f"2D Local Subspace Trajectories & Loss Landscapes Across Slingshot Jumps\nRun ID: {run_id}",
-        fontweight="bold",
-        fontsize=13,
-        y=0.97,
-    )
+    fig.subplots_adjust(right=0.95, top=0.90, hspace=0.32, wspace=0.25)
 
     if output_dir is None:
         target_dir = plots_jump_planes_dir()
@@ -234,15 +223,19 @@ def plot_jump_planes(
         target_dir = output_dir
 
     target_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = plots_jump_planes_path(run_id, "pdf")
-    png_path = plots_jump_planes_path(run_id, "png")
+    pdf_path = plots_jump_planes_path(run_id, "pdf", short_descriptor)
+    png_path = plots_jump_planes_path(run_id, "png", short_descriptor)
+    txt_path = plots_jump_planes_legend_path(run_id, short_descriptor)
 
     fig.savefig(pdf_path, bbox_inches="tight")
     fig.savefig(png_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
 
+    txt_path.write_text("\n".join(legend_texts))
+
     print(f"Saved 2D Jump Planes PDF plot to: {pdf_path}")
     print(f"Saved 2D Jump Planes PNG plot to: {png_path}")
+    print(f"Saved 2D Jump Planes Legend data to: {txt_path}")
     return pdf_path, png_path
 
 

@@ -6,6 +6,7 @@ For each optimizer and model configuration, it plots:
   - Column (a): Train & Test Accuracy over step
   - Column (b): Train & Test Loss (log-scale) over step
   - Column (c): Total Weight Norm & Last Layer Weight Norm over step
+  - Column (d): Optimizer Dynamics (m_t, sqrt(v_t), and global update norm on log-scale) over step
 
 Each page displays parameter ablation studies as rows. For AdamW and RMSprop, 3 separate
 pages correspond to the 3 model configurations (MLP MSE, MLP CE, ViT CE) with 3 ablation rows
@@ -13,7 +14,7 @@ each. For SGD, all 3 model configurations are consolidated onto a single page (1
 ablating momentum), avoiding empty rows.
 
 Required Inputs:
-  - cache/optimizer-sweep-v1_mlflow_export.parquet: Exported metrics parquet for the optimizer sweep.
+  - cache/optimizer-sweep-v1_mlflow_export.parquet: Exported metrics parquet.
   - MLflow server (or local cache): Access to training_config.json for run hyperparameters
     (downloaded automatically via MLflow HTTP endpoint and cached in cache/runs/{run_id}/).
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,10 +45,10 @@ from privacy_and_grokking.artifacts.local import (
 app = typer.Typer(pretty_exceptions_enable=False)
 
 # Styling tokens matching publication standards
-COLOR_TRAIN = "#ff7f0e"       # tab:orange
-COLOR_TEST = "#1f77b4"        # tab:blue
+COLOR_TRAIN = "#ff7f0e"  # tab:orange
+COLOR_TEST = "#1f77b4"  # tab:blue
 COLOR_NORM_TOTAL = "#4338ca"  # deep indigo
-COLOR_NORM_LAST = "#dc2626"   # crimson red
+COLOR_NORM_LAST = "#dc2626"  # crimson red
 COLOR_TEXT = "#000000"
 
 
@@ -69,7 +70,9 @@ def extract_optimizer_params(
 ) -> pl.DataFrame:
     """Extract and parse optimizer parameters from cached or remote training_config.json."""
     unique_run_ids = df.select("run_id").unique().drop_nulls().to_series().to_list()
-    print(f"Loading training config for {len(unique_run_ids)} runs (cached or from {tracking_uri})...")
+    print(
+        f"Loading training config for {len(unique_run_ids)} runs (cached or from {tracking_uri})..."
+    )
 
     def _fetch_config(run_id: str) -> dict:
         try:
@@ -107,8 +110,8 @@ def plot_ablation_grid(
 
     fig, axes = plt.subplots(
         nrows=num_rows,
-        ncols=3,
-        figsize=(15.5, 4.2 * num_rows),
+        ncols=4,
+        figsize=(20.5, 4.2 * num_rows),
         dpi=300,
         squeeze=False,
     )
@@ -132,12 +135,16 @@ def plot_ablation_grid(
                     df_row = df_row.filter(pl.col(k) == v)
 
         if df_row.is_empty() or ablation_param not in df_row.columns:
-            for c in range(3):
+            for c in range(4):
                 axes[row_idx, c].text(
-                    0.5, 0.5,
+                    0.5,
+                    0.5,
                     f"No data for {ablation_param}\nwith {fixed_params}",
-                    ha="center", va="center", transform=axes[row_idx, c].transAxes,
-                    fontsize=9, color="#64748b"
+                    ha="center",
+                    va="center",
+                    transform=axes[row_idx, c].transAxes,
+                    fontsize=9,
+                    color="#64748b",
                 )
             continue
 
@@ -154,10 +161,10 @@ def plot_ablation_grid(
 
         colors = [cmap(i / max(len(unique_vals) - 1, 1)) for i in range(len(unique_vals))]
 
-        for ax_idx in range(3):
+        for ax_idx in range(4):
             ax = axes[row_idx, ax_idx]
 
-            for val, color in zip(unique_vals, colors):
+            for val, color in zip(unique_vals, colors, strict=False):
                 if isinstance(val, float):
                     df_val = df_row.filter((pl.col(ablation_param) - val).abs() < 1e-8)
                 else:
@@ -178,33 +185,56 @@ def plot_ablation_grid(
                         (train_loss_metric, "-", "Train Loss"),
                         (test_loss_metric, "--", "Test Loss"),
                     ]
-                else:
+                elif ax_idx == 2:
                     last_layer = "fc3.weight" if model_name == "mlp" else "vit.heads.head.weight"
                     metrics = [
                         ("eval/weight_norm/total", "-", "Total Norm"),
                         (f"eval/weight_norm/{last_layer}", "--", "Last Layer"),
                     ]
+                else:
+                    # Column 4: Optimizer Dynamics (m_t, sqrt(v_t), and update norm)
+                    available_metrics = set(df_val["metric_name"].unique())
+                    mt_metric = (
+                        "optim/global_mt_norm"
+                        if "optim/global_mt_norm" in available_metrics
+                        else "optim/global_momentum_buffer_norm"
+                    )
+                    vt_metric = (
+                        "optim/global_sqrt_vt_norm"
+                        if "optim/global_sqrt_vt_norm" in available_metrics
+                        else "optim/global_sqrt_square_avg_norm"
+                    )
+                    metrics = [
+                        (mt_metric, "-", "m_t"),
+                        (vt_metric, "--", "sqrt_v_t"),
+                        ("optim/global_update_norm", ":", "Update Norm"),
+                    ]
 
                 val_str = f"{val:.1e}" if (isinstance(val, float) and 0 < val < 1e-3) else str(val)
+                labeled_for_val = False
 
-                for metric_name, linestyle, label_type in metrics:
+                for metric_name, linestyle, _label_type in metrics:
                     df_metric = df_val.filter(pl.col("metric_name") == metric_name)
                     if df_metric.is_empty():
                         continue
 
                     # Average over seeds
-                    df_agg = (
-                        df_metric.group_by("step")
-                        .agg(pl.col("value").mean())
-                        .sort("step")
-                    )
+                    df_agg = df_metric.group_by("step").agg(pl.col("value").mean()).sort("step")
 
                     steps = df_agg["step"].to_numpy()
                     vals = df_agg["value"].to_numpy()
 
-                    # Put legend label only on solid lines to avoid cluttered duplicate legends
-                    show_label = label_type in ("Train Acc", "Train Loss", "Total Norm")
-                    line_label = f"{ablation_param}={val_str}" if show_label else None
+                    # Filter out non-positive values for log scale plots to prevent warnings
+                    if ax_idx in (1, 3):
+                        valid_mask = np.isfinite(vals) & (vals > 0)
+                        if not np.any(valid_mask):
+                            continue
+                        steps = steps[valid_mask]
+                        vals = vals[valid_mask]
+
+                    # Assign legend label only to first plotted line per parameter value
+                    line_label = f"{ablation_param}={val_str}" if not labeled_for_val else None
+                    labeled_for_val = True
 
                     ax.plot(
                         steps,
@@ -216,7 +246,7 @@ def plot_ablation_grid(
                         label=line_label,
                     )
 
-            if ax_idx == 1:
+            if ax_idx in (1, 3):
                 ax.set_yscale("log")
 
             ax.set_xlabel("Step", fontsize=9.5)
@@ -226,25 +256,33 @@ def plot_ablation_grid(
                 ax.set_ylabel("Accuracy", fontsize=9.5)
                 ax.set_title(f"{row_title} — Accuracy", fontsize=11, fontweight="semibold")
                 ax.set_ylim(-0.02, 1.05)
+                legend_title = "Solid: Train | Dashed: Test"
             elif ax_idx == 1:
                 ax.set_ylabel("Loss (Log Scale)", fontsize=9.5)
                 ax.set_title(f"{row_title} — Loss", fontsize=11, fontweight="semibold")
-            else:
+                legend_title = "Solid: Train | Dashed: Test"
+            elif ax_idx == 2:
                 ax.set_ylabel("Weight Norm ||θ||", fontsize=9.5)
                 ax.set_title(f"{row_title} — Weight Norm", fontsize=11, fontweight="semibold")
+                legend_title = "Solid: Total | Dashed: Last Layer"
+            else:
+                ax.set_ylabel("Norm (Log Scale)", fontsize=9.5)
+                ax.set_title(
+                    f"{row_title} — Optimizer Dynamics", fontsize=11, fontweight="semibold"
+                )
+                legend_title = "Solid: ‖mₜ‖ | Dashed: ‖√vₜ‖ | Dotted: ‖Δθ‖"
 
             ax.grid(True, linestyle=":", alpha=0.55)
 
             handles, labels = ax.get_legend_handles_labels()
             if handles:
-                # Add solid vs dashed explanation in legend
                 ax.legend(
                     handles,
                     labels,
                     fontsize=7.8,
                     loc="best",
                     framealpha=0.85,
-                    title="Solid: Train/Total | Dashed: Test/Last",
+                    title=legend_title,
                     title_fontsize=7.5,
                 )
 
@@ -256,7 +294,7 @@ def plot_ablation_grid(
 @app.command()
 def main(
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--output", "-o", help="Destination path for generated PDF."),
     ] = None,
     tracking_uri: Annotated[
@@ -298,9 +336,21 @@ def main(
             ("vit_torchvision", "cross_entropy", "AdamW — ViT (Cross Entropy) Grokking"),
         ]
         adamw_ablations = [
-            {"name": "eps", "fixed": {"beta1": 0.9, "beta2": 0.999}, "row_title": "Ablation: eps (fixed β₁=0.9, β₂=0.999)"},
-            {"name": "beta1", "fixed": {"eps": 1e-8, "beta2": 0.999}, "row_title": "Ablation: beta1 (fixed ε=1e-8, β₂=0.999)"},
-            {"name": "beta2", "fixed": {"eps": 1e-8, "beta1": 0.9}, "row_title": "Ablation: beta2 (fixed ε=1e-8, β₁=0.9)"},
+            {
+                "name": "eps",
+                "fixed": {"beta1": 0.9, "beta2": 0.999},
+                "row_title": "Ablation: eps (fixed β₁=0.9, β₂=0.999)",
+            },
+            {
+                "name": "beta1",
+                "fixed": {"eps": 1e-8, "beta2": 0.999},
+                "row_title": "Ablation: beta1 (fixed ε=1e-8, β₂=0.999)",
+            },
+            {
+                "name": "beta2",
+                "fixed": {"eps": 1e-8, "beta1": 0.9},
+                "row_title": "Ablation: beta2 (fixed ε=1e-8, β₁=0.9)",
+            },
         ]
         for model_key, loss_key, page_title in adamw_models:
             print(f"  Plotting page: {page_title} ...")
@@ -310,8 +360,7 @@ def main(
                 & (pl.col("params.loss_function") == loss_key)
             )
             specs = [
-                {**ab, "model_name": model_key, "loss_func": loss_key}
-                for ab in adamw_ablations
+                {**ab, "model_name": model_key, "loss_func": loss_key} for ab in adamw_ablations
             ]
             plot_ablation_grid(df_subset, page_title, specs, pdf)
 
@@ -322,9 +371,21 @@ def main(
             ("vit_torchvision", "cross_entropy", "RMSprop — ViT (Cross Entropy) Grokking"),
         ]
         rmsprop_ablations = [
-            {"name": "eps", "fixed": {"alpha": 0.99, "momentum": 0.0}, "row_title": "Ablation: eps (fixed α=0.99, momentum=0.0)"},
-            {"name": "alpha", "fixed": {"eps": 1e-8, "momentum": 0.0}, "row_title": "Ablation: alpha (fixed ε=1e-8, momentum=0.0)"},
-            {"name": "momentum", "fixed": {"eps": 1e-8, "alpha": 0.99}, "row_title": "Ablation: momentum (fixed ε=1e-8, α=0.99)"},
+            {
+                "name": "eps",
+                "fixed": {"alpha": 0.99, "momentum": 0.0},
+                "row_title": "Ablation: eps (fixed α=0.99, momentum=0.0)",
+            },
+            {
+                "name": "alpha",
+                "fixed": {"eps": 1e-8, "momentum": 0.0},
+                "row_title": "Ablation: alpha (fixed ε=1e-8, momentum=0.0)",
+            },
+            {
+                "name": "momentum",
+                "fixed": {"eps": 1e-8, "alpha": 0.99},
+                "row_title": "Ablation: momentum (fixed ε=1e-8, α=0.99)",
+            },
         ]
         for model_key, loss_key, page_title in rmsprop_models:
             print(f"  Plotting page: {page_title} ...")
@@ -334,8 +395,7 @@ def main(
                 & (pl.col("params.loss_function") == loss_key)
             )
             specs = [
-                {**ab, "model_name": model_key, "loss_func": loss_key}
-                for ab in rmsprop_ablations
+                {**ab, "model_name": model_key, "loss_func": loss_key} for ab in rmsprop_ablations
             ]
             plot_ablation_grid(df_subset, page_title, specs, pdf)
 
@@ -358,7 +418,10 @@ def main(
             },
             {
                 "name": "momentum",
-                "fixed": {"params.model_name": "vit_torchvision", "params.loss_function": "cross_entropy"},
+                "fixed": {
+                    "params.model_name": "vit_torchvision",
+                    "params.loss_function": "cross_entropy",
+                },
                 "model_name": "vit_torchvision",
                 "loss_func": "cross_entropy",
                 "row_title": "ViT (CE) — Momentum Sweep",
