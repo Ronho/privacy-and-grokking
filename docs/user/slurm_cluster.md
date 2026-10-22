@@ -62,6 +62,16 @@ MNISTConfig()()
 scontrol show node | awk '/^NodeName=/{n=substr($1,10); rm=0; fm=0; cc=0; cg=0; ac=0; ag=0} /^[ \t]*RealMemory=/{for(i=1;i<=NF;i++){if($i~/^RealMemory=/) rm=substr($i,12); if($i~/^FreeMem=/) fm=substr($i,9)}} /^[ \t]*CfgTRES=/{if(match($1,/cpu=[0-9]+/)) cc=substr($1,RSTART+4,RLENGTH-4); if(match($1,/gres\/gpu=[0-9]+/)) cg=substr($1,RSTART+9,RLENGTH-9)} /^[ \t]*AllocTRES=/{if(match($1,/cpu=[0-9]+/)) ac=substr($1,RSTART+4,RLENGTH-4); if(match($1,/gres\/gpu=[0-9]+/)) ag=substr($1,RSTART+9,RLENGTH-9); used=(fm>0?rm-fm:0); printf "%-18s | CPU: %3d / %-3d | GPU Avail: %d  [Alloc: %d, Tot: %d] | RAM: %4.0f / %-4.0f GiB (Free: %4.0f GiB)\n", n, ac, cc, cg-ag, ag, cg, used/1024, rm/1024, fm/1024}'
 ```
 
+**Check Resource Usage of terminated Jobs:**
+```bash
+seff <JOB_ID>
+```
+
+**Check Resource Usage of running JOB:**
+```bash
+sacct -j <JOB_ID> --format=JobID,JobName,State,Elapsed,TotalCPU,MaxRSS
+```
+
 **Get an interactive GPU shell:**
 ```bash
 srun --jobid=19462 --pty nvidia-smi

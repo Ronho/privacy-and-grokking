@@ -7,8 +7,8 @@
 #SBATCH --nodelist=BCM-SM-A100-01,BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=60
-#SBATCH --mem=96G
+#SBATCH --cpus-per-task=10
+#SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
@@ -23,7 +23,7 @@ nvidia-smi
 
 nvidia-cuda-mps-control -d
 
-CONCURRENT_JOBS=20
+CONCURRENT_JOBS=10
 
 export MLFLOW_TRACKING_URI="file:///workspace/mlruns"
 export PATH="$HOME/storage/personal/bin:$PATH"

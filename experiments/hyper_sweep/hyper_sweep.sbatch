@@ -8,8 +8,8 @@
 #SBATCH --nodelist=BCM-DGX-A100-2,BCM-SM-A100-03
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=60
-#SBATCH --mem=96G
+#SBATCH --cpus-per-task=10
+#SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --container-image=nvcr.io\#nvidia/pytorch:26.07-py3
 #SBATCH --container-mounts=/home/ronholzapfel/privacy-and-grokking:/workspace,/home/ronholzapfel:/home/ronholzapfel
