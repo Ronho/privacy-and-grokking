@@ -23,7 +23,7 @@ num_repetitions = 6
 num_files = 5
 seed = 4712
 shuffle = False
-sweep_mode = "one_fixed"  # "one_fixed" (2D slices, 1 param fixed) or "two_fixed" (1D ablations, 2 params fixed)
+sweep_mode = "two_fixed"  # "one_fixed" (2D slices, 1 param fixed) or "two_fixed" (1D ablations, 2 params fixed)
 
 
 # Start of main script
@@ -112,7 +112,7 @@ def get_parameter_combinations(
 
 configs_list = list(configs.glob("*.json"))
 configs_list = [
-    c for c in configs_list#if c.name.startswith("GROK_")
+    c for c in configs_list if "MSE_VIT" in c.name
 ]
 configs_list.sort(key=config_priority)
 
@@ -133,7 +133,7 @@ def cmd(
     if steps is None:
         steps = get_steps(config)
     cmd_str = (
-        f"pag train hyper-sweep-v2 {config.name} {steps} "
+        f"pag train hyper-sweep-v3 {config.name} {steps} "
         f"--run-name {name_prefix}{config.stem} "
         f"-o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} "
         f"-o data.mask.model_index={model_index} -o data.canary='{canary_json}' "
