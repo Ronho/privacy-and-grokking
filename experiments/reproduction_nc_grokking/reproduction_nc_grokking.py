@@ -24,7 +24,7 @@ configs_list = [c for c in configs_list if not c.name.startswith("_")]
 configs_list.sort(key=config_priority)
 
 def cmd(config, seed, data_seed, model_index, name_prefix="", postfix=None):
-    cmd_str = f"pag train reproduction-nc-grokking-v1 {config.name} 150000 --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index}"
+    cmd_str = f"pag train reproduction-nc-grokking-v2 {config.name} 150000 --run-name {name_prefix}{config.stem} -o seed={seed} -o data.seed={data_seed} -o data.mask.seed={data_seed} -o data.mask.model_index={model_index}"
     if LOAD_ALL_TO_GPU:
         cmd_str += " --load-all-to-gpu"
     if postfix is not None:
