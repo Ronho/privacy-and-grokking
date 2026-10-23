@@ -6,9 +6,11 @@ SETUPS = {
     "NO_GROK_MNIST_MSE_MLP": "(II) MLP (MSE)\nNo Grokking",
     "GROK_MNIST_CE_MLP": "(III) MLP (CE)\nGrokking",
     "NO_GROK_MNIST_CE_MLP": "(IV) MLP (CE)\nNo Grokking",
-    "GROK_MNIST_CE_VIT": "(V) ViT (CE)\nGrokking",
-    "NO_GROK_MNIST_CE_VIT": "(VI) ViT (CE)\nNo Grokking",
-    "GROK_MADD_CE_TRANSFORMER": "(VII) MADD (CE)\nGrokking"
+    "GROK_MNIST_MSE_VIT": "(V) ViT (CE)\nGrokking",
+    "NO_GROK_MNIST_MSE_VIT": "(VI) ViT (CE)\nNo Grokking",
+    "GROK_MNIST_CE_VIT": "(VII) ViT (CE)\nGrokking",
+    "NO_GROK_MNIST_CE_VIT": "(VIII) ViT (CE)\nNo Grokking",
+    "GROK_MADD_CE_TRANSFORMER": "(IX) MADD (CE)\nGrokking",
 }
 
 def setup():

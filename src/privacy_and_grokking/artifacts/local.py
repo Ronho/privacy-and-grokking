@@ -115,6 +115,9 @@ def local_run_training_config(run_id: str) -> Path:
     """Locally cached training_config.json for a run."""
     return local_run_dir(run_id) / "training_config.json"
 
+def local_run_margin_attack_data(run_id: str, checkpoint: str) -> Path:
+    """Locally cached margin attack data for a run."""
+    return local_run_dir(run_id) / "margin_attack" / f"{checkpoint}.parquet"
 
 def trajectory_grid_path(run_id: str) -> Path:
     """Loss landscape grid JSON for a run."""
@@ -192,6 +195,16 @@ def runs_keep_cache_path(experiment_name: str) -> Path:
 def informia_cache_dir(experiment_name: str) -> Path:
     """InfORMIA results directory for an experiment."""
     return get_cache_dir() / experiment_name
+
+
+def canary_margins_cache_dir(experiment_name: str) -> Path:
+    """Directory for cached per-sample canary margin data."""
+    return get_cache_dir() / "canary_margins" / experiment_name
+
+
+def canary_margins_cache_path(experiment_name: str, run_id: str, step: int) -> Path:
+    """Cached per-run, per-checkpoint canary margin parquet."""
+    return canary_margins_cache_dir(experiment_name) / f"{run_id}_{step}.parquet"
 
 
 # ===================================================================
