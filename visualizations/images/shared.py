@@ -3,15 +3,16 @@ import polars as pl
 
 SETUPS = {
     "GROK_MNIST_MSE_MLP": "(I) MLP (MSE)\nGrokking",
-    "NO_GROK_MNIST_MSE_MLP": "(II) MLP (MSE)\nNo Grokking",
+    "NO_GROK_MNIST_MSE_MLP": "(II) MLP (MSE)\nBaseline",
     "GROK_MNIST_CE_MLP": "(III) MLP (CE)\nGrokking",
-    "NO_GROK_MNIST_CE_MLP": "(IV) MLP (CE)\nNo Grokking",
-    "GROK_MNIST_MSE_VIT": "(V) ViT (CE)\nGrokking",
-    "NO_GROK_MNIST_MSE_VIT": "(VI) ViT (CE)\nNo Grokking",
+    "NO_GROK_MNIST_CE_MLP": "(IV) MLP (CE)\nBaseline",
+    "GROK_MNIST_MSE_VIT": "(V) ViT (MSE)\nGrokking",
+    "NO_GROK_MNIST_MSE_VIT": "(VI) ViT (MSE)\nBaseline",
     "GROK_MNIST_CE_VIT": "(VII) ViT (CE)\nGrokking",
-    "NO_GROK_MNIST_CE_VIT": "(VIII) ViT (CE)\nNo Grokking",
+    "NO_GROK_MNIST_CE_VIT": "(VIII) ViT (CE)\nBaseline",
     "GROK_MADD_CE_TRANSFORMER": "(IX) MADD (CE)\nGrokking",
 }
+BATCHES = [list(SETUPS.keys())[:4], list(SETUPS.keys())[4:]]
 
 def setup():
     plt.style.use('./style.mplstyle')
