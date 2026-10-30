@@ -13,3 +13,4 @@ media/
 *.pth
 *.db
 *.DS_Store
+**/mlruns
