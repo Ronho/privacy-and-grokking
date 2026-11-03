@@ -372,11 +372,11 @@ def plots_jump_planes_path(run_id: str, fmt: str = "pdf", short_descriptor: str 
     return plots_jump_planes_dir() / f"jump_planes_2d_{run_id}.{fmt}"
 
 
-def plots_jump_planes_legend_path(run_id: str, short_descriptor: str | None = None) -> Path:
-    """Canonical path for the exported legend text for jump planes."""
+def plots_jump_planes_angles_path(run_id: str, short_descriptor: str | None = None) -> Path:
+    """Canonical path for the exported per-jump angle table of jump planes."""
     if short_descriptor:
-        return plots_jump_planes_dir() / f"jump_planes_legend_{short_descriptor}_{run_id}.txt"
-    return plots_jump_planes_dir() / f"jump_planes_legend_{run_id}.txt"
+        return plots_jump_planes_dir() / f"jump_planes_angles_{short_descriptor}_{run_id}.txt"
+    return plots_jump_planes_dir() / f"jump_planes_angles_{run_id}.txt"
 
 
 def plots_joint_trajectories_dir() -> Path:

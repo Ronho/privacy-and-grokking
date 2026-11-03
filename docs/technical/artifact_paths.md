@@ -48,7 +48,8 @@ plots/
 ├── interpolation_1d/                           → plots_1d_interpolation_dir,
 │   └── interpolation_1d_{run_id}.pdf           │ plots_1d_interpolation_path
 ├── jump_planes/                                → plots_jump_planes_dir,
-│   └── jump_planes_2d_{run_id}.pdf             │ plots_jump_planes_path
+│   ├── jump_planes_2d_{run_id}.pdf             │ plots_jump_planes_path
+│   └── jump_planes_angles_{run_id}.txt         ─┘ plots_jump_planes_angles_path
 
 
 ├── canary_accuracy/                            → plots_canary_accuracy_dir

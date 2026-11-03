@@ -192,6 +192,10 @@ uv run python visualizations/images/plot_jump_planes.py \
 Key features:
 - **Visual Proof of $\approx 90^\circ$ Turns**: Proves that the model enters the minimum along $u_1$ and is ejected orthogonally along $u_2$ during Edge-of-Stability events.
 - **Logarithmic 2D Landscape**: Evaluates $L(\theta_{\mathrm{pre}} + x u_1 + y u_2)$ on a power-of-10 grid ($10^{-8} \dots 10^2$).
+- **Panel Labels**: Subplots are labeled with lowercase letters `(a)`, `(b)`, ... instead of Roman numerals, matching the usual publication convention.
+- **No Post-Jump Trajectory in the Plot**: Checkpoints after $\theta_{\mathrm{post}}$ are intentionally hidden so the orthogonal jump stays visually dominant. Their angle metrics are written to a separate text file.
+- **Angle Export**: Per-jump angles (turn angle, outgoing angle, delta theta) and the jump distance are saved as a tab-separated table in `cache/plots/jump_planes/jump_planes_angles_{run_id}.txt`.
+- **Extraction Pipeline**: `visualizations/preprocessing/extract_jump_planes.py` detects the jumps, constructs the $(u_1, u_2)$ basis from the incoming drift and the Gram-Schmidt-orthogonalized jump vector, evaluates the 35x35 loss grid, projects the trajectory checkpoints into the plane, and caches the result in `cache/runs/{run_id}/jump_planes/jumps_2d_planes.json`.
 ### 2.6 Optimizer Sweep Dynamics Overview
 
 Visualizes optimization and training dynamics across optimizers (AdamW, RMSprop, SGD) for the models from the optimizer sweep in a publication-quality multi-row x 4-column layout:
@@ -211,7 +215,7 @@ uv run python visualizations/images/plot_os_dynamics.py
 
 ### 2.7 Optimizer Sweep Jump Planes Overview
 
-Generates the 2D local subspace jump planes for the exact same canonical default runs from the optimizer sweep as used in the dynamics plots. For each run, it extracts all slingshot jumps and plots the incoming drift, orthogonal jump, and outgoing drift over the local 2D loss landscape.
+Generates the 2D local subspace jump planes for the exact same canonical default runs from the optimizer sweep as used in the dynamics plots. For each run, it extracts all slingshot jumps and plots the incoming drift and orthogonal jump over the local 2D loss landscape. Post-jump checkpoints are omitted; the per-jump angles are exported to a separate text file.
 
 ```bash
 # Generate jump plane plots for all canonical optimizer sweep runs

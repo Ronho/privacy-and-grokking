@@ -6,16 +6,20 @@ For each jump:
   - x-axis (u1): Direction of incoming trajectory drift towards the minimum
   - y-axis (u2): Direction of the jump (Gram-Schmidt orthogonalized against u1)
   - Background: 2D loss contours on a logarithmic scale (10^-8 to 10^2)
-  - Trajectory: Incoming approach (x-axis), 90-degree orthogonal jump (y-axis), and outgoing path
+  - Trajectory: Incoming approach (x-axis) and orthogonal jump (y-axis).
+    Checkpoints after the jump are intentionally not drawn; their angles are
+    exported to a separate text file instead.
 
 Outputs:
   - cache/plots/jump_planes/jump_planes_2d_{run_id}.pdf
   - cache/plots/jump_planes/jump_planes_2d_{run_id}.png
+  - cache/plots/jump_planes/jump_planes_angles_{run_id}.txt
 """
 
 from __future__ import annotations
 
 import json
+import string
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -32,9 +36,9 @@ from matplotlib.ticker import LogFormatterMathtext, LogLocator
 from privacy_and_grokking.artifacts.cache import DEFAULT_TRACKING_URI
 from privacy_and_grokking.artifacts.local import (
     jump_planes_grid_path,
+    plots_jump_planes_angles_path,
     plots_jump_planes_dir,
     plots_jump_planes_path,
-    plots_jump_planes_legend_path,
 )
 from privacy_and_grokking.utils import Logger
 from visualizations.preprocessing.extract_jump_planes import extract_jump_planes
@@ -50,7 +54,7 @@ def plot_jump_planes(
     short_descriptor: str | None = None,
 ) -> tuple[Path, Path]:
     """Plots a publication-grade 2x4 grid of 2D local subspace loss landscapes and jump trajectories."""
-    legend_texts = []
+    angle_lines = []
     data_file = jump_planes_grid_path(run_id)
 
     if not data_file.exists() or force_extract:
@@ -84,7 +88,9 @@ def plot_jump_planes(
     norm = LogNorm(vmin=min_loss, vmax=max_loss)
     levels = np.logspace(-8, 2, 21)
     power_10_levels = np.logspace(-8, 2, 11)
-    roman_numerals = ["(I)", "(II)", "(III)", "(IV)", "(V)", "(VI)", "(VII)", "(VIII)", "(IX)", "(X)"]
+    # Lowercase panel labels are easier to scan than Roman numerals and follow the
+    # usual subfigure convention in publications.
+    panel_labels = [f"({c})" for c in string.ascii_lowercase]
 
     cf = None
 
@@ -95,6 +101,7 @@ def plot_jump_planes(
         s_pre = jump["step_pre"]
         s_post = jump["step_post"]
         turn_angle = jump["turn_angle_deg"]
+        out_angle = jump["out_angle_deg"]
         theta_rot = jump["theta_rot_deg"]
         jump_dist = jump["jump_distance"]
 
@@ -150,18 +157,10 @@ def plot_jump_planes(
             zorder=9,
         )
 
-        # Outgoing segment (steps >= s_post)
-        mask_out = steps >= s_post
-        ax.plot(
-            xs[mask_out],
-            ys[mask_out],
-            color="#33a02c",
-            linewidth=2.0,
-            linestyle="--",
-            label="Outgoing drift ($v_{\\mathrm{out}}$)",
-            zorder=6,
-        )
-        ax.scatter(xs[mask_out], ys[mask_out], color="#33a02c", edgecolors="black", s=12, zorder=7)
+        # Post-jump checkpoints are deliberately omitted from the plot: the jump
+        # target star already marks the end state, and the outgoing drift would
+        # visually compete with the orthogonal jump. The corresponding angles
+        # are exported to a separate text file instead.
 
         # Key state markers
         ax.scatter(
@@ -189,17 +188,15 @@ def plot_jump_planes(
         ax.axhline(0.0, color="gray", linestyle=":", linewidth=0.8, alpha=0.5)
         ax.axvline(0.0, color="gray", linestyle=":", linewidth=0.8, alpha=0.5)
 
-        # Collect legend text instead of plotting it
-        roman_num = roman_numerals[idx] if idx < len(roman_numerals) else f"({idx+1})"
-        legend_texts.append(
-            f"{roman_num} Step {s_pre:,} to {s_post:,}\n"
-            f"Angle (v_in, v_jump): {turn_angle:.1f} degrees\n"
-            f"Jump Distance ||v_jump||: {jump_dist:.1f}\n"
-            f"Delta Theta: {theta_rot:.1f} degrees\n"
+        # Collect the angle table rows for the separate text export.
+        panel_label = panel_labels[idx] if idx < len(panel_labels) else f"({idx+1})"
+        angle_lines.append(
+            f"{panel_label}\t{s_pre}\t{s_post}\t"
+            f"{turn_angle:.3f}\t{out_angle:.3f}\t{theta_rot:.3f}\t{jump_dist:.6f}"
         )
 
         ax.set_title(
-            f"{roman_num} Step {s_pre:,} to {s_post:,}",
+            f"{panel_label} Step {s_pre:,} to {s_post:,}",
             fontweight="bold",
             pad=6,
         )
@@ -225,17 +222,25 @@ def plot_jump_planes(
     target_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = plots_jump_planes_path(run_id, "pdf", short_descriptor)
     png_path = plots_jump_planes_path(run_id, "png", short_descriptor)
-    txt_path = plots_jump_planes_legend_path(run_id, short_descriptor)
+    angles_path = plots_jump_planes_angles_path(run_id, short_descriptor)
 
     fig.savefig(pdf_path, bbox_inches="tight")
     fig.savefig(png_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    txt_path.write_text("\n".join(legend_texts))
+    angles_header = (
+        f"# Jump plane angles for run {run_id}\n"
+        "# turn_angle_deg: angle between incoming drift v_in and jump vector v_jump\n"
+        "# out_angle_deg: angle between incoming drift v_in and outgoing drift v_out\n"
+        "# theta_rot_deg: angle between parameter vectors theta_pre and theta_post\n"
+        "# panel\tstep_pre\tstep_post\tturn_angle_deg\tout_angle_deg\t"
+        "theta_rot_deg\tjump_distance"
+    )
+    angles_path.write_text(angles_header + "\n" + "\n".join(angle_lines) + "\n")
 
     print(f"Saved 2D Jump Planes PDF plot to: {pdf_path}")
     print(f"Saved 2D Jump Planes PNG plot to: {png_path}")
-    print(f"Saved 2D Jump Planes Legend data to: {txt_path}")
+    print(f"Saved 2D Jump Planes angles to: {angles_path}")
     return pdf_path, png_path
 
 
