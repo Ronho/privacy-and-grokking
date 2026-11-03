@@ -248,3 +248,50 @@ uv run python visualizations/images/plot_os_ablation.py
 - **Output files**:
   - `cache/plots/os_ablation/{run_name}.pdf`
 
+### 2.10 Adversarial Class-Mean Reconstruction Notebook
+
+The notebook `visualizations/images/plot_adversarial_class_mean.ipynb` demonstrates a model-inversion style attack: it generates one adversarial example per MNIST class that is confidently classified as that class while staying as close as possible to the **training class mean**. The class mean is never used by the optimizer; it is computed separately and only used to score the result.
+
+The attack solves
+
+$$
+x_c^* = \arg\min_{x \in [0,1]^{C \times H \times W}}
+\mathrm{CE}(f(x), c) + \lambda \lVert x - \mu_{\mathrm{global}} \rVert_2^2,
+$$
+
+where $\mu_{\mathrm{global}}$ is the public global pixel mean. The notebook compares the resulting distance to the true class mean with the distance distribution of natural training samples, and reports the optimization trajectory, the generated images, and the class means side by side.
+
+Required inputs:
+- `cache/runs/{run_id}/training_config.json` and `cache/runs/{run_id}/checkpoints/{step}/model.pth` for the configured run (the notebook uses the cached MNIST MLP run `088b42f7979f4c769bd6256d29b08ee0` at step `150000`; missing artifacts are fetched through the MLflow artifact cache).
+- The MNIST dataset in the local torchvision cache (to compute the evaluation-only class means).
+
+Generated outputs:
+- `cache/plots/adversarial_class_mean_grid_<date>.pdf` and `.png`
+- `cache/plots/adversarial_class_mean_metrics_<date>.pdf` and `.png`
+
+### 2.11 Reference Quality for Class-Mean and Class-Boundary Attacks
+
+The notebook `visualizations/images/plot_confidence_perturbation_attacks.ipynb` compares four ways of obtaining the class reference used by the Distance-to-Class-Mean (DCM) and Distance-to-Class-Boundary (DCB) membership inference attacks on the canonical `GROK_MNIST_MSE_MLP` model:
+
+1. **Train-lkg:** the attacker knows all training samples and estimates the reference from them.
+2. **Test-est:** only test samples are available; the class mean is estimated from the test split and the boundary reference is the KDE mode of the test-split class-0 margins.
+3. **Adversarial example:** one synthetic class representative per class, generated from the model with the MSE objective plus a prior towards the global pixel mean.
+4. **Perturbed test sample:** the first test image predicted as class $c$, moved towards higher confidence with an $L_\infty$-bounded PGD attack ($\varepsilon=0.05$, 100 steps).
+
+The DCM attack scores penultimate-feature distances to the reference mean. The DCB attack uses the class-0 pairwise margin: $d_{0c}=(f_0-f_c)/\lVert w_0-w_c\rVert$ for $c\ge2$, and the $0$–$1$ margin for actual classes 0 and 1, matching the canary-selection implementation. Boundary references are KDE modes of $|d_{0c}|$.
+
+> [!IMPORTANT]
+> The checked-in `configs/GROK_MNIST_MSE_MLP.json` is a template with seed 0. The actual run uses `seed=350876`, `data.seed=604157`, and `mask.seed=604157`. The notebook overrides these seeds so that the train-lkg reference and the membership labels refer to the model's real 1,000-sample training subset. Using the template seeds evaluates on a disjoint subset and collapses the train-lkg attack to chance.
+
+The notebook reports the average feature- and pixel-space distance to the train class mean for train and test samples, plus pooled and per-class AUC and TPR@1%FPR for all reference variants. Train-lkg is the known-training-data scenario; the test-est, adversarial-example, and perturbed-test references do not use training data. The perturbed-test anchor is excluded from the test evaluation so that the reference is never scored against itself.
+
+Required inputs:
+- `configs/GROK_MNIST_MSE_MLP.json`
+- `cache/runs/2143636bf7d1447e9fa8ef6f107c5d03/checkpoints/150000/model.pth`
+- The MNIST dataset in the local torchvision cache.
+
+Generated outputs:
+- `cache/plots/reference_quality_attacks_<date>.pdf` and `.png`
+- `cache/plots/reference_quality_distance_<date>.pdf` and `.png`
+- `cache/plots/reference_quality_perturbations_<date>.pdf` and `.png`
+
