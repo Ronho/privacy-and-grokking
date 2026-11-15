@@ -2,15 +2,15 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 SETUPS = {
-    "GROK_MNIST_MSE_MLP": "(I) MLP (MSE)\nGrokking",
-    "NO_GROK_MNIST_MSE_MLP": "(II) MLP (MSE)\nBaseline",
-    "GROK_MNIST_CE_MLP": "(III) MLP (CE)\nGrokking",
-    "NO_GROK_MNIST_CE_MLP": "(IV) MLP (CE)\nBaseline",
-    "GROK_MNIST_MSE_VIT": "(V) ViT (MSE)\nGrokking",
-    "NO_GROK_MNIST_MSE_VIT": "(VI) ViT (MSE)\nBaseline",
-    "GROK_MNIST_CE_VIT": "(VII) ViT (CE)\nGrokking",
-    "NO_GROK_MNIST_CE_VIT": "(VIII) ViT (CE)\nBaseline",
-    "GROK_MADD_CE_TRANSFORMER": "(IX) MADD (CE)\nGrokking",
+    "GROK_MNIST_MSE_MLP": "(I) MLP (MSE) Grokking",
+    "NO_GROK_MNIST_MSE_MLP": "(II) MLP (MSE) Baseline",
+    "GROK_MNIST_CE_MLP": "(III) MLP (CE) Grokking",
+    "NO_GROK_MNIST_CE_MLP": "(IV) MLP (CE) Baseline",
+    "GROK_MNIST_MSE_VIT": "(V) ViT (MSE) Grokking",
+    "NO_GROK_MNIST_MSE_VIT": "(VI) ViT (MSE) Baseline",
+    "GROK_MNIST_CE_VIT": "(VII) ViT (CE) Grokking",
+    "NO_GROK_MNIST_CE_VIT": "(VIII) ViT (CE) Baseline",
+    "GROK_MADD_CE_TRANSFORMER": "(IX) MADD (CE) Grokking",
 }
 BATCHES = [list(SETUPS.keys())[:4], list(SETUPS.keys())[4:]]
 
